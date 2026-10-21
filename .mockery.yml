@@ -8,6 +8,9 @@ packages:
   reportsgo/internal/repository:
     interfaces:
       TxBeginner:
+  reportsgo/internal/handler:
+    interfaces:
+      Pinger:
   github.com/jackc/pgx/v5:
     interfaces:
       Tx:
