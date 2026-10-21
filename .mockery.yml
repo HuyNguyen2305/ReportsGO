@@ -1,0 +1,13 @@
+template: testify
+dir: "tests/mocks/{{.SrcPackageName}}"
+filename: "mock_{{.InterfaceName}}.go"
+pkgname: "{{.SrcPackageName}}mocks"
+structname: "Mock{{.InterfaceName}}"
+
+packages:
+  reportsgo/internal/repository:
+    interfaces:
+      TxBeginner:
+  github.com/jackc/pgx/v5:
+    interfaces:
+      Tx:

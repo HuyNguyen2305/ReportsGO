@@ -29,6 +29,11 @@ tasks:
     cmds:
       - go run ./cmd/seed
 
+  mocks:
+    desc: Generate mocks (mockery) into tests/mocks
+    cmds:
+      - go tool mockery
+
   sqlc:
     desc: Generate type-safe query code (sqlc)
     cmds:
