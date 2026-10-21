@@ -19,6 +19,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+
+	"reportsgo/internal/seed"
 )
 
 // NewDatabase creates an empty throwaway database (dropped on cleanup) and returns its URL.
@@ -96,6 +98,17 @@ func MigratedPool(t *testing.T) *pgxpool.Pool {
 	pool, err := pgxpool.New(context.Background(), NewMigratedDatabase(t))
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
+	return pool
+}
+
+// SeededPool is MigratedPool plus the development sample data from db/seed/seed.sql.
+func SeededPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+
+	pool := MigratedPool(t)
+	script, err := seed.Load(filepath.Join(RepoRoot(t), "db", "seed", "seed.sql"))
+	require.NoError(t, err)
+	require.NoError(t, seed.Run(context.Background(), pool, script))
 	return pool
 }
 

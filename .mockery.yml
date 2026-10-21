@@ -8,6 +8,9 @@ packages:
   reportsgo/internal/repository:
     interfaces:
       TxBeginner:
+  reportsgo/internal/service:
+    interfaces:
+      InvoiceRepository:
   reportsgo/internal/handler:
     interfaces:
       Pinger:

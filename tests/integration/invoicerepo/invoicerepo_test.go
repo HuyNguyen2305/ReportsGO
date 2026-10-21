@@ -5,7 +5,6 @@ package invoicerepo_test
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -14,7 +13,6 @@ import (
 
 	"reportsgo/internal/model"
 	"reportsgo/internal/repository"
-	"reportsgo/internal/seed"
 	"reportsgo/tests/integration/testdb"
 )
 
@@ -32,10 +30,7 @@ func newEnv(t *testing.T, withNulls bool) env {
 	t.Helper()
 	ctx := context.Background()
 
-	pool := testdb.MigratedPool(t)
-	script, err := seed.Load(filepath.Join(testdb.RepoRoot(t), "db", "seed", "seed.sql"))
-	require.NoError(t, err)
-	require.NoError(t, seed.Run(ctx, pool, script))
+	pool := testdb.SeededPool(t)
 
 	if withNulls {
 		_, err := pool.Exec(ctx, `
