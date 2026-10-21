@@ -80,14 +80,20 @@ func NewMigrator(t *testing.T, dbURL string) *migrate.Migrate {
 	return m
 }
 
-// MigratedPool creates a throwaway database, applies all migrations and returns a pool for it.
-func MigratedPool(t *testing.T) *pgxpool.Pool {
+// NewMigratedDatabase creates a throwaway database with all migrations applied and returns its URL.
+func NewMigratedDatabase(t *testing.T) string {
 	t.Helper()
 
 	dbURL := NewDatabase(t)
 	require.NoError(t, NewMigrator(t, dbURL).Up())
+	return dbURL
+}
 
-	pool, err := pgxpool.New(context.Background(), dbURL)
+// MigratedPool creates a throwaway database, applies all migrations and returns a pool for it.
+func MigratedPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+
+	pool, err := pgxpool.New(context.Background(), NewMigratedDatabase(t))
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 	return pool

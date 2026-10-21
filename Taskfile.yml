@@ -29,6 +29,16 @@ tasks:
     cmds:
       - go run ./cmd/seed
 
+  run:
+    desc: Run the API (reads .env)
+    cmds:
+      - go run ./cmd/api
+
+  build:
+    desc: Build the API binary into bin/
+    cmds:
+      - go build -o bin/api.exe ./cmd/api
+
   mocks:
     desc: Generate mocks (mockery) into tests/mocks
     cmds:

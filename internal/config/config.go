@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -28,6 +30,14 @@ type Config struct {
 	ShutdownTimeout    time.Duration
 	CORSAllowedOrigins []string
 	LogLevel           string
+
+	HTTPReadHeaderTimeout time.Duration
+	HTTPReadTimeout       time.Duration
+	HTTPWriteTimeout      time.Duration
+	HTTPIdleTimeout       time.Duration
+	// TrustedProxies lists the proxies (IPs or CIDRs) whose X-Forwarded-For header is believed.
+	// Empty means no proxy is trusted and the client IP is the connection's remote address.
+	TrustedProxies []string
 }
 
 // Lookup reports the value of an environment variable, like os.LookupEnv.
@@ -48,8 +58,22 @@ func Load(lookup Lookup) (Config, error) {
 		ShutdownTimeout:    l.duration("SHUTDOWN_TIMEOUT", 15*time.Second),
 		CORSAllowedOrigins: l.list("CORS_ALLOWED_ORIGINS"),
 		LogLevel:           l.oneOf("LOG_LEVEL", "info", "debug", "info", "warn", "error"),
+
+		HTTPReadHeaderTimeout: l.duration("HTTP_READ_HEADER_TIMEOUT", 5*time.Second),
+		HTTPReadTimeout:       l.duration("HTTP_READ_TIMEOUT", 15*time.Second),
+		HTTPWriteTimeout:      l.duration("HTTP_WRITE_TIMEOUT", 30*time.Second),
+		HTTPIdleTimeout:       l.duration("HTTP_IDLE_TIMEOUT", 60*time.Second),
+		TrustedProxies:        l.list("TRUSTED_PROXIES"),
 	}
 
+	if msg := checkListenAddr(cfg.HTTPAddr); msg != "" {
+		l.fail("HTTP_ADDR", fmt.Sprintf("%q %s", cfg.HTTPAddr, msg))
+	}
+	for _, p := range cfg.TrustedProxies {
+		if !validProxy(p) {
+			l.fail("TRUSTED_PROXIES", fmt.Sprintf("%q must be an IP address or CIDR such as 10.0.0.0/8", p))
+		}
+	}
 	for _, origin := range cfg.CORSAllowedOrigins {
 		if msg := checkOrigin(origin); msg != "" {
 			l.fail("CORS_ALLOWED_ORIGINS", fmt.Sprintf("%q %s", origin, msg))
@@ -101,7 +125,33 @@ func (c Config) LogValue() slog.Value {
 		slog.Duration("shutdown_timeout", c.ShutdownTimeout),
 		slog.Any("cors_allowed_origins", c.CORSAllowedOrigins),
 		slog.String("log_level", c.LogLevel),
+		slog.Duration("http_read_header_timeout", c.HTTPReadHeaderTimeout),
+		slog.Duration("http_read_timeout", c.HTTPReadTimeout),
+		slog.Duration("http_write_timeout", c.HTTPWriteTimeout),
+		slog.Duration("http_idle_timeout", c.HTTPIdleTimeout),
+		slog.Any("trusted_proxies", c.TrustedProxies),
 	)
+}
+
+// checkListenAddr returns a problem description, or "" if addr is a host:port with a numeric port.
+func checkListenAddr(addr string) string {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "must be host:port, such as :8080"
+	}
+	if _, err := strconv.ParseUint(port, 10, 16); err != nil {
+		return "must have a numeric port between 0 and 65535"
+	}
+	return ""
+}
+
+// validProxy reports whether s is an IP address or a CIDR prefix.
+func validProxy(s string) bool {
+	if _, err := netip.ParseAddr(s); err == nil {
+		return true
+	}
+	_, err := netip.ParsePrefix(s)
+	return err == nil
 }
 
 // checkOrigin returns a problem description, or "" if origin is a plain http(s) origin

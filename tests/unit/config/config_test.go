@@ -34,6 +34,12 @@ func TestLoadDefaults(t *testing.T) {
 		ShutdownTimeout:    15 * time.Second,
 		CORSAllowedOrigins: nil,
 		LogLevel:           "info",
+
+		HTTPReadHeaderTimeout: 5 * time.Second,
+		HTTPReadTimeout:       15 * time.Second,
+		HTTPWriteTimeout:      30 * time.Second,
+		HTTPIdleTimeout:       60 * time.Second,
+		TrustedProxies:        nil,
 	}, cfg)
 }
 
