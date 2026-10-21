@@ -1,1 +1,8 @@
+# Local secrets; .env.example is the committed template.
+.env
+
+# Build output
+/bin/
+*.exe
 CLAUDE.md
+/.claude/
