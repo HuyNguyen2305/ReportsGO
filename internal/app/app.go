@@ -12,6 +12,7 @@ import (
 	"reportsgo/internal/handler"
 	"reportsgo/internal/middleware"
 	"reportsgo/internal/repository"
+	"reportsgo/internal/service"
 )
 
 // Options carries the parts of the server that vary between the real binary and tests.
@@ -37,11 +38,15 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger, opts Optio
 	}
 	defer pool.Close() // runs after the server has drained, so requests never lose their database
 
+	// Each report is wired the same way: repository -> service -> handler (a RouteRegistrar).
+	invoices := handler.NewInvoiceHandler(
+		service.NewInvoiceService(repository.NewInvoiceRepository(pool), nil), logger)
+
 	engine := handler.NewRouter(handler.Deps{
 		Logger:     logger,
 		Pinger:     pool,
 		Middleware: middleware.Default(logger, cfg.CORSAllowedOrigins),
-		Reports:    opts.Reports,
+		Reports:    append([]handler.RouteRegistrar{invoices}, opts.Reports...),
 	})
 	// An empty list means "trust no proxy header", so clients cannot forge client_ip via X-Forwarded-For.
 	if err := engine.SetTrustedProxies(cfg.TrustedProxies); err != nil {

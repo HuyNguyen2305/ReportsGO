@@ -23,6 +23,7 @@ func TestListPagingSignalsAnotherPageWhenOneExtraRowComesBack(t *testing.T) {
 	q, res := run(t, service.ListInvoicesParams{Limit: "3"}, rows)
 
 	require.Equal(t, 3, q.Limit, "the service asks for the page size; the repository adds the extra row itself")
+	require.Equal(t, 3, res.Limit, "the result reports the effective page size")
 	require.True(t, res.HasMore)
 	require.Equal(t, []int64{10, 9, 8}, []int64{res.Items[0].ID, res.Items[1].ID, res.Items[2].ID})
 	require.Len(t, res.Items, 3, "the extra row is dropped")

@@ -27,6 +27,12 @@ type Deps struct {
 	Middleware []gin.HandlerFunc
 }
 
+// noStore marks every response of the group, errors included, as uncacheable.
+func noStore(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	c.Next()
+}
+
 // NewRouter builds the Gin engine: health endpoints at the root and each report under ReportsPrefix.
 // Gin's mode is set by the caller.
 func NewRouter(deps Deps) *gin.Engine {
@@ -46,7 +52,8 @@ func NewRouter(deps Deps) *gin.Engine {
 	engine.GET("/healthz", health.Healthz)
 	engine.GET("/readyz", health.Readyz)
 
-	reports := engine.Group(ReportsPrefix)
+	// Report data is financial and changes constantly, so browsers and proxies must never cache it.
+	reports := engine.Group(ReportsPrefix, noStore)
 	for _, r := range deps.Reports {
 		r.Register(reports)
 	}

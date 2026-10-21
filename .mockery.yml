@@ -14,6 +14,7 @@ packages:
   reportsgo/internal/handler:
     interfaces:
       Pinger:
+      InvoiceService:
   github.com/jackc/pgx/v5:
     interfaces:
       Tx:

@@ -37,6 +37,7 @@ func NewInvoiceService(repo InvoiceRepository, clock Clock) *InvoiceService {
 // ListInvoicesResult is one page of the report.
 type ListInvoicesResult struct {
 	Items      []model.InvoiceRow
+	Limit      int    // the effective page size
 	NextCursor string // empty when there is no next page
 	HasMore    bool
 	// Summary totals the whole filtered set. It is set on the first page only (no cursor sent).
@@ -59,7 +60,7 @@ func (s *InvoiceService) List(ctx context.Context, p ListInvoicesParams) (*ListI
 		return nil, fmt.Errorf("list invoices: %w", err)
 	}
 
-	res := &ListInvoicesResult{From: req.from, To: req.to}
+	res := &ListInvoicesResult{Limit: q.Limit, From: req.from, To: req.to}
 	// The repository returns one row beyond the page size so we can tell whether another page exists.
 	if len(rows) > q.Limit {
 		rows = rows[:q.Limit]

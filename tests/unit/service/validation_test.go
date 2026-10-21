@@ -210,6 +210,7 @@ func TestListAppliesDefaults(t *testing.T) {
 	}, q)
 	require.Equal(t, date(2026, 10, 1), res.From)
 	require.Equal(t, date(2026, 10, 31), res.To)
+	require.Equal(t, service.DefaultPageSize, res.Limit)
 }
 
 func TestListDefaultDateRangeIsTheCurrentUTCMonth(t *testing.T) {
