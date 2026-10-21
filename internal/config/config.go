@@ -50,6 +50,11 @@ func Load(lookup Lookup) (Config, error) {
 		LogLevel:           l.oneOf("LOG_LEVEL", "info", "debug", "info", "warn", "error"),
 	}
 
+	for _, origin := range cfg.CORSAllowedOrigins {
+		if msg := checkOrigin(origin); msg != "" {
+			l.fail("CORS_ALLOWED_ORIGINS", fmt.Sprintf("%q %s", origin, msg))
+		}
+	}
 	if cfg.DBMinConns > cfg.DBMaxConns {
 		l.errs = append(l.errs, errors.New("DB_MIN_CONNS: must not exceed DB_MAX_CONNS"))
 	}
@@ -97,6 +102,28 @@ func (c Config) LogValue() slog.Value {
 		slog.Any("cors_allowed_origins", c.CORSAllowedOrigins),
 		slog.String("log_level", c.LogLevel),
 	)
+}
+
+// checkOrigin returns a problem description, or "" if origin is a plain http(s) origin
+// (scheme, host and optional port, nothing else).
+func checkOrigin(origin string) string {
+	if origin == "*" {
+		return "is not allowed; list explicit origins such as https://app.example.com"
+	}
+	u, err := url.Parse(origin)
+	switch {
+	case err != nil:
+		return "is not a valid URL"
+	case u.Scheme != "http" && u.Scheme != "https":
+		return "must start with http:// or https://"
+	case u.Host == "" || u.Hostname() == "":
+		return "must include a host"
+	case u.User != nil:
+		return "must not contain credentials"
+	case u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/"):
+		return "must be an origin only, without a path, query or fragment"
+	}
+	return ""
 }
 
 func redactURL(raw string) string {

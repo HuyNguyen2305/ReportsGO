@@ -53,8 +53,8 @@ func RespondError(c *gin.Context, logger *slog.Logger, err error) {
 	c.AbortWithStatusJSON(status, dto.ErrorResponse{Error: body})
 }
 
-// writeError aborts with a fixed status and code, for responses that do not come from an error value.
-func writeError(c *gin.Context, status int, code, message string) {
+// WriteError aborts with a fixed status and code, for responses that do not come from an error value.
+func WriteError(c *gin.Context, status int, code, message string) {
 	c.AbortWithStatusJSON(status, dto.ErrorResponse{Error: dto.ErrorBody{
 		Code:      code,
 		Message:   message,
