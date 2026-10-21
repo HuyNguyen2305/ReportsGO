@@ -1,0 +1,45 @@
+version: "3"
+
+vars:
+  MIGRATE: go run -tags postgres github.com/golang-migrate/migrate/v4/cmd/migrate
+
+tasks:
+  db:up:
+    desc: Start a throwaway local Postgres 18 in Docker
+    cmds:
+      - docker run -d --name reportsgo-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:18
+  db:down:
+    desc: Stop and remove the local Postgres container
+    cmds:
+      - docker rm -f reportsgo-pg
+
+  migrate:up:
+    desc: Apply all migrations (requires POSTGRES_URL)
+    cmds:
+      - "{{.MIGRATE}} -path migrations -database \"$POSTGRES_URL\" up"
+  migrate:down:
+    desc: Revert all migrations (requires POSTGRES_URL)
+    cmds:
+      - "{{.MIGRATE}} -path migrations -database \"$POSTGRES_URL\" down -all"
+
+  sqlc:
+    desc: Generate type-safe query code (sqlc)
+    cmds:
+      - sqlc generate
+
+  test:
+    desc: Run unit tests
+    cmds:
+      - go test ./...
+
+  test:integration:
+    desc: Run integration tests (requires TEST_POSTGRES_URL)
+    cmds:
+      - go test -tags integration ./tests/integration/...
+
+  check:
+    desc: Format check, vet and lint
+    cmds:
+      - gofmt -l .
+      - go vet -tags integration ./...
+      - go tool golangci-lint run --build-tags integration ./...
