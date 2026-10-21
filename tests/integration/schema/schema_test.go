@@ -4,90 +4,18 @@ package schema_test
 
 import (
 	"context"
-	"fmt"
-	"net/url"
-	"os"
-	"path/filepath"
 	"testing"
-	"time"
 
-	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+
+	"reportsgo/tests/integration/testdb"
 )
 
-// newDatabase creates a throwaway database, applies nothing, and returns its URL.
-func newDatabase(t *testing.T) string {
-	t.Helper()
-
-	adminURL := os.Getenv("TEST_POSTGRES_URL")
-	if adminURL == "" {
-		t.Skip("TEST_POSTGRES_URL not set")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	admin, err := pgx.Connect(ctx, adminURL)
-	require.NoError(t, err)
-	defer func() { _ = admin.Close(ctx) }()
-
-	name := fmt.Sprintf("reportsgo_test_%d", time.Now().UnixNano())
-	_, err = admin.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{name}.Sanitize())
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		cctx, ccancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer ccancel()
-		c, cerr := pgx.Connect(cctx, adminURL)
-		if cerr != nil {
-			return
-		}
-		defer func() { _ = c.Close(cctx) }()
-		_, _ = c.Exec(cctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{name}.Sanitize()+" WITH (FORCE)")
-	})
-
-	u, err := url.Parse(adminURL)
-	require.NoError(t, err)
-	u.Path = "/" + name
-	return u.String()
-}
-
-func newMigrator(t *testing.T, dbURL string) *migrate.Migrate {
-	t.Helper()
-
-	dir, err := filepath.Abs(filepath.Join("..", "..", "..", "migrations"))
-	require.NoError(t, err)
-
-	u, err := url.Parse(dbURL)
-	require.NoError(t, err)
-	u.Scheme = "pgx5"
-
-	m, err := migrate.New("file://"+filepath.ToSlash(dir), u.String())
-	require.NoError(t, err)
-	t.Cleanup(func() { _, _ = m.Close() })
-	return m
-}
-
-func migratedPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-
-	dbURL := newDatabase(t)
-	require.NoError(t, newMigrator(t, dbURL).Up())
-
-	pool, err := pgxpool.New(context.Background(), dbURL)
-	require.NoError(t, err)
-	t.Cleanup(pool.Close)
-	return pool
-}
-
 func TestMigrationsRoundTrip(t *testing.T) {
-	dbURL := newDatabase(t)
-	m := newMigrator(t, dbURL)
+	dbURL := testdb.NewDatabase(t)
+	m := testdb.NewMigrator(t, dbURL)
 
 	require.NoError(t, m.Up())
 	require.NoError(t, m.Down())
@@ -145,7 +73,7 @@ func seed(t *testing.T, pool *pgxpool.Pool) seeded {
 }
 
 func TestSchemaAcceptsOneRowPerTable(t *testing.T) {
-	pool := migratedPool(t)
+	pool := testdb.MigratedPool(t)
 	s := seed(t, pool)
 
 	_, err := pool.Exec(context.Background(),
@@ -155,7 +83,7 @@ func TestSchemaAcceptsOneRowPerTable(t *testing.T) {
 }
 
 func TestPaymentsTargetConstraint(t *testing.T) {
-	pool := migratedPool(t)
+	pool := testdb.MigratedPool(t)
 	s := seed(t, pool)
 
 	tests := []struct {
@@ -188,7 +116,7 @@ func TestPaymentsTargetConstraint(t *testing.T) {
 }
 
 func TestUniqueConstraints(t *testing.T) {
-	pool := migratedPool(t)
+	pool := testdb.MigratedPool(t)
 	s := seed(t, pool)
 
 	tests := []struct {

@@ -1,5 +1,7 @@
 version: "3"
 
+dotenv: [".env"]
+
 vars:
   MIGRATE: go run -tags postgres github.com/golang-migrate/migrate/v4/cmd/migrate
 
@@ -14,13 +16,18 @@ tasks:
       - docker rm -f reportsgo-pg
 
   migrate:up:
-    desc: Apply all migrations (requires POSTGRES_URL)
+    desc: Apply all migrations (requires DATABASE_URL)
     cmds:
-      - "{{.MIGRATE}} -path migrations -database \"$POSTGRES_URL\" up"
+      - "{{.MIGRATE}} -path migrations -database \"$DATABASE_URL\" up"
   migrate:down:
-    desc: Revert all migrations (requires POSTGRES_URL)
+    desc: Revert all migrations (requires DATABASE_URL)
     cmds:
-      - "{{.MIGRATE}} -path migrations -database \"$POSTGRES_URL\" down -all"
+      - "{{.MIGRATE}} -path migrations -database \"$DATABASE_URL\" down -all"
+
+  db:seed:
+    desc: Reload sample data into DATABASE_URL (TRUNCATES data tables; dev only)
+    cmds:
+      - go run ./cmd/seed
 
   sqlc:
     desc: Generate type-safe query code (sqlc)
@@ -35,7 +42,7 @@ tasks:
   test:integration:
     desc: Run integration tests (requires TEST_POSTGRES_URL)
     cmds:
-      - go test -tags integration ./tests/integration/...
+      - go test -tags integration -count=1 ./tests/integration/...
 
   check:
     desc: Format check, vet and lint

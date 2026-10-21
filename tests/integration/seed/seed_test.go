@@ -1,0 +1,101 @@
+//go:build integration
+
+package seed_test
+
+import (
+	"context"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"reportsgo/internal/seed"
+	"reportsgo/tests/integration/testdb"
+)
+
+func loadScript(t *testing.T) string {
+	t.Helper()
+	script, err := seed.Load(filepath.Join(testdb.RepoRoot(t), "db", "seed", "seed.sql"))
+	require.NoError(t, err)
+	return script
+}
+
+func TestSeedIsIdempotentAndPopulatesEveryTable(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.MigratedPool(t)
+	script := loadScript(t)
+
+	require.NoError(t, seed.Run(ctx, pool, script))
+	first, err := seed.Counts(ctx, pool)
+	require.NoError(t, err)
+
+	require.NoError(t, seed.Run(ctx, pool, script))
+	second, err := seed.Counts(ctx, pool)
+	require.NoError(t, err)
+
+	require.Equal(t, first, second, "re-running the seed must give identical counts")
+	for _, table := range seed.Tables {
+		require.Positive(t, first[table], "table %s should have rows", table)
+	}
+	require.Equal(t, 29, first["jobs"])
+	require.Equal(t, 1, first["recurring_invoices"])
+}
+
+func TestSeedRollsBackOnError(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.MigratedPool(t)
+	require.NoError(t, seed.Run(ctx, pool, loadScript(t)))
+	before, err := seed.Counts(ctx, pool)
+	require.NoError(t, err)
+
+	// TRUNCATE succeeds, then the invalid statement fails: nothing may be committed.
+	err = seed.Run(ctx, pool, "TRUNCATE payments; SELECT * FROM no_such_table;")
+	require.Error(t, err)
+
+	after, err := seed.Counts(ctx, pool)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+}
+
+func TestSeededDataSupportsReportQueries(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.MigratedPool(t)
+	require.NoError(t, seed.Run(ctx, pool, loadScript(t)))
+
+	t.Run("every payment has exactly one target", func(t *testing.T) {
+		var bad int
+		require.NoError(t, pool.QueryRow(ctx,
+			`SELECT count(*) FROM payments WHERE num_nonnulls(invoice_id, credit_id) <> 1`).Scan(&bad))
+		require.Zero(t, bad)
+	})
+
+	t.Run("invoices report joins customer and tags", func(t *testing.T) {
+		var customer string
+		var tags []string
+		require.NoError(t, pool.QueryRow(ctx,
+			`SELECT c.display_name, coalesce(array_agg(t.name ORDER BY t.name) FILTER (WHERE t.id IS NOT NULL), '{}')
+			   FROM invoices i
+			   JOIN customers c ON c.id = i.customer_id
+			   LEFT JOIN invoice_tag_links l ON l.invoice_id = i.id
+			   LEFT JOIN invoice_tags t ON t.id = l.tag_id
+			  WHERE i.invoice_number = '85030'
+			  GROUP BY c.display_name`).Scan(&customer, &tags))
+		require.Equal(t, "#F Last Name", customer)
+		require.Equal(t, []string{"a", "b", "c"}, tags)
+	})
+
+	t.Run("october invoice total matches the screenshot filter", func(t *testing.T) {
+		var n int
+		require.NoError(t, pool.QueryRow(ctx,
+			`SELECT count(*) FROM invoices
+			  WHERE invoice_date BETWEEN '2026-10-01' AND '2026-10-31' AND deleted_at IS NULL AND archived_at IS NULL`).Scan(&n))
+		require.Equal(t, 18, n)
+	})
+
+	t.Run("recurring invoice points at its next invoice", func(t *testing.T) {
+		var number string
+		require.NoError(t, pool.QueryRow(ctx,
+			`SELECT i.invoice_number FROM recurring_invoices r JOIN invoices i ON i.id = r.next_invoice_id`).Scan(&number))
+		require.Equal(t, "84890", number)
+	})
+}
