@@ -163,6 +163,32 @@ FROM (VALUES
 JOIN invoices i     ON i.invoice_number = v.num
 JOIN invoice_tags t ON t.name = v.tag;
 
+-- Sent, archived and deleted invoices, so the report's summary and every tab have data.
+-- Outstanding for the three 'sent' invoices is 95.00 + (100.00 - 30.00 paid) + 99.00 = 264.00.
+INSERT INTO invoices (invoice_number, customer_id, job_id, billing_email, invoice_date, total, discount,
+                      status, signature_status, payment_terms_id, frequency_label, created_by, archived_at, deleted_at)
+SELECT v.num, c.id,
+       (SELECT j.id FROM jobs j WHERE j.customer_id = c.id ORDER BY j.created_at DESC, j.id DESC LIMIT 1),
+       c.billing_email, v.inv_date::date, v.total, 0.00,
+       v.status::invoice_status, v.sig::signature_status, pt.id, 'With each job', u.id,
+       v.archived_at::timestamptz, v.deleted_at::timestamptz
+FROM (VALUES
+    ('85031', '5001',  '2026-10-22', 95.00,  'sent', 'pending', NULL,         NULL),
+    ('85032', '63706', '2026-10-20', 100.00, 'sent', 'signed',  NULL,         NULL),
+    ('85033', '63689', '2026-10-18', 99.00,  'sent', 'draft',   NULL,         NULL),
+    ('85034', '63714', '2026-10-17', 40.00,  'paid', 'signed',  '2026-10-18', NULL),
+    ('85035', '63716', '2026-10-16', 25.00,  'draft', 'draft',  NULL,         '2026-10-17')
+) AS v(num, acct, inv_date, total, status, sig, archived_at, deleted_at)
+JOIN customers c      ON c.account_number = v.acct
+JOIN payment_terms pt ON pt.name = 'Due on receipt'
+JOIN users u          ON u.full_name = 'Thọ Nguyễn Quang';
+
+-- Partial payment on 85032 (30.00 of 100.00).
+INSERT INTO payments (customer_id, invoice_id, method_type, amount, payment_date)
+SELECT i.customer_id, i.id, 'check', 30.00, '2026-10-21'
+FROM invoices i
+WHERE i.invoice_number = '85032';
+
 -- Recurring invoices --------------------------------------------------------
 
 INSERT INTO recurring_invoices (customer_id, frequency_unit, frequency_interval, weekday, occurrences,

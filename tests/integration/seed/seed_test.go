@@ -39,6 +39,8 @@ func TestSeedIsIdempotentAndPopulatesEveryTable(t *testing.T) {
 	}
 	require.Equal(t, 29, first["jobs"])
 	require.Equal(t, 1, first["recurring_invoices"])
+	require.Equal(t, 24, first["invoices"], "19 original + 3 sent + 1 archived + 1 deleted")
+	require.Equal(t, 12, first["payments"], "11 original + 1 partial payment")
 }
 
 func TestSeedRollsBackOnError(t *testing.T) {
@@ -89,7 +91,7 @@ func TestSeededDataSupportsReportQueries(t *testing.T) {
 		require.NoError(t, pool.QueryRow(ctx,
 			`SELECT count(*) FROM invoices
 			  WHERE invoice_date BETWEEN '2026-10-01' AND '2026-10-31' AND deleted_at IS NULL AND archived_at IS NULL`).Scan(&n))
-		require.Equal(t, 18, n)
+		require.Equal(t, 21, n, "18 original + 3 sent; the archived and deleted invoices are excluded")
 	})
 
 	t.Run("recurring invoice points at its next invoice", func(t *testing.T) {
