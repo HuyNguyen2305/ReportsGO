@@ -14,6 +14,7 @@ packages:
       EstimateRepository:
       DocumentRepository:
       PaymentRepository:
+      CreditRepository:
   reportsgo/internal/handler:
     interfaces:
       Pinger:
