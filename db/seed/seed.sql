@@ -231,6 +231,20 @@ FROM (VALUES
 JOIN customers c ON c.account_number = v.acct
 JOIN users u     ON u.full_name = v.creator;
 
+-- Estimates in other states, so every status and tab of the Estimates report has data.
+INSERT INTO billing_documents (parent_type, document_number, customer_id, billing_email, created_by,
+                               document_date, total, status, signature_status, archived_at, deleted_at)
+SELECT 'estimate', v.num, c.id, c.billing_email, u.id, v.est_date::date, v.total,
+       v.status::billing_status, v.sig::signature_status, v.archived_at::timestamptz, v.deleted_at::timestamptz
+FROM (VALUES
+    ('123188', '63733', '2026-10-21', 150.00, 'accepted', 'signed',   NULL,         NULL),
+    ('123189', '63717', '2026-10-21', 75.50,  'declined', 'declined', NULL,         NULL),
+    ('123150', '63714', '2026-10-05', 40.00,  'sent',     'pending',  '2026-10-06', NULL),
+    ('123151', '63706', '2026-10-04', 10.00,  'draft',    'draft',    NULL,         '2026-10-05')
+) AS v(num, acct, est_date, total, status, sig, archived_at, deleted_at)
+JOIN customers c ON c.account_number = v.acct
+JOIN users u     ON u.full_name = 'Thọ Nguyễn Quang';
+
 -- Documents ----------------------------------------------------------------
 
 INSERT INTO documents (document_number, document_type_id, customer_id, created_by, created_at)

@@ -39,7 +39,7 @@ func TestSeedIsIdempotentAndPopulatesEveryTable(t *testing.T) {
 	}
 	require.Equal(t, 29, first["jobs"])
 	require.Equal(t, 1, first["recurring_invoices"])
-	require.Equal(t, 41, first["billing_documents"], "24 invoices + 17 estimates")
+	require.Equal(t, 45, first["billing_documents"], "24 invoices + 21 estimates")
 	require.Equal(t, 12, first["payments"], "11 original + 1 partial payment")
 }
 
@@ -83,7 +83,7 @@ func TestSeededDataSupportsReportQueries(t *testing.T) {
 			counts[kind] = n
 		}
 		require.NoError(t, rows.Err())
-		require.Equal(t, map[string]int{"invoice": 24, "estimate": 17}, counts, "19 original + 3 sent + 1 archived + 1 deleted invoices")
+		require.Equal(t, map[string]int{"invoice": 24, "estimate": 21}, counts, "19 original + 3 sent + 1 archived + 1 deleted invoices")
 	})
 
 	t.Run("invoices report joins customer and tags", func(t *testing.T) {
