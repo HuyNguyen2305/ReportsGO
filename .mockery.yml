@@ -16,6 +16,7 @@ packages:
     interfaces:
       Pinger:
       InvoiceService:
+      EstimateService:
   github.com/jackc/pgx/v5:
     interfaces:
       Tx:

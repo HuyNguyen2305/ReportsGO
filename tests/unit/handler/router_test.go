@@ -52,7 +52,7 @@ func TestRouterMountsReportsUnderPrefix(t *testing.T) {
 		{"/api/v1/reports/payments", http.StatusOK, "payments"},
 		{"/invoices", http.StatusNotFound, ""},
 		{"/api/v1/invoices", http.StatusNotFound, ""},
-		{"/api/v1/reports/estimates", http.StatusNotFound, ""},
+		{"/api/v1/reports/no-such-report", http.StatusNotFound, ""},
 	}
 
 	for _, tt := range tests {

@@ -371,7 +371,7 @@ func TestInvoiceRoutes(t *testing.T) {
 		{"DELETE list", http.MethodDelete, invoicesPath, http.StatusMethodNotAllowed, "method_not_allowed"},
 		{"POST filters", http.MethodPost, invoicesPath + "/filters", http.StatusMethodNotAllowed, "method_not_allowed"},
 		{"unknown subpath", http.MethodGet, invoicesPath + "/nope", http.StatusNotFound, "not_found"},
-		{"a report that does not exist", http.MethodGet, "/api/v1/reports/estimates", http.StatusNotFound, "not_found"},
+		{"a report that does not exist", http.MethodGet, "/api/v1/reports/no-such-report", http.StatusNotFound, "not_found"},
 		{"not under the reports prefix", http.MethodGet, "/invoices", http.StatusNotFound, "not_found"},
 	}
 

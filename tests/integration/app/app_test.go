@@ -307,6 +307,38 @@ func TestServerServesTheInvoiceReportRoutes(t *testing.T) {
 	require.Equal(t, "limit", env.Error.Details[0].Field)
 }
 
+func TestServerServesTheEstimateReportRoutes(t *testing.T) {
+	// The database is migrated but not seeded: the report must work, and be empty, rather than fail.
+	s := startServer(t, nil)
+
+	resp, body := get(t, s.base+"/api/v1/reports/estimates", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", body)
+	require.Equal(t, "no-store", resp.Header.Get("Cache-Control"))
+
+	var list dto.EstimateListResponse
+	require.NoError(t, json.Unmarshal(body, &list))
+	require.Empty(t, list.Data)
+	require.NotNil(t, list.Summary)
+	require.EqualValues(t, 0, list.Summary.Count)
+	require.Equal(t, "0.00", list.Summary.Total)
+
+	resp, body = get(t, s.base+"/api/v1/reports/estimates/filters", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", body)
+	var filters dto.EstimateFiltersResponse
+	require.NoError(t, json.Unmarshal(body, &filters))
+	require.Equal(t, []string{"draft", "sent", "accepted", "declined"}, filters.Statuses)
+
+	resp, body = get(t, s.base+"/api/v1/reports/estimates?status=paid", nil)
+	require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
+	var env dto.ErrorResponse
+	require.NoError(t, json.Unmarshal(body, &env))
+	require.Equal(t, "status", env.Error.Details[0].Field)
+
+	// the invoice report is still served next to it
+	resp, body = get(t, s.base+"/api/v1/reports/invoices", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", body)
+}
+
 func TestGracefulShutdownLetsInFlightRequestsFinish(t *testing.T) {
 	started := make(chan struct{})
 	s := startServer(t, nil, registrarFunc(func(rg *gin.RouterGroup) {

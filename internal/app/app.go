@@ -41,12 +41,14 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger, opts Optio
 	// Each report is wired the same way: repository -> service -> handler (a RouteRegistrar).
 	invoices := handler.NewInvoiceHandler(
 		service.NewInvoiceService(repository.NewInvoiceRepository(pool), nil), logger)
+	estimates := handler.NewEstimateHandler(
+		service.NewEstimateService(repository.NewEstimateRepository(pool), nil), logger)
 
 	engine := handler.NewRouter(handler.Deps{
 		Logger:     logger,
 		Pinger:     pool,
 		Middleware: middleware.Default(logger, cfg.CORSAllowedOrigins),
-		Reports:    append([]handler.RouteRegistrar{invoices}, opts.Reports...),
+		Reports:    append([]handler.RouteRegistrar{invoices, estimates}, opts.Reports...),
 	})
 	// An empty list means "trust no proxy header", so clients cannot forge client_ip via X-Forwarded-For.
 	if err := engine.SetTrustedProxies(cfg.TrustedProxies); err != nil {
