@@ -31,11 +31,11 @@ const jobLabel = `CASE WHEN j.id IS NULL THEN NULL ELSE st.name || ' (' || sl.ad
 // condition comes only from this table, never from the caller.
 var invoiceSorts = map[model.InvoiceSortKey]sortSpec{
 	model.SortAccountNumber:   {expr: `c.account_number`, cast: "text"},
-	model.SortInvoiceNumber:   {expr: `i.invoice_number`, cast: "text"},
+	model.SortInvoiceNumber:   {expr: `i.document_number`, cast: "text"},
 	model.SortCustomer:        {expr: `lower(c.display_name)`, cast: "text"},
 	model.SortJob:             {expr: `lower(coalesce(` + jobLabel + `, ''))`, cast: "text"},
 	model.SortBillingEmail:    {expr: `lower(coalesce(i.billing_email, ''))`, cast: "text"},
-	model.SortDate:            {expr: `i.invoice_date`, cast: "date"},
+	model.SortDate:            {expr: `i.document_date`, cast: "date"},
 	model.SortTotal:           {expr: `i.total`, cast: "numeric"},
 	model.SortDiscount:        {expr: `i.discount`, cast: "numeric"},
 	model.SortStatus:          {expr: `i.status::text`, cast: "text"},
@@ -45,7 +45,7 @@ var invoiceSorts = map[model.InvoiceSortKey]sortSpec{
 
 // invoiceFrom joins everything the select list, filters and sort expressions can refer to.
 const invoiceFrom = `
-FROM invoices i
+FROM billing_documents i
 JOIN customers c ON c.id = i.customer_id
 LEFT JOIN jobs j ON j.id = i.job_id
 LEFT JOIN service_types st ON st.id = j.service_type_id
@@ -83,6 +83,9 @@ func (w *whereBuilder) where() string {
 // applyInvoiceFilter adds the filter's conditions. List and Summary share it, so the table and its totals
 // can never disagree about which invoices are in scope.
 func applyInvoiceFilter(w *whereBuilder, f model.InvoiceFilter) error {
+	// billing_documents also holds estimates; this report is invoices only.
+	w.add("i.parent_type = 'invoice'")
+
 	switch f.Lifecycle {
 	case model.LifecycleActive, "":
 		w.add("i.deleted_at IS NULL AND i.archived_at IS NULL")
@@ -95,10 +98,10 @@ func applyInvoiceFilter(w *whereBuilder, f model.InvoiceFilter) error {
 	}
 
 	if !f.DateFrom.IsZero() {
-		w.add("i.invoice_date >= " + w.arg(f.DateFrom) + "::date")
+		w.add("i.document_date >= " + w.arg(f.DateFrom) + "::date")
 	}
 	if !f.DateTo.IsZero() {
-		w.add("i.invoice_date <= " + w.arg(f.DateTo) + "::date")
+		w.add("i.document_date <= " + w.arg(f.DateTo) + "::date")
 	}
 	if len(f.Statuses) > 0 {
 		w.add("i.status::text = ANY(" + w.arg(toStrings(f.Statuses)) + "::text[])")
@@ -118,7 +121,7 @@ func applyInvoiceFilter(w *whereBuilder, f model.InvoiceFilter) error {
 	}
 	if f.Search != "" {
 		p := w.arg("%" + escapeLike(f.Search) + "%")
-		w.add(`(i.invoice_number ILIKE ` + p + ` ESCAPE '\' OR c.account_number ILIKE ` + p + ` ESCAPE '\'` +
+		w.add(`(i.document_number ILIKE ` + p + ` ESCAPE '\' OR c.account_number ILIKE ` + p + ` ESCAPE '\'` +
 			` OR c.display_name ILIKE ` + p + ` ESCAPE '\' OR i.billing_email ILIKE ` + p + ` ESCAPE '\')`)
 	}
 	return nil
@@ -151,8 +154,8 @@ func BuildInvoiceListQuery(q model.InvoiceQuery) (Statement, error) {
 	}
 	limit := w.arg(q.Limit + 1)
 
-	sql := `SELECT i.id, i.invoice_number, c.account_number, c.id, c.display_name,
-    ` + jobLabel + ` AS job, i.frequency_label, i.billing_email, i.invoice_date,
+	sql := `SELECT i.id, i.document_number, c.account_number, c.id, c.display_name,
+    ` + jobLabel + ` AS job, i.frequency_label, i.billing_email, i.document_date,
     (i.total * 100)::bigint, (i.discount * 100)::bigint,
     ` + tagsSubquery + ` AS tags,
     pt.name, pt.description, i.status::text, i.signature_status::text,

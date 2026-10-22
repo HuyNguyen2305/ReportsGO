@@ -16,8 +16,8 @@ import (
 var Tables = []string{
 	"users", "lead_sources", "service_types", "payment_terms", "invoice_tags", "document_types",
 	"customers", "customer_phones", "service_locations", "jobs",
-	"invoices", "invoice_tag_links", "recurring_invoices",
-	"estimates", "documents", "credits", "payments",
+	"billing_documents", "invoice_tag_links", "recurring_invoices",
+	"documents", "credits", "payments",
 }
 
 const runTimeout = 60 * time.Second

@@ -27,7 +27,7 @@ func newService(t *testing.T, withNulls bool) *service.InvoiceService {
 	pool := testdb.SeededPool(t)
 	if withNulls {
 		_, err := pool.Exec(context.Background(), `
-			INSERT INTO invoices (invoice_number, customer_id, invoice_date, total, discount, status)
+			INSERT INTO billing_documents (document_number, customer_id, document_date, total, discount, status)
 			SELECT 'N' || g, c.id, '2026-10-10', 10 * g, g, 'draft'
 			FROM generate_series(1, 3) g
 			JOIN customers c ON c.account_number = '63716'`)

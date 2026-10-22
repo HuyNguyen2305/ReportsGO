@@ -3,8 +3,8 @@
 -- Rows reference each other by natural keys (account/invoice/estimate numbers),
 -- so the script does not depend on identity values.
 
-TRUNCATE payments, credits, documents, estimates, invoice_tag_links, recurring_invoices,
-         invoices, jobs, service_locations, customer_phones, customers,
+TRUNCATE payments, credits, documents, invoice_tag_links, recurring_invoices,
+         billing_documents, jobs, service_locations, customer_phones, customers,
          document_types, invoice_tags, payment_terms, service_types, lead_sources, users
     RESTART IDENTITY CASCADE;
 
@@ -122,12 +122,13 @@ WHERE c.account_number = '5001' AND st.name = 'Bi-Monthly Service';
 -- Invoices ----------------------------------------------------------------
 -- job_id links to the customer's most recent job, when one exists.
 
-INSERT INTO invoices (invoice_number, customer_id, job_id, billing_email, invoice_date, total, discount,
-                      status, signature_status, payment_terms_id, frequency_label, created_by)
-SELECT v.num, c.id,
+INSERT INTO billing_documents (parent_type, document_number, customer_id, job_id, billing_email, document_date,
+                               total, discount, status, signature_status, payment_terms_id, frequency_label,
+                               created_by)
+SELECT 'invoice', v.num, c.id,
        (SELECT j.id FROM jobs j WHERE j.customer_id = c.id ORDER BY j.created_at DESC, j.id DESC LIMIT 1),
        c.billing_email, v.inv_date::date, v.total, v.discount,
-       v.status::invoice_status, 'draft', pt.id, v.freq, u.id
+       v.status::billing_status, 'draft', pt.id, v.freq, u.id
 FROM (VALUES
     ('84936', '5001',  '2026-10-26', 65.00,  0.00, 'draft', 'Due on receipt', 'Weekly',        'thon nguyen'),
     ('85030', '63714', '2026-10-21', 65.00,  0.00, 'draft', 'Due on receipt', 'Daily',         'thon nguyen'),
@@ -160,17 +161,18 @@ FROM (VALUES
     ('85028', 'a'), ('85028', 'b'), ('85028', 'c'),
     ('85005', 'a'), ('85005', 'b')
 ) AS v(num, tag)
-JOIN invoices i     ON i.invoice_number = v.num
-JOIN invoice_tags t ON t.name = v.tag;
+JOIN billing_documents i ON i.parent_type = 'invoice' AND i.document_number = v.num
+JOIN invoice_tags t      ON t.name = v.tag;
 
 -- Sent, archived and deleted invoices, so the report's summary and every tab have data.
 -- Outstanding for the three 'sent' invoices is 95.00 + (100.00 - 30.00 paid) + 99.00 = 264.00.
-INSERT INTO invoices (invoice_number, customer_id, job_id, billing_email, invoice_date, total, discount,
-                      status, signature_status, payment_terms_id, frequency_label, created_by, archived_at, deleted_at)
-SELECT v.num, c.id,
+INSERT INTO billing_documents (parent_type, document_number, customer_id, job_id, billing_email, document_date,
+                               total, discount, status, signature_status, payment_terms_id, frequency_label,
+                               created_by, archived_at, deleted_at)
+SELECT 'invoice', v.num, c.id,
        (SELECT j.id FROM jobs j WHERE j.customer_id = c.id ORDER BY j.created_at DESC, j.id DESC LIMIT 1),
        c.billing_email, v.inv_date::date, v.total, 0.00,
-       v.status::invoice_status, v.sig::signature_status, pt.id, 'With each job', u.id,
+       v.status::billing_status, v.sig::signature_status, pt.id, 'With each job', u.id,
        v.archived_at::timestamptz, v.deleted_at::timestamptz
 FROM (VALUES
     ('85031', '5001',  '2026-10-22', 95.00,  'sent', 'pending', NULL,         NULL),
@@ -186,8 +188,8 @@ JOIN users u          ON u.full_name = 'Thọ Nguyễn Quang';
 -- Partial payment on 85032 (30.00 of 100.00).
 INSERT INTO payments (customer_id, invoice_id, method_type, amount, payment_date)
 SELECT i.customer_id, i.id, 'check', 30.00, '2026-10-21'
-FROM invoices i
-WHERE i.invoice_number = '85032';
+FROM billing_documents i
+WHERE i.parent_type = 'invoice' AND i.document_number = '85032';
 
 -- Recurring invoices --------------------------------------------------------
 
@@ -195,17 +197,18 @@ INSERT INTO recurring_invoices (customer_id, frequency_unit, frequency_interval,
                                 action, status, total_value, started_on, next_invoice_id, next_invoice_date)
 SELECT c.id, 'week', 1, 4, 3, 'send_by_email', 'active', 65.00, '2026-09-14', i.id, '2026-09-24'
 FROM customers c
-JOIN invoices i ON i.invoice_number = '84890'
+JOIN billing_documents i ON i.parent_type = 'invoice' AND i.document_number = '84890'
 WHERE c.account_number = '63689';
 
-UPDATE invoices
+UPDATE billing_documents
 SET recurring_invoice_id = (SELECT id FROM recurring_invoices ORDER BY id LIMIT 1)
-WHERE invoice_number = '84890';
+WHERE parent_type = 'invoice' AND document_number = '84890';
 
 -- Estimates ----------------------------------------------------------------
 
-INSERT INTO estimates (estimate_number, customer_id, billing_email, created_by, estimate_date, total)
-SELECT v.num, c.id, c.billing_email, u.id, v.est_date::date, v.total
+INSERT INTO billing_documents (parent_type, document_number, customer_id, billing_email, created_by,
+                               document_date, total)
+SELECT 'estimate', v.num, c.id, c.billing_email, u.id, v.est_date::date, v.total
 FROM (VALUES
     ('123187', '63733', '2026-10-20', 24.40, 'thon nguyen'),
     ('123184', '63717', '2026-10-20', 24.40, 'thon nguyen'),
@@ -278,7 +281,7 @@ FROM (VALUES
     ('84979', 'check', NULL,     NULL,   '2026-10-10'),
     ('84975', 'check', NULL,     NULL,   '2026-10-08')
 ) AS v(num, method, brand, last4, pay_date)
-JOIN invoices i ON i.invoice_number = v.num;
+JOIN billing_documents i ON i.parent_type = 'invoice' AND i.document_number = v.num;
 
 -- Credit "payments": the Payments report lists each credit as a row.
 INSERT INTO payments (customer_id, credit_id, method_type, card_brand, card_last4, amount, payment_date)

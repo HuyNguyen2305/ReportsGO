@@ -46,21 +46,36 @@ func TestBuildInvoiceListQueryDefault(t *testing.T) {
 	stmt, err := repository.BuildInvoiceListQuery(defaultQuery())
 	require.NoError(t, err)
 
-	require.Contains(t, stmt.SQL, "ORDER BY i.invoice_date DESC, i.id DESC")
+	require.Contains(t, stmt.SQL, "ORDER BY i.document_date DESC, i.id DESC")
 	require.Contains(t, stmt.SQL, "i.deleted_at IS NULL AND i.archived_at IS NULL")
 	require.Contains(t, stmt.SQL, "LIMIT $1")
 	require.Equal(t, []any{51}, stmt.Args, "one extra row is fetched to detect another page")
 	requirePlaceholdersMatchArgs(t, stmt)
 }
 
+// billing_documents also holds estimates, so both statements must always restrict to invoices.
+func TestInvoiceQueriesAreRestrictedToInvoices(t *testing.T) {
+	list, err := repository.BuildInvoiceListQuery(defaultQuery())
+	require.NoError(t, err)
+	summary, err := repository.BuildInvoiceSummaryQuery(model.InvoiceFilter{})
+	require.NoError(t, err)
+
+	for name, stmt := range map[string]repository.Statement{"list": list, "summary": summary} {
+		t.Run(name, func(t *testing.T) {
+			require.Contains(t, stmt.SQL, "FROM billing_documents i")
+			require.Contains(t, stmt.SQL, "i.parent_type = 'invoice'")
+		})
+	}
+}
+
 func TestBuildInvoiceListQueryEverySortKeyAndDirection(t *testing.T) {
 	wantExpr := map[model.InvoiceSortKey]struct{ expr, cast string }{
 		model.SortAccountNumber:   {"c.account_number", "text"},
-		model.SortInvoiceNumber:   {"i.invoice_number", "text"},
+		model.SortInvoiceNumber:   {"i.document_number", "text"},
 		model.SortCustomer:        {"lower(c.display_name)", "text"},
 		model.SortJob:             {"lower(coalesce(CASE WHEN j.id IS NULL", "text"},
 		model.SortBillingEmail:    {"lower(coalesce(i.billing_email, ''))", "text"},
-		model.SortDate:            {"i.invoice_date", "date"},
+		model.SortDate:            {"i.document_date", "date"},
 		model.SortTotal:           {"i.total", "numeric"},
 		model.SortDiscount:        {"i.discount", "numeric"},
 		model.SortStatus:          {"i.status::text", "text"},
@@ -161,14 +176,14 @@ func TestBuildInvoiceListQueryFiltersAddClausesAndArgsInOrder(t *testing.T) {
 	}, stmt.Args)
 
 	for _, want := range []string{
-		"i.invoice_date >= $1::date",
-		"i.invoice_date <= $2::date",
+		"i.document_date >= $1::date",
+		"i.document_date <= $2::date",
 		"i.status::text = ANY($3::text[])",
 		"i.signature_status::text = ANY($4::text[])",
 		"j.service_type_id = ANY($5::bigint[])",
 		"tl.tag_id = ANY($6::bigint[])",
 		"i.payment_terms_id = ANY($7::bigint[])",
-		"i.invoice_number ILIKE $8",
+		"i.document_number ILIKE $8",
 		"c.account_number ILIKE $8",
 		"c.display_name ILIKE $8",
 		"i.billing_email ILIKE $8",
@@ -184,7 +199,7 @@ func TestBuildInvoiceListQueryEmptyFiltersAddNothing(t *testing.T) {
 	stmt, err := repository.BuildInvoiceListQuery(defaultQuery())
 	require.NoError(t, err)
 
-	for _, absent := range []string{"invoice_date >=", "invoice_date <=", "ANY(", "EXISTS", "ILIKE", "(($"} {
+	for _, absent := range []string{"document_date >=", "document_date <=", "ANY(", "EXISTS", "ILIKE", "(($"} {
 		require.NotContains(t, stmt.SQL, absent)
 	}
 	require.Len(t, stmt.Args, 1)

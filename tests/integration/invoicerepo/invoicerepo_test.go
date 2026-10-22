@@ -34,7 +34,7 @@ func newEnv(t *testing.T, withNulls bool) env {
 
 	if withNulls {
 		_, err := pool.Exec(ctx, `
-			INSERT INTO invoices (invoice_number, customer_id, invoice_date, total, discount, status)
+			INSERT INTO billing_documents (document_number, customer_id, document_date, total, discount, status)
 			SELECT 'N' || g, c.id, '2026-10-10', 10 * g, g, 'draft'
 			FROM generate_series(1, 3) g
 			JOIN customers c ON c.account_number = '63716'`)
@@ -384,7 +384,7 @@ func TestListFilters(t *testing.T) {
 
 	// the database is still intact after the hostile search above
 	var n int
-	require.NoError(t, e.pool.QueryRow(ctx, "SELECT count(*) FROM invoices").Scan(&n))
+	require.NoError(t, e.pool.QueryRow(ctx, "SELECT count(*) FROM billing_documents WHERE parent_type = 'invoice'").Scan(&n))
 	require.Equal(t, 24, n)
 }
 
@@ -454,7 +454,7 @@ func TestSummary(t *testing.T) {
 			return s.Outstanding
 		}
 		const base = `INSERT INTO payments (customer_id, invoice_id, method_type, amount, payment_date, status, deleted_at)
-			SELECT customer_id, id, 'cash', %s FROM invoices WHERE invoice_number = '85033'`
+			SELECT customer_id, id, 'cash', %s FROM billing_documents WHERE parent_type = 'invoice' AND document_number = '85033'`
 
 		exec(fmt.Sprintf(base, `50, '2026-10-19', 'paid', now()`)) // deleted payment: ignored
 		require.Equal(t, model.Money(26400), outstanding())
@@ -501,7 +501,7 @@ func TestRepositoryWorksInsideATransaction(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	_, err = tx.Exec(ctx, `INSERT INTO invoices (invoice_number, customer_id, invoice_date, total)
+	_, err = tx.Exec(ctx, `INSERT INTO billing_documents (document_number, customer_id, document_date, total)
 		SELECT 'TX1', id, '2026-10-15', 5 FROM customers WHERE account_number = '5001'`)
 	require.NoError(t, err)
 
@@ -544,4 +544,38 @@ func TestInvalidQueriesAreRejectedBeforeReachingTheDatabase(t *testing.T) {
 	bad.Lifecycle = "bogus"
 	_, err = e.repo.Summary(ctx, bad)
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
+}
+
+// billing_documents holds estimates next to invoices; the invoice report must never see them, even when an
+// estimate shares an invoice's number.
+func TestEstimatesNeverAppearInInvoiceResults(t *testing.T) {
+	e := newEnv(t, false)
+	ctx := context.Background()
+
+	var estimates int
+	require.NoError(t, e.pool.QueryRow(ctx, `SELECT count(*) FROM billing_documents
+		WHERE parent_type = 'estimate' AND deleted_at IS NULL AND archived_at IS NULL
+		  AND document_date BETWEEN '2026-10-01' AND '2026-10-31'`).Scan(&estimates))
+	require.Positive(t, estimates, "the seed has October estimates, so this test is meaningful")
+
+	rows := e.listAll(t, octoberActive(), model.SortDate, true)
+	require.Len(t, rows, 21, "estimates do not change the invoice count")
+	summary, err := e.repo.Summary(ctx, octoberActive())
+	require.NoError(t, err)
+	require.EqualValues(t, 21, summary.Count)
+
+	_, err = e.pool.Exec(ctx, `INSERT INTO billing_documents (parent_type, document_number, customer_id, document_date, total)
+		SELECT 'estimate', '85033', id, '2026-10-18', 777 FROM customers WHERE account_number = '63689'`)
+	require.NoError(t, err)
+
+	f := octoberActive()
+	f.Search = "85033"
+	got, err := e.repo.List(ctx, query(f, model.SortDate, true, 10))
+	require.NoError(t, err)
+	require.Len(t, got, 1, "only the invoice with that number")
+	require.Equal(t, model.Money(9900), got[0].Total)
+	s, err := e.repo.Summary(ctx, f)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, s.Count)
+	require.Equal(t, model.Money(9900), s.Total)
 }

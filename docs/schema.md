@@ -10,34 +10,40 @@ lead_sources ─┐
               ├─< customers ─┬─< customer_phones
               │              ├─< service_locations ─┐
 service_types ─┼──────────────┼─< jobs >─────────────┘
-              │              ├─< invoices >─< invoice_tag_links >─ invoice_tags
-payment_terms ─┼──────────────┤      ▲  │
+              │              ├─< billing_documents >─< invoice_tag_links >─ invoice_tags
+payment_terms ─┼──────────────┤      ▲  │   (parent_type = invoice | estimate)
 users ────────┤              │      │  └─ recurring_invoice_id ─> recurring_invoices (next_invoice_id ─> invoices)
-document_types ┘              ├─< estimates
-                              ├─< documents
+document_types ┘              ├─< documents
                               ├─< credits
                               └─< payments ─> invoice_id XOR credit_id
 ```
 
-`invoices.recurring_invoice_id` and `recurring_invoices.next_invoice_id` reference each other; the first FK is added in migration 000007.
+`billing_documents` holds both invoices and estimates (migration 000009 merged the former `invoices` and `estimates` tables), told apart by `parent_type`:
+
+- `UNIQUE (parent_type, document_number)`: an invoice and an estimate may share a number.
+- Statuses depend on the type (`billing_documents_status_chk`): invoices `draft/sent/paid/void`, estimates `draft/sent/accepted/declined`.
+- Estimates have no job, recurring invoice, payment terms or discount (`billing_documents_estimate_chk`).
+- `payments.invoice_id`, `recurring_invoices.next_invoice_id` and `invoice_tag_links.invoice_id` can only reference invoices; a generated `*_parent_type` column plus a composite foreign key enforce it.
+
+`billing_documents.recurring_invoice_id` and `recurring_invoices.next_invoice_id` reference each other; the first FK is added in migration 000007.
 
 ## Screenshot column → table.column
 
 | Report | Column | Source |
 |---|---|---|
 | Invoices | Account # | `customers.account_number` |
-| | Invoice # | `invoices.invoice_number` |
+| | Invoice # | `billing_documents.document_number` (`parent_type = 'invoice'`) |
 | | Customer | `customers.display_name` |
 | | Job | `jobs` → `service_types.name` + `service_locations` |
-| | Frequency | `invoices.frequency_label` |
-| | Billing Email | `invoices.billing_email` |
-| | Date / Total / Discount | `invoices.invoice_date` / `total` / `discount` |
+| | Frequency | `billing_documents.frequency_label` |
+| | Billing Email | `billing_documents.billing_email` |
+| | Date / Total / Discount | `billing_documents.document_date` / `total` / `discount` |
 | | Invoice Tags | `invoice_tag_links` → `invoice_tags.name` |
 | | Payment Terms | `payment_terms.name`, `description` |
-| | Status / Signature | `invoices.status` / `signature_status` |
-| Estimates | Estimate / Account # / Customer | `estimates.estimate_number` / `customers.account_number` / `customers.display_name` |
+| | Status / Signature | `billing_documents.status` / `signature_status` |
+| Estimates | Estimate / Account # / Customer | `billing_documents.document_number` (`parent_type = 'estimate'`) / `customers.account_number` / `customers.display_name` |
 | | Phone | `customer_phones` |
-| | Billing Email / Created By / Date / Total / Status | `estimates.*`, `users.full_name` |
+| | Billing Email / Created By / Date / Total / Status | `billing_documents.*`, `users.full_name` |
 | Documents | Document # / Type | `documents.document_number` / `document_types.name` |
 | | Created By / Date Created / Status | `users.full_name` / `documents.created_at` / `documents.status` |
 | Payments | Payment For | `payments.invoice_id` or `payments.credit_id` |
@@ -53,6 +59,6 @@ document_types ┘              ├─< estimates
 | | Job Created Date / Completed Jobs | derived from `jobs` |
 
 ## Assumptions to confirm
-- Enum values not visible in the screenshots (e.g. `estimate_status`, `document_status`, `recurring_status.paused`).
-- `invoices.frequency_label` is stored text, separate from `recurring_invoices`.
+- Enum values not visible in the screenshots (e.g. estimate statuses `accepted`/`declined`, `document_status`, `recurring_status.paused`).
+- `billing_documents.frequency_label` is stored text, separate from `recurring_invoices`.
 - Credits are inferred from "Credit" rows on the Payments report (no Credits screenshot).

@@ -11,6 +11,94 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type BillingStatus string
+
+const (
+	BillingStatusDraft    BillingStatus = "draft"
+	BillingStatusSent     BillingStatus = "sent"
+	BillingStatusPaid     BillingStatus = "paid"
+	BillingStatusVoid     BillingStatus = "void"
+	BillingStatusAccepted BillingStatus = "accepted"
+	BillingStatusDeclined BillingStatus = "declined"
+)
+
+func (e *BillingStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = BillingStatus(s)
+	case string:
+		*e = BillingStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for BillingStatus: %T", src)
+	}
+	return nil
+}
+
+type NullBillingStatus struct {
+	BillingStatus BillingStatus
+	Valid         bool // Valid is true if BillingStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullBillingStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.BillingStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.BillingStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullBillingStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.BillingStatus), nil
+}
+
+type DocumentParentType string
+
+const (
+	DocumentParentTypeInvoice  DocumentParentType = "invoice"
+	DocumentParentTypeEstimate DocumentParentType = "estimate"
+)
+
+func (e *DocumentParentType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = DocumentParentType(s)
+	case string:
+		*e = DocumentParentType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for DocumentParentType: %T", src)
+	}
+	return nil
+}
+
+type NullDocumentParentType struct {
+	DocumentParentType DocumentParentType
+	Valid              bool // Valid is true if DocumentParentType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullDocumentParentType) Scan(value interface{}) error {
+	if value == nil {
+		ns.DocumentParentType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.DocumentParentType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullDocumentParentType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.DocumentParentType), nil
+}
+
 type DocumentStatus string
 
 const (
@@ -52,50 +140,6 @@ func (ns NullDocumentStatus) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.DocumentStatus), nil
-}
-
-type EstimateStatus string
-
-const (
-	EstimateStatusDraft    EstimateStatus = "draft"
-	EstimateStatusSent     EstimateStatus = "sent"
-	EstimateStatusAccepted EstimateStatus = "accepted"
-	EstimateStatusDeclined EstimateStatus = "declined"
-)
-
-func (e *EstimateStatus) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = EstimateStatus(s)
-	case string:
-		*e = EstimateStatus(s)
-	default:
-		return fmt.Errorf("unsupported scan type for EstimateStatus: %T", src)
-	}
-	return nil
-}
-
-type NullEstimateStatus struct {
-	EstimateStatus EstimateStatus
-	Valid          bool // Valid is true if EstimateStatus is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullEstimateStatus) Scan(value interface{}) error {
-	if value == nil {
-		ns.EstimateStatus, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.EstimateStatus.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullEstimateStatus) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.EstimateStatus), nil
 }
 
 type FrequencyUnit string
@@ -140,50 +184,6 @@ func (ns NullFrequencyUnit) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.FrequencyUnit), nil
-}
-
-type InvoiceStatus string
-
-const (
-	InvoiceStatusDraft InvoiceStatus = "draft"
-	InvoiceStatusSent  InvoiceStatus = "sent"
-	InvoiceStatusPaid  InvoiceStatus = "paid"
-	InvoiceStatusVoid  InvoiceStatus = "void"
-)
-
-func (e *InvoiceStatus) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = InvoiceStatus(s)
-	case string:
-		*e = InvoiceStatus(s)
-	default:
-		return fmt.Errorf("unsupported scan type for InvoiceStatus: %T", src)
-	}
-	return nil
-}
-
-type NullInvoiceStatus struct {
-	InvoiceStatus InvoiceStatus
-	Valid         bool // Valid is true if InvoiceStatus is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullInvoiceStatus) Scan(value interface{}) error {
-	if value == nil {
-		ns.InvoiceStatus, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.InvoiceStatus.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullInvoiceStatus) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.InvoiceStatus), nil
 }
 
 type JobStatus string
@@ -448,6 +448,27 @@ func (ns NullSignatureStatus) Value() (driver.Value, error) {
 	return string(ns.SignatureStatus), nil
 }
 
+type BillingDocument struct {
+	ID                 int64
+	DocumentNumber     string
+	CustomerID         int64
+	JobID              pgtype.Int8
+	RecurringInvoiceID pgtype.Int8
+	BillingEmail       pgtype.Text
+	DocumentDate       pgtype.Date
+	Total              pgtype.Numeric
+	Discount           pgtype.Numeric
+	Status             BillingStatus
+	SignatureStatus    SignatureStatus
+	PaymentTermsID     pgtype.Int8
+	FrequencyLabel     string
+	CreatedBy          pgtype.Int8
+	CreatedAt          pgtype.Timestamptz
+	ArchivedAt         pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	ParentType         DocumentParentType
+}
+
 type Credit struct {
 	ID           int64
 	CustomerID   int64
@@ -495,49 +516,15 @@ type DocumentType struct {
 	Name string
 }
 
-type Estimate struct {
-	ID              int64
-	EstimateNumber  string
-	CustomerID      int64
-	BillingEmail    pgtype.Text
-	CreatedBy       pgtype.Int8
-	EstimateDate    pgtype.Date
-	Total           pgtype.Numeric
-	Status          EstimateStatus
-	SignatureStatus SignatureStatus
-	CreatedAt       pgtype.Timestamptz
-	ArchivedAt      pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-}
-
-type Invoice struct {
-	ID                 int64
-	InvoiceNumber      string
-	CustomerID         int64
-	JobID              pgtype.Int8
-	RecurringInvoiceID pgtype.Int8
-	BillingEmail       pgtype.Text
-	InvoiceDate        pgtype.Date
-	Total              pgtype.Numeric
-	Discount           pgtype.Numeric
-	Status             InvoiceStatus
-	SignatureStatus    SignatureStatus
-	PaymentTermsID     pgtype.Int8
-	FrequencyLabel     string
-	CreatedBy          pgtype.Int8
-	CreatedAt          pgtype.Timestamptz
-	ArchivedAt         pgtype.Timestamptz
-	DeletedAt          pgtype.Timestamptz
-}
-
 type InvoiceTag struct {
 	ID   int64
 	Name string
 }
 
 type InvoiceTagLink struct {
-	InvoiceID int64
-	TagID     int64
+	InvoiceID         int64
+	TagID             int64
+	InvoiceParentType DocumentParentType
 }
 
 type Job struct {
@@ -558,18 +545,19 @@ type LeadSource struct {
 }
 
 type Payment struct {
-	ID          int64
-	CustomerID  int64
-	InvoiceID   pgtype.Int8
-	CreditID    pgtype.Int8
-	MethodType  PaymentMethodType
-	CardBrand   pgtype.Text
-	CardLast4   pgtype.Text
-	Amount      pgtype.Numeric
-	PaymentDate pgtype.Date
-	Status      PaymentStatus
-	CreatedAt   pgtype.Timestamptz
-	DeletedAt   pgtype.Timestamptz
+	ID                int64
+	CustomerID        int64
+	InvoiceID         pgtype.Int8
+	CreditID          pgtype.Int8
+	MethodType        PaymentMethodType
+	CardBrand         pgtype.Text
+	CardLast4         pgtype.Text
+	Amount            pgtype.Numeric
+	PaymentDate       pgtype.Date
+	Status            PaymentStatus
+	CreatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	InvoiceParentType NullDocumentParentType
 }
 
 type PaymentTerm struct {
@@ -579,21 +567,22 @@ type PaymentTerm struct {
 }
 
 type RecurringInvoice struct {
-	ID                int64
-	CustomerID        int64
-	JobID             pgtype.Int8
-	FrequencyUnit     FrequencyUnit
-	FrequencyInterval int32
-	Weekday           pgtype.Int2
-	Occurrences       pgtype.Int4
-	Action            RecurringAction
-	Status            RecurringStatus
-	TotalValue        pgtype.Numeric
-	StartedOn         pgtype.Date
-	EndsOn            pgtype.Date
-	NextInvoiceID     pgtype.Int8
-	NextInvoiceDate   pgtype.Date
-	CreatedAt         pgtype.Timestamptz
+	ID                    int64
+	CustomerID            int64
+	JobID                 pgtype.Int8
+	FrequencyUnit         FrequencyUnit
+	FrequencyInterval     int32
+	Weekday               pgtype.Int2
+	Occurrences           pgtype.Int4
+	Action                RecurringAction
+	Status                RecurringStatus
+	TotalValue            pgtype.Numeric
+	StartedOn             pgtype.Date
+	EndsOn                pgtype.Date
+	NextInvoiceID         pgtype.Int8
+	NextInvoiceDate       pgtype.Date
+	CreatedAt             pgtype.Timestamptz
+	NextInvoiceParentType NullDocumentParentType
 }
 
 type ServiceLocation struct {
