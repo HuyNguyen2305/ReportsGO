@@ -9,6 +9,7 @@ import (
 )
 
 type Querier interface {
+	ListDocumentTypes(ctx context.Context) ([]DocumentType, error)
 	ListInvoiceTags(ctx context.Context) ([]InvoiceTag, error)
 	ListPaymentTerms(ctx context.Context) ([]PaymentTerm, error)
 	ListServiceTypes(ctx context.Context) ([]ServiceType, error)

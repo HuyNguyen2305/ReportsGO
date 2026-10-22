@@ -9,6 +9,32 @@ import (
 	"context"
 )
 
+const listDocumentTypes = `-- name: ListDocumentTypes :many
+SELECT id, name
+FROM document_types
+ORDER BY name, id
+`
+
+func (q *Queries) ListDocumentTypes(ctx context.Context) ([]DocumentType, error) {
+	rows, err := q.db.Query(ctx, listDocumentTypes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DocumentType{}
+	for rows.Next() {
+		var i DocumentType
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listInvoiceTags = `-- name: ListInvoiceTags :many
 SELECT id, name
 FROM invoice_tags

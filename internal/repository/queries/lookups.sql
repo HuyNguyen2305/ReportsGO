@@ -12,3 +12,8 @@ ORDER BY name, id;
 SELECT id, name, description
 FROM payment_terms
 ORDER BY name, id;
+
+-- name: ListDocumentTypes :many
+SELECT id, name
+FROM document_types
+ORDER BY name, id;

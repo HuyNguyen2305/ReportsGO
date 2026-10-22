@@ -23,6 +23,17 @@ type Statement struct {
 type sortSpec struct {
 	expr string
 	cast string
+	// text is the SQL that renders the sort value for a cursor, for the keys whose default text form is not
+	// stable or precise enough (timestamps). Empty means "expr cast to text".
+	text string
+}
+
+// sortText returns the SQL for this key's cursor value.
+func (s sortSpec) sortText() string {
+	if s.text != "" {
+		return s.text
+	}
+	return s.expr
 }
 
 // Values of billing_documents.parent_type. They are constants, so they are safe to embed in SQL text.
@@ -98,12 +109,22 @@ func applyCommonFilter(w *whereBuilder, alias string, c commonFilter) error {
 // applySearch adds the case-insensitive substring search over document number, account number, customer name
 // and billing email. The customer must be joined as "c".
 func applySearch(w *whereBuilder, alias, search string) {
+	applySearchOn(w, search, alias+".document_number", "c.account_number", "c.display_name", alias+".billing_email")
+}
+
+// applySearchOn adds a case-insensitive substring match of search against any of the given SQL columns.
+// The columns are constant fragments chosen by the report, never caller input; the term is a bind argument
+// with LIKE wildcards escaped so it is matched literally.
+func applySearchOn(w *whereBuilder, search string, columns ...string) {
 	if search == "" {
 		return
 	}
 	p := w.arg("%" + escapeLike(search) + "%")
-	w.add(`(` + alias + `.document_number ILIKE ` + p + ` ESCAPE '\' OR c.account_number ILIKE ` + p + ` ESCAPE '\'` +
-		` OR c.display_name ILIKE ` + p + ` ESCAPE '\' OR ` + alias + `.billing_email ILIKE ` + p + ` ESCAPE '\')`)
+	matches := make([]string, len(columns))
+	for i, col := range columns {
+		matches[i] = col + ` ILIKE ` + p + ` ESCAPE '\'`
+	}
+	w.add("(" + strings.Join(matches, " OR ") + ")")
 }
 
 // applyKeyset adds the condition that keeps only rows after the cursor in the given direction.

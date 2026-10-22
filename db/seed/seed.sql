@@ -248,7 +248,7 @@ JOIN users u     ON u.full_name = 'Thọ Nguyễn Quang';
 -- Documents ----------------------------------------------------------------
 
 INSERT INTO documents (document_number, document_type_id, customer_id, created_by, created_at)
-SELECT v.num, dt.id, c.id, u.id, v.created_at::timestamptz
+SELECT v.num, dt.id, c.id, u.id, v.created_at::timestamp AT TIME ZONE 'UTC'
 FROM (VALUES
     ('5979', '1-Time Treatment (PestPros of MI)',            '63733', '2026-10-20 11:40:10', 'thon nguyen'),
     ('5978', '1-Time Treatment (PestPros of MI)',            '63733', '2026-10-20 09:49:06', 'thon nguyen'),
@@ -269,6 +269,19 @@ FROM (VALUES
 JOIN document_types dt ON dt.name = v.doc_type
 JOIN customers c       ON c.account_number = v.acct
 JOIN users u           ON u.full_name = v.creator;
+
+-- Documents in other states, so every status, type and tab of the Documents report has data.
+INSERT INTO documents (document_number, document_type_id, customer_id, created_by, status, created_at, deleted_at)
+SELECT v.num, dt.id, c.id, u.id, v.status::document_status, v.created_at::timestamp AT TIME ZONE 'UTC', v.deleted_at::timestamp AT TIME ZONE 'UTC'
+FROM (VALUES
+    ('5980', '1 Year Termite Warranty (Spidermen)',       '63706', 'sent',   '2026-10-21 10:00:00',        NULL),
+    ('5981', '1 Year SubTermite Agreement (LibertyPS)',   '63714', 'signed', '2026-10-21 12:30:00',        NULL),
+    ('5982', '1-Time Treatment (PestPros of MI)',         '63733', 'signed', '2026-10-22 08:15:30.123456', NULL),
+    ('5900', '1-Time Treatment (PestPros of MI)',         '63717', 'draft',  '2026-10-10 09:00:00',        '2026-10-18 09:00:00')
+) AS v(num, doc_type, acct, status, created_at, deleted_at)
+JOIN document_types dt ON dt.name = v.doc_type
+JOIN customers c       ON c.account_number = v.acct
+JOIN users u           ON u.full_name = 'Thọ Nguyễn Quang';
 
 -- Credits and payments ------------------------------------------------------
 
