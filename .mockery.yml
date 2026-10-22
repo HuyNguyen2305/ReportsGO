@@ -22,6 +22,7 @@ packages:
       EstimateService:
       DocumentService:
       PaymentService:
+      CreditService:
   github.com/jackc/pgx/v5:
     interfaces:
       Tx:
