@@ -18,6 +18,7 @@ packages:
       Pinger:
       InvoiceService:
       EstimateService:
+      DocumentService:
   github.com/jackc/pgx/v5:
     interfaces:
       Tx:

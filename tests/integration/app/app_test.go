@@ -339,6 +339,40 @@ func TestServerServesTheEstimateReportRoutes(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", body)
 }
 
+func TestServerServesTheDocumentReportRoutes(t *testing.T) {
+	// The database is migrated but not seeded: the report must work, and be empty, rather than fail.
+	s := startServer(t, nil)
+
+	resp, body := get(t, s.base+"/api/v1/reports/documents", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", body)
+	require.Equal(t, "no-store", resp.Header.Get("Cache-Control"))
+
+	var list dto.DocumentListResponse
+	require.NoError(t, json.Unmarshal(body, &list))
+	require.Empty(t, list.Data)
+	require.NotNil(t, list.Summary)
+	require.EqualValues(t, 0, list.Summary.Count)
+
+	resp, body = get(t, s.base+"/api/v1/reports/documents/filters", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", body)
+	var filters dto.DocumentFiltersResponse
+	require.NoError(t, json.Unmarshal(body, &filters))
+	require.Equal(t, []string{"draft", "sent", "signed"}, filters.Statuses)
+	require.Empty(t, filters.DocumentTypes)
+
+	resp, body = get(t, s.base+"/api/v1/reports/documents?lifecycle=archived", nil)
+	require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
+	var env dto.ErrorResponse
+	require.NoError(t, json.Unmarshal(body, &env))
+	require.Equal(t, "lifecycle", env.Error.Details[0].Field)
+
+	// the other reports are still served next to it
+	for _, path := range []string{"/api/v1/reports/invoices", "/api/v1/reports/estimates"} {
+		resp, body = get(t, s.base+path, nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode, "%s: %s", path, body)
+	}
+}
+
 func TestGracefulShutdownLetsInFlightRequestsFinish(t *testing.T) {
 	started := make(chan struct{})
 	s := startServer(t, nil, registrarFunc(func(rg *gin.RouterGroup) {
