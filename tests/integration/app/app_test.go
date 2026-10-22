@@ -510,3 +510,37 @@ func TestClientIPHonorsForwardedForOnlyFromTrustedProxies(t *testing.T) {
 		})
 	}
 }
+
+func TestServerServesThePaymentReportRoutes(t *testing.T) {
+	// The database is migrated but not seeded: the report must work, and be empty, rather than fail.
+	s := startServer(t, nil)
+
+	resp, body := get(t, s.base+"/api/v1/reports/payments", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", body)
+	require.Equal(t, "no-store", resp.Header.Get("Cache-Control"))
+
+	var list dto.PaymentListResponse
+	require.NoError(t, json.Unmarshal(body, &list))
+	require.Empty(t, list.Data)
+	require.NotNil(t, list.Summary)
+	require.EqualValues(t, 0, list.Summary.Count)
+	require.Equal(t, "0.00", list.Summary.Total)
+
+	resp, body = get(t, s.base+"/api/v1/reports/payments/filters", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", body)
+	var filters dto.PaymentFiltersResponse
+	require.NoError(t, json.Unmarshal(body, &filters))
+	require.Equal(t, []string{"cash", "check", "card", "other"}, filters.Methods)
+
+	resp, body = get(t, s.base+"/api/v1/reports/payments?method=wire", nil)
+	require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
+	var env dto.ErrorResponse
+	require.NoError(t, json.Unmarshal(body, &env))
+	require.Equal(t, "method", env.Error.Details[0].Field)
+
+	// the other reports are still served next to it
+	for _, path := range []string{"/api/v1/reports/invoices", "/api/v1/reports/estimates", "/api/v1/reports/documents"} {
+		resp, body = get(t, s.base+path, nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode, "%s: %s", path, body)
+	}
+}
