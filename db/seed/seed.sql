@@ -317,3 +317,19 @@ SELECT cr.customer_id, cr.id, cr.method_type,
        CASE WHEN cr.method_type = 'card' THEN '3222' END,
        cr.amount, cr.credit_date
 FROM credits cr;
+
+-- Payments in other states, for the Payments report: every status, the "other" method, a second card
+-- brand, a payment outside October and a deleted one. They sit on invoices that are already paid, so no
+-- outstanding balance changes. Several share a date to exercise paging ties.
+INSERT INTO payments (customer_id, invoice_id, method_type, card_brand, card_last4, amount, payment_date,
+                      status, deleted_at)
+SELECT i.customer_id, i.id, v.method::payment_method_type, v.brand, v.last4, v.amount, v.pay_date::date,
+       v.status::payment_status, v.deleted_at::timestamptz
+FROM (VALUES
+    ('85009', 'other', NULL,    NULL,   12.50, '2026-10-16', 'pending',  NULL),
+    ('85004', 'card',  'Visa',  '4242', 20.00, '2026-10-15', 'failed',   NULL),
+    ('85010', 'card',  'Debit', '5555', 15.00, '2026-10-15', 'refunded', NULL),
+    ('85000', 'check', NULL,    NULL,   10.00, '2026-09-30', 'paid',     NULL),
+    ('85005', 'cash',  NULL,    NULL,    5.00, '2026-10-11', 'paid',     '2026-10-12 09:00:00+00')
+) AS v(num, method, brand, last4, amount, pay_date, status, deleted_at)
+JOIN billing_documents i ON i.parent_type = 'invoice' AND i.document_number = v.num;
