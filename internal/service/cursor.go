@@ -21,6 +21,8 @@ const (
 	// maxCursorTextValue bounds a text sort value (lower-cased names, job labels, emails) in characters.
 	maxCursorTextValue = 1000
 	dateLayout         = "2006-01-02"
+	// timestampLayout is how the repository renders a created_at sort value (microseconds, always UTC).
+	timestampLayout = "2006-01-02T15:04:05.000000Z"
 )
 
 // InvalidCursorError explains why a cursor was rejected. Reason is safe to show to API clients.
@@ -45,9 +47,10 @@ type cursorPayload struct {
 type valueKind int
 
 const (
-	kindText  valueKind = iota // lower-cased names, labels, emails, numbers, statuses
-	kindDate                   // YYYY-MM-DD
-	kindMoney                  // decimal amount with two places
+	kindText      valueKind = iota // lower-cased names, labels, emails, numbers, statuses
+	kindDate                       // YYYY-MM-DD
+	kindTimestamp                  // UTC instant in the repository's fixed form, 2006-01-02T15:04:05.000000Z
+	kindMoney                      // decimal amount with two places
 )
 
 // encodeCursor returns the opaque cursor that resumes after the row with the given sort value and id.
@@ -99,6 +102,11 @@ func validateSortValue(kind valueKind, v string) error {
 	case kindDate:
 		t, err := time.Parse(dateLayout, v)
 		if err != nil || t.Format(dateLayout) != v {
+			return invalidCursor("is not a valid cursor")
+		}
+	case kindTimestamp:
+		// The layout is fixed-width, so a successful parse means the text is exactly what the repository renders.
+		if _, err := time.Parse(timestampLayout, v); err != nil {
 			return invalidCursor("is not a valid cursor")
 		}
 	case kindMoney:

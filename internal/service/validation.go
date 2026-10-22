@@ -78,16 +78,21 @@ func (v *validator) date(field, raw string) (time.Time, bool) {
 }
 
 func (v *validator) lifecycle(raw string) model.Lifecycle {
+	return v.lifecycleIn(raw, model.Lifecycles)
+}
+
+// lifecycleIn resolves the tab against the ones the report offers; the default is the active tab.
+func (v *validator) lifecycleIn(raw string, valid []model.Lifecycle) model.Lifecycle {
 	raw = strings.ToLower(strings.TrimSpace(raw))
 	if raw == "" {
 		return model.LifecycleActive
 	}
-	for _, l := range model.Lifecycles {
+	for _, l := range valid {
 		if raw == string(l) {
 			return l
 		}
 	}
-	v.add("lifecycle", "must be one of: "+joinValues(model.Lifecycles))
+	v.add("lifecycle", "must be one of: "+joinValues(valid))
 	return model.LifecycleActive
 }
 

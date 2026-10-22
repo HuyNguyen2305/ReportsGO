@@ -12,6 +12,7 @@ packages:
     interfaces:
       InvoiceRepository:
       EstimateRepository:
+      DocumentRepository:
   reportsgo/internal/handler:
     interfaces:
       Pinger:
