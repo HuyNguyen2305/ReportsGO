@@ -333,3 +333,19 @@ FROM (VALUES
     ('85005', 'cash',  NULL,    NULL,    5.00, '2026-10-11', 'paid',     '2026-10-12 09:00:00+00')
 ) AS v(num, method, brand, last4, amount, pay_date, status, deleted_at)
 JOIN billing_documents i ON i.parent_type = 'invoice' AND i.document_number = v.num;
+
+-- More credits for the Credits report: every method, an empty detail, no creator, another customer, a credit
+-- outside October and several on one date (paging ties). They are added after the "credit payments" insert
+-- above on purpose, so they stay out of the Payments report.
+INSERT INTO credits (customer_id, amount, method_type, method_detail, credit_date, created_by)
+SELECT c.id, v.amount, v.method::payment_method_type, v.detail, v.credit_date::date, u.id
+FROM (VALUES
+    ('63714',  50.00, 'cash',  'Cash at the door',      '2026-10-15', 'thon nguyen'),
+    ('63714',  75.25, 'check', 'Check #1042',           '2026-10-12', 'Thọ Nguyễn Quang'),
+    ('63733', 120.00, 'other', 'Wire transfer',         '2026-10-21', NULL),
+    ('63733',  20.00, 'card',  'Stripe **** 4242 Visa', '2026-10-15', 'thon nguyen'),
+    ('63717',  10.00, 'cash',  '',                      '2026-10-15', 'Thọ Nguyễn Quang'),
+    ('63717',  35.50, 'check', 'Check #77',             '2026-09-30', 'thon nguyen')
+) AS v(acct, amount, method, detail, credit_date, creator)
+JOIN customers c ON c.account_number = v.acct
+LEFT JOIN users u ON u.full_name = v.creator;

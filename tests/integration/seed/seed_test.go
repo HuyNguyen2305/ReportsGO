@@ -42,6 +42,7 @@ func TestSeedIsIdempotentAndPopulatesEveryTable(t *testing.T) {
 	require.Equal(t, 45, first["billing_documents"], "24 invoices + 21 estimates")
 	require.Equal(t, 19, first["documents"], "15 original + sent + 2 signed + 1 deleted")
 	require.Equal(t, 17, first["payments"], "12 original + 5 in other states")
+	require.Equal(t, 8, first["credits"], "2 original + 6 for the Credits report")
 }
 
 func TestSeedRollsBackOnError(t *testing.T) {
