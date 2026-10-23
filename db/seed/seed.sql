@@ -34,7 +34,7 @@ INSERT INTO document_types (name) VALUES
 -- Customers, phones, locations -------------------------------------------
 
 INSERT INTO customers (account_number, first_name, last_name, display_name, email, billing_email, lead_source_id, top_note, created_at)
-SELECT v.acct, v.first_name, v.last_name, v.display_name, v.email, v.email, ls.id, v.top_note, v.created_at::timestamptz
+SELECT v.acct, v.first_name, v.last_name, v.display_name, v.email, v.email, ls.id, v.top_note, v.created_at::timestamp AT TIME ZONE 'UTC'
 FROM (VALUES
     ('5001',  'William', 'Saliba',  'William Saliba',  'williamsaliba@yopmail.com', NULL,                    '',                       '2026-09-01'),
     ('5002',  'Alaba',   'David',   'Alaba David',     'alaba123@yopmail.com',      NULL,                    '',                       '2026-09-01'),
@@ -393,3 +393,34 @@ JOIN customers c          ON c.account_number = v.acct
 JOIN service_locations l  ON l.customer_id = c.id
 JOIN service_types st     ON st.name = v.service
 LEFT JOIN lead_sources ls ON ls.name = v.source;
+
+-- More customers for the New Customers report: a microsecond timestamp, the first and the last instant of a UTC
+-- day, customers just outside October (09-30 and 11-01), two created at the very same instant (paging ties),
+-- every lead source, and customers with and without an email and a phone (one has two phones: the report shows
+-- the first). Timestamps are explicit UTC so the data does not depend on the database's time zone. They are
+-- added last, so nothing above changes.
+INSERT INTO customers (account_number, first_name, last_name, display_name, email, billing_email, lead_source_id, created_at)
+SELECT v.acct, '', v.display_name, v.display_name, v.email, v.email, ls.id, v.created_at::timestamptz
+FROM (VALUES
+    ('70001', 'Ada Lovelace',     'ada@example.com',    'Google',   '2026-10-22 08:15:30.123456+00'),
+    ('70002', 'Boundary Start',   NULL,                 NULL,       '2026-10-10 00:00:00+00'),
+    ('70003', 'Boundary End',     'end@example.com',    'Referral', '2026-10-10 23:59:59.999999+00'),
+    ('70004', 'September Last',   'sept@example.com',   'Google',   '2026-09-30 23:00:00+00'),
+    ('70005', 'November First',   NULL,                 NULL,       '2026-11-01 00:00:00+00'),
+    ('70006', 'Tie One',          'tie@example.com',    'Facebook', '2026-10-12 06:00:00+00'),
+    ('70007', 'Tie Two',          NULL,                 'Facebook', '2026-10-12 06:00:00+00'),
+    ('70008', 'Percent 50% Off',  'a_b@example.com',    NULL,       '2026-10-13 09:30:00+00')
+) AS v(acct, display_name, email, source, created_at)
+LEFT JOIN lead_sources ls ON ls.name = v.source;
+
+INSERT INTO customer_phones (customer_id, number, kind)
+SELECT c.id, v.number, 'mobile'
+FROM (VALUES
+    (1, '70001', '555-0101'),
+    (2, '70001', '555-0102'),
+    (3, '70002', '555-0202'),
+    (4, '70006', '555-0606'),
+    (5, '70007', '555-0707')
+) AS v(n, acct, number)
+JOIN customers c ON c.account_number = v.acct
+ORDER BY v.n;
