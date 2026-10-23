@@ -16,6 +16,7 @@ packages:
       PaymentRepository:
       CreditRepository:
       RecurringRepository:
+      JobRepository:
   reportsgo/internal/handler:
     interfaces:
       Pinger:
