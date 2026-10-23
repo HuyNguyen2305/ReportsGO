@@ -24,6 +24,7 @@ packages:
       DocumentService:
       PaymentService:
       CreditService:
+      RecurringService:
   github.com/jackc/pgx/v5:
     interfaces:
       Tx:

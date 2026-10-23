@@ -581,3 +581,43 @@ func TestServerServesTheCreditReportRoutes(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode, "%s: %s", path, body)
 	}
 }
+
+func TestServerServesTheRecurringInvoiceReportRoutes(t *testing.T) {
+	// The database is migrated but not seeded: the report must work, and be empty, rather than fail.
+	s := startServer(t, nil)
+
+	resp, body := get(t, s.base+"/api/v1/reports/recurring-invoices", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", body)
+	require.Equal(t, "no-store", resp.Header.Get("Cache-Control"))
+
+	var list dto.RecurringListResponse
+	require.NoError(t, json.Unmarshal(body, &list))
+	require.Empty(t, list.Data)
+	require.NotNil(t, list.Summary)
+	require.EqualValues(t, 0, list.Summary.Count)
+	require.Equal(t, "0.00", list.Summary.Total)
+	require.Nil(t, list.Range.From, "no default month for this report")
+	require.Nil(t, list.Range.To)
+
+	resp, body = get(t, s.base+"/api/v1/reports/recurring-invoices/filters", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", body)
+	var filters dto.RecurringFiltersResponse
+	require.NoError(t, json.Unmarshal(body, &filters))
+	require.Equal(t, []string{"active", "paused", "failed", "ended"}, filters.Statuses)
+
+	// recurring invoices have no tabs, so the parameter most other reports accept is unsupported here
+	resp, body = get(t, s.base+"/api/v1/reports/recurring-invoices?lifecycle=active", nil)
+	require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
+	var env dto.ErrorResponse
+	require.NoError(t, json.Unmarshal(body, &env))
+	require.Equal(t, "lifecycle", env.Error.Details[0].Field)
+
+	// the other reports are still served next to it
+	for _, path := range []string{
+		"/api/v1/reports/invoices", "/api/v1/reports/estimates", "/api/v1/reports/documents",
+		"/api/v1/reports/payments", "/api/v1/reports/credits",
+	} {
+		resp, body = get(t, s.base+path, nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode, "%s: %s", path, body)
+	}
+}
