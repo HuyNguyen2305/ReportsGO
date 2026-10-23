@@ -38,7 +38,7 @@ func TestSeedIsIdempotentAndPopulatesEveryTable(t *testing.T) {
 		require.Positive(t, first[table], "table %s should have rows", table)
 	}
 	require.Equal(t, 29, first["jobs"])
-	require.Equal(t, 1, first["recurring_invoices"])
+	require.Equal(t, 7, first["recurring_invoices"], "1 original + 6 for the Recurring Invoices report")
 	require.Equal(t, 45, first["billing_documents"], "24 invoices + 21 estimates")
 	require.Equal(t, 19, first["documents"], "15 original + sent + 2 signed + 1 deleted")
 	require.Equal(t, 17, first["payments"], "12 original + 5 in other states")
@@ -114,7 +114,7 @@ func TestSeededDataSupportsReportQueries(t *testing.T) {
 	t.Run("recurring invoice points at its next invoice", func(t *testing.T) {
 		var number string
 		require.NoError(t, pool.QueryRow(ctx,
-			`SELECT i.document_number FROM recurring_invoices r JOIN billing_documents i ON i.id = r.next_invoice_id`).Scan(&number))
+			`SELECT i.document_number FROM recurring_invoices r JOIN billing_documents i ON i.id = r.next_invoice_id ORDER BY r.id LIMIT 1`).Scan(&number))
 		require.Equal(t, "84890", number)
 	})
 }
