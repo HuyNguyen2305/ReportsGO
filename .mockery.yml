@@ -28,6 +28,7 @@ packages:
       CreditService:
       RecurringService:
       JobService:
+      CustomerService:
   github.com/jackc/pgx/v5:
     interfaces:
       Tx:
