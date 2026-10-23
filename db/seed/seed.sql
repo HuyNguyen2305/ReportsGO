@@ -80,7 +80,8 @@ JOIN customers c ON c.account_number = v.acct;
 -- Jobs --------------------------------------------------------------------
 
 INSERT INTO jobs (customer_id, location_id, service_type_id, lead_source_id, status, scheduled_at, invoice_value, created_at)
-SELECT c.id, l.id, st.id, ls.id, v.status::job_status, v.created_at::timestamptz, v.value, v.created_at::timestamptz
+SELECT c.id, l.id, st.id, ls.id, v.status::job_status, v.created_at::timestamp AT TIME ZONE 'UTC', v.value,
+       v.created_at::timestamp AT TIME ZONE 'UTC'
 FROM (VALUES
     ('63706', 'Blank Service 123',   'confirmed',   '2026-10-01 04:30', 0.00,  NULL),
     ('63706', 'Blank Service 123',   'unconfirmed', '2026-10-01 05:27', 0.00,  NULL),
@@ -113,7 +114,7 @@ LEFT JOIN lead_sources ls ON ls.name = v.source;
 -- Seven more completed Bi-Monthly jobs for William Saliba (10/09 - 10/15).
 INSERT INTO jobs (customer_id, location_id, service_type_id, status, scheduled_at, invoice_value, created_at)
 SELECT c.id, l.id, st.id, 'completed', d, 65.00, d
-FROM generate_series('2026-10-09 08:00'::timestamptz, '2026-10-15 08:00'::timestamptz, interval '1 day') AS d
+FROM generate_series('2026-10-09 08:00+00'::timestamptz, '2026-10-15 08:00+00'::timestamptz, interval '1 day') AS d
 CROSS JOIN customers c
 JOIN service_locations l ON l.customer_id = c.id
 CROSS JOIN service_types st
@@ -368,3 +369,27 @@ FROM (VALUES
 ) AS v(acct, unit, every, weekday, occurrences, action, status, total, started, ends, next_number, next_date)
 JOIN customers c ON c.account_number = v.acct
 LEFT JOIN billing_documents i ON i.parent_type = 'invoice' AND i.document_number = v.next_number;
+
+-- More jobs for the New Jobs report: a cancelled job (none above), every lead source, a microsecond timestamp,
+-- the first and the last instant of a UTC day, jobs just outside October (09-30 and 11-01) and two created at the
+-- very same instant (paging ties). Timestamps are explicit UTC so the data does not depend on the database's time
+-- zone. They are added after the invoices on purpose: an invoice links to its customer's most recent job at the
+-- time it is created, so these do not change the Invoices report.
+INSERT INTO lead_sources (name) VALUES ('Google'), ('Referral');
+
+INSERT INTO jobs (customer_id, location_id, service_type_id, lead_source_id, status, scheduled_at, invoice_value, created_at)
+SELECT c.id, l.id, st.id, ls.id, v.status::job_status, v.created_at::timestamptz, v.value, v.created_at::timestamptz
+FROM (VALUES
+    ('63733', 'Initial Service',    'cancelled',   '2026-10-22 08:15:30.123456+00', 95.00, 'Google'),
+    ('63714', 'Full service',       'completed',   '2026-10-10 00:00:00+00',        79.30, 'Referral'),
+    ('63717', 'Call Back Service',  'confirmed',   '2026-10-10 23:59:59.999999+00', 10.33, 'Facebook'),
+    ('63706', 'Bi-Monthly Service', 'completed',   '2026-09-30 23:00:00+00',        65.00, NULL),
+    ('63706', 'Bi-Monthly Service', 'unconfirmed', '2026-11-01 00:00:00+00',        65.00, 'Google'),
+    ('63733', 'Blank Service 123',  'confirmed',   '2026-10-12 06:00:00+00',         0.00, NULL),
+    ('63714', 'Blank Service 123',  'confirmed',   '2026-10-12 06:00:00+00',         0.00, 'Google'),
+    ('5001',  'Bi-Monthly Service', 'cancelled',   '2026-10-13 09:30:00+00',        65.00, NULL)
+) AS v(acct, service, status, created_at, value, source)
+JOIN customers c          ON c.account_number = v.acct
+JOIN service_locations l  ON l.customer_id = c.id
+JOIN service_types st     ON st.name = v.service
+LEFT JOIN lead_sources ls ON ls.name = v.source;

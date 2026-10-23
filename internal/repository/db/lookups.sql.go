@@ -61,6 +61,32 @@ func (q *Queries) ListInvoiceTags(ctx context.Context) ([]InvoiceTag, error) {
 	return items, nil
 }
 
+const listLeadSources = `-- name: ListLeadSources :many
+SELECT id, name
+FROM lead_sources
+ORDER BY name, id
+`
+
+func (q *Queries) ListLeadSources(ctx context.Context) ([]LeadSource, error) {
+	rows, err := q.db.Query(ctx, listLeadSources)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LeadSource{}
+	for rows.Next() {
+		var i LeadSource
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPaymentTerms = `-- name: ListPaymentTerms :many
 SELECT id, name, description
 FROM payment_terms

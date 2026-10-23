@@ -17,3 +17,8 @@ ORDER BY name, id;
 SELECT id, name
 FROM document_types
 ORDER BY name, id;
+
+-- name: ListLeadSources :many
+SELECT id, name
+FROM lead_sources
+ORDER BY name, id;
