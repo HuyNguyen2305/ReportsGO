@@ -621,3 +621,42 @@ func TestServerServesTheRecurringInvoiceReportRoutes(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode, "%s: %s", path, body)
 	}
 }
+
+func TestServerServesTheNewJobsReportRoutes(t *testing.T) {
+	// The database is migrated but not seeded: the report must work, and be empty, rather than fail.
+	s := startServer(t, nil)
+
+	resp, body := get(t, s.base+"/api/v1/reports/new-jobs", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", body)
+	require.Equal(t, "no-store", resp.Header.Get("Cache-Control"))
+
+	var list dto.JobListResponse
+	require.NoError(t, json.Unmarshal(body, &list))
+	require.Empty(t, list.Data)
+	require.NotNil(t, list.Summary)
+	require.EqualValues(t, 0, list.Summary.Count)
+	require.Equal(t, "0.00", list.Summary.Total)
+
+	resp, body = get(t, s.base+"/api/v1/reports/new-jobs/filters", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", body)
+	var filters dto.JobFiltersResponse
+	require.NoError(t, json.Unmarshal(body, &filters))
+	require.Equal(t, []string{"unconfirmed", "confirmed", "completed", "cancelled"}, filters.Statuses)
+	require.NotNil(t, filters.ServiceTypes)
+	require.NotNil(t, filters.LeadSources)
+
+	resp, body = get(t, s.base+"/api/v1/reports/new-jobs?lifecycle=active", nil)
+	require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
+	var env dto.ErrorResponse
+	require.NoError(t, json.Unmarshal(body, &env))
+	require.Equal(t, "lifecycle", env.Error.Details[0].Field)
+
+	// the other reports are still served next to it
+	for _, path := range []string{
+		"/api/v1/reports/invoices", "/api/v1/reports/estimates", "/api/v1/reports/documents",
+		"/api/v1/reports/payments", "/api/v1/reports/credits", "/api/v1/reports/recurring-invoices",
+	} {
+		resp, body = get(t, s.base+path, nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode, "%s: %s", path, body)
+	}
+}
