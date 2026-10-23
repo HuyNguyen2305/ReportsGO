@@ -48,12 +48,24 @@ func (v *validator) err() error {
 // dateRange parses from/to. With neither given the range is the current UTC calendar month; when only one is
 // given the other side stays open (zero time).
 func (v *validator) dateRange(rawFrom, rawTo string, now time.Time) (from, to time.Time) {
-	rawFrom, rawTo = strings.TrimSpace(rawFrom), strings.TrimSpace(rawTo)
-	if rawFrom == "" && rawTo == "" {
+	if strings.TrimSpace(rawFrom) == "" && strings.TrimSpace(rawTo) == "" {
 		n := now.UTC()
 		first := time.Date(n.Year(), n.Month(), 1, 0, 0, 0, 0, time.UTC)
 		return first, first.AddDate(0, 1, -1)
 	}
+	return v.parseRange(rawFrom, rawTo)
+}
+
+// openDateRange parses from/to for reports without a default range: with neither given both sides stay open
+// (zero time), and when only one is given the other stays open too.
+func (v *validator) openDateRange(rawFrom, rawTo string) (from, to time.Time) {
+	return v.parseRange(rawFrom, rawTo)
+}
+
+// parseRange parses whichever of from/to is given and checks that to is not before from. A missing side is
+// returned as the zero time.
+func (v *validator) parseRange(rawFrom, rawTo string) (from, to time.Time) {
+	rawFrom, rawTo = strings.TrimSpace(rawFrom), strings.TrimSpace(rawTo)
 
 	var fromOK, toOK bool
 	if rawFrom != "" {
