@@ -140,7 +140,7 @@ Everything needed to build the filter controls. Use the returned ids for `servic
 
 ## CORS
 
-Browsers may call these endpoints from the origins listed in `CORS_ALLOWED_ORIGINS`. Only `GET`, `HEAD` and
+Browsers may call these endpoints from the origins listed in `CORS_ALLOWED_ORIGINS`. Only `GET` and
 `OPTIONS` are allowed; `X-Request-ID` is exposed to scripts. No credentials are accepted.
 
 ## Examples

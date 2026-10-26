@@ -566,7 +566,7 @@ func TestCORSAndRouting(t *testing.T) {
 			"Origin": allowedOrigin, "Access-Control-Request-Method": "GET",
 		})
 		require.Equal(t, http.StatusNoContent, resp.status)
-		require.Equal(t, "GET, HEAD, OPTIONS", resp.header.Get("Access-Control-Allow-Methods"))
+		require.Equal(t, "GET, OPTIONS", resp.header.Get("Access-Control-Allow-Methods"))
 	})
 
 	t.Run("report is read-only", func(t *testing.T) {

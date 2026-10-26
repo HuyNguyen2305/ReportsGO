@@ -75,7 +75,7 @@ func TestCORSPreflight(t *testing.T) {
 		wantAllowed bool
 	}{
 		{"allowed origin, GET", reportsPath + "/ok", "https://app.example.com", "GET", true},
-		{"allowed origin, HEAD", reportsPath + "/ok", "https://app.example.com", "HEAD", true},
+		{"allowed origin, HEAD (not served)", reportsPath + "/ok", "https://app.example.com", "HEAD", false},
 		{"allowed origin, unknown path", "/does/not/exist", "https://app.example.com", "GET", true},
 		{"allowed origin, POST", reportsPath + "/ok", "https://app.example.com", "POST", false},
 		{"allowed origin, DELETE", reportsPath + "/ok", "https://app.example.com", "DELETE", false},
@@ -101,7 +101,7 @@ func TestCORSPreflight(t *testing.T) {
 
 			if tt.wantAllowed {
 				require.Equal(t, tt.origin, h.Get("Access-Control-Allow-Origin"))
-				require.Equal(t, "GET, HEAD, OPTIONS", h.Get("Access-Control-Allow-Methods"))
+				require.Equal(t, "GET, OPTIONS", h.Get("Access-Control-Allow-Methods"))
 				require.Equal(t, "Accept, Content-Type, X-Request-ID", h.Get("Access-Control-Allow-Headers"))
 				require.Equal(t, "600", h.Get("Access-Control-Max-Age"))
 			} else {

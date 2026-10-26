@@ -210,7 +210,7 @@ func TestServerServesBuiltInEndpoints(t *testing.T) {
 		})
 		require.Equal(t, http.StatusNoContent, resp.StatusCode)
 		require.Equal(t, allowedOrigin, resp.Header.Get("Access-Control-Allow-Origin"))
-		require.Equal(t, "GET, HEAD, OPTIONS", resp.Header.Get("Access-Control-Allow-Methods"))
+		require.Equal(t, "GET, OPTIONS", resp.Header.Get("Access-Control-Allow-Methods"))
 	})
 
 	t.Run("CORS is refused for other origins", func(t *testing.T) {

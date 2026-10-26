@@ -9,7 +9,7 @@ import (
 
 // The API is read-only, so cross-origin requests are limited to safe methods and no credentials.
 const (
-	corsAllowMethods = "GET, HEAD, OPTIONS"
+	corsAllowMethods = "GET, OPTIONS"
 	corsAllowHeaders = "Accept, Content-Type, X-Request-ID"
 	corsMaxAge       = "600"
 )
@@ -69,7 +69,7 @@ func isPreflight(r *http.Request) bool {
 }
 
 func safeMethod(m string) bool {
-	return m == http.MethodGet || m == http.MethodHead || m == http.MethodOptions
+	return m == http.MethodGet || m == http.MethodOptions
 }
 
 // normalizeOrigin makes origin comparison case-insensitive and ignores a trailing slash.

@@ -162,7 +162,7 @@ the static lists and limits mean the frontend never has to hard-code them.
 
 ## CORS
 
-Browsers may call these endpoints from the origins listed in `CORS_ALLOWED_ORIGINS`. Only `GET`, `HEAD` and
+Browsers may call these endpoints from the origins listed in `CORS_ALLOWED_ORIGINS`. Only `GET` and
 `OPTIONS` are allowed; `X-Request-ID` is exposed to scripts. No credentials are accepted.
 
 ## Examples

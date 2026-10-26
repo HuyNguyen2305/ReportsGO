@@ -74,7 +74,7 @@ func TestFullStackAgainstRealDatabase(t *testing.T) {
 			"Access-Control-Request-Method": "GET",
 		})
 		require.Equal(t, http.StatusNoContent, rec.Code)
-		require.Equal(t, "GET, HEAD, OPTIONS", rec.Header().Get("Access-Control-Allow-Methods"))
+		require.Equal(t, "GET, OPTIONS", rec.Header().Get("Access-Control-Allow-Methods"))
 	})
 
 	t.Run("a panicking handler returns the 500 envelope and the server keeps serving", func(t *testing.T) {
