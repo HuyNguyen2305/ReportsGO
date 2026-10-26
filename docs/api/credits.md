@@ -39,7 +39,7 @@ case-insensitive; blanks and duplicates are ignored.
 sort key. Every sort is stable: ties are broken by credit id in the same direction. A credit without a known
 creator sorts as an empty name under `created_by`.
 
-Number columns are identifiers, not quantities: `account_number` sort as text, character by character, not numerically, so `100` comes before `9`.
+Number columns are identifiers, not quantities: `account_number` sorts as text, character by character, not numerically, so `100` comes before `9`.
 
 ### Response
 

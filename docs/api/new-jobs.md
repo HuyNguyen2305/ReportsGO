@@ -35,7 +35,7 @@ of the other reports, such as `method` and `document_type_id`.
 `?status=cancelled&status=completed`, `?status=cancelled,completed`. Values are trimmed and case-insensitive for
 `status`; blanks and duplicates are ignored.
 
-Number columns are identifiers, not quantities: `account_number` sort as text, character by character, not numerically, so `100` comes before `9`.
+Number columns are identifiers, not quantities: `account_number` sorts as text, character by character, not numerically, so `100` comes before `9`.
 
 ### Response
 
