@@ -32,6 +32,8 @@ func TestPoolConfigValidate(t *testing.T) {
 		{"negative min conns", func(c *repository.PoolConfig) { c.MinConns = -1 }, "MinConns must be between 0 and MaxConns"},
 		{"min above max", func(c *repository.PoolConfig) { c.MinConns = 11 }, "MinConns must be between 0 and MaxConns"},
 		{"zero statement timeout", func(c *repository.PoolConfig) { c.StatementTimeout = 0 }, "StatementTimeout must be positive"},
+		{"zero connect timeout means the default", func(c *repository.PoolConfig) { c.ConnectTimeout = 0 }, ""},
+		{"negative connect timeout", func(c *repository.PoolConfig) { c.ConnectTimeout = -time.Second }, "ConnectTimeout must not be negative"},
 	}
 
 	for _, tt := range tests {

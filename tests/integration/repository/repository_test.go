@@ -5,6 +5,7 @@ package repository_test
 import (
 	"context"
 	"errors"
+	"net"
 	"testing"
 	"time"
 
@@ -60,6 +61,34 @@ func TestNewPoolFailsWhenDatabaseUnreachable(t *testing.T) {
 		URL: "postgres://u:p@127.0.0.1:1/db?sslmode=disable", MaxConns: 1, StatementTimeout: time.Second,
 	})
 	require.Error(t, err)
+}
+
+func TestNewPoolGivesUpWhenServerNeverAnswers(t *testing.T) {
+	// A listener that accepts connections and then says nothing, like a host behind a dead network path.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			t.Cleanup(func() { _ = conn.Close() })
+		}
+	}()
+
+	start := time.Now()
+	_, err = repository.NewPool(context.Background(), repository.PoolConfig{
+		URL:              "postgres://u:p@" + ln.Addr().String() + "/db?sslmode=disable",
+		MaxConns:         1,
+		StatementTimeout: time.Second,
+		ConnectTimeout:   300 * time.Millisecond,
+	})
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Less(t, time.Since(start), 5*time.Second, "NewPool must honour its connect timeout")
 }
 
 func TestWithTx(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/mock"
@@ -104,7 +105,9 @@ func TestWithTxRollsBackAndRepanics(t *testing.T) {
 	tx := pgxmocks.NewMockTx(t)
 	db := repositorymocks.NewMockTxBeginner(t)
 	db.EXPECT().Begin(mock.Anything).Return(tx, nil).Once()
-	tx.EXPECT().Rollback(mock.Anything).Return(nil).Once()
+	tx.EXPECT().Rollback(mock.Anything).Run(func(rbCtx context.Context) {
+		requireBoundedRollback(t, rbCtx)
+	}).Return(nil).Once()
 
 	require.PanicsWithValue(t, "boom", func() {
 		_ = repository.WithTx(context.Background(), db, func(context.Context, pgx.Tx) error {
@@ -120,6 +123,7 @@ func TestWithTxRollbackIgnoresCancelledContext(t *testing.T) {
 	db.EXPECT().Begin(mock.Anything).Return(tx, nil).Once()
 	tx.EXPECT().Rollback(mock.Anything).Run(func(rbCtx context.Context) {
 		require.NoError(t, rbCtx.Err(), "rollback must not use the cancelled request context")
+		requireBoundedRollback(t, rbCtx)
 	}).Return(nil).Once()
 
 	err := repository.WithTx(ctx, db, func(context.Context, pgx.Tx) error {
@@ -127,4 +131,13 @@ func TestWithTxRollbackIgnoresCancelledContext(t *testing.T) {
 		return errWork
 	})
 	require.ErrorIs(t, err, errWork)
+}
+
+// requireBoundedRollback checks that a rollback context carries a deadline, so a dead connection cannot
+// block the caller forever.
+func requireBoundedRollback(t *testing.T, ctx context.Context) {
+	t.Helper()
+	deadline, ok := ctx.Deadline()
+	require.True(t, ok, "rollback context must have a deadline")
+	require.WithinDuration(t, time.Now().Add(5*time.Second), deadline, 2*time.Second)
 }

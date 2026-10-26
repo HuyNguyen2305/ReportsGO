@@ -2,6 +2,7 @@
 package repository
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -10,12 +11,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// DefaultConnectTimeout bounds the connectivity check NewPool makes at startup.
+const DefaultConnectTimeout = 10 * time.Second
+
 // PoolConfig configures the shared connection pool.
 type PoolConfig struct {
 	URL              string
 	MaxConns         int32
 	MinConns         int32
 	StatementTimeout time.Duration
+	// ConnectTimeout bounds the startup connectivity check; zero means DefaultConnectTimeout.
+	ConnectTimeout time.Duration
 }
 
 // Validate checks the settings that can be verified without a database.
@@ -32,6 +38,9 @@ func (c PoolConfig) Validate() error {
 	}
 	if c.StatementTimeout <= 0 {
 		errs = append(errs, errors.New("StatementTimeout must be positive"))
+	}
+	if c.ConnectTimeout < 0 {
+		errs = append(errs, errors.New("ConnectTimeout must not be negative"))
 	}
 	return errors.Join(errs...)
 }
@@ -60,7 +69,11 @@ func NewPool(ctx context.Context, cfg PoolConfig) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create pool: %w", err)
 	}
-	if err := pool.Ping(ctx); err != nil {
+	// Without a bound, an unreachable or silent host would hang startup until the process is killed.
+	connectTimeout := cmp.Or(cfg.ConnectTimeout, DefaultConnectTimeout)
+	pingCtx, cancel := context.WithTimeout(ctx, connectTimeout)
+	defer cancel()
+	if err := pool.Ping(pingCtx); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
