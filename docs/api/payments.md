@@ -78,7 +78,9 @@ ties are broken by payment id in the same direction.
 - `method.type` is `cash`, `check`, `card` or `other`. `card_brand` and `card_last4` are `null` unless the
   payment was made by card (and can be `null` for a card payment whose details are unknown).
 - `summary` counts and totals the **whole filtered set**, not just this page, and is only present on the
-  **first page** (when no `cursor` is sent). It is `null` on later pages. The total adds up **every** payment in
+  **first page** (when no `cursor` is sent). It is `null` on later pages. The rows and the summary are read from
+  one database snapshot, so the count and total always describe exactly the set the rows were taken from, even
+  while payments are being added. The total adds up **every** payment in
   scope whatever its status, so `failed` and `refunded` payments are included; send `status=paid` to total only
   the money that was collected.
 - `range` is the date range actually applied, so a client can show the defaulted month. An open end is `null`.

@@ -47,47 +47,46 @@ func (_m *MockPaymentRepository) EXPECT() *MockPaymentRepository_Expecter {
 	return &MockPaymentRepository_Expecter{mock: &_m.Mock}
 }
 
-// List provides a mock function for the type MockPaymentRepository
-func (_mock *MockPaymentRepository) List(ctx context.Context, q model.PaymentQuery) ([]model.PaymentRow, error) {
-	ret := _mock.Called(ctx, q)
+// Page provides a mock function for the type MockPaymentRepository
+func (_mock *MockPaymentRepository) Page(ctx context.Context, q model.PaymentQuery, withSummary bool) (model.PaymentPage, error) {
+	ret := _mock.Called(ctx, q, withSummary)
 
 	if len(ret) == 0 {
-		panic("no return value specified for List")
+		panic("no return value specified for Page")
 	}
 
-	var r0 []model.PaymentRow
+	var r0 model.PaymentPage
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.PaymentQuery) ([]model.PaymentRow, error)); ok {
-		return returnFunc(ctx, q)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, model.PaymentQuery, bool) (model.PaymentPage, error)); ok {
+		return returnFunc(ctx, q, withSummary)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.PaymentQuery) []model.PaymentRow); ok {
-		r0 = returnFunc(ctx, q)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, model.PaymentQuery, bool) model.PaymentPage); ok {
+		r0 = returnFunc(ctx, q, withSummary)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]model.PaymentRow)
-		}
+		r0 = ret.Get(0).(model.PaymentPage)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, model.PaymentQuery) error); ok {
-		r1 = returnFunc(ctx, q)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, model.PaymentQuery, bool) error); ok {
+		r1 = returnFunc(ctx, q, withSummary)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
 }
 
-// MockPaymentRepository_List_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'List'
-type MockPaymentRepository_List_Call struct {
+// MockPaymentRepository_Page_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Page'
+type MockPaymentRepository_Page_Call struct {
 	*mock.Call
 }
 
-// List is a helper method to define mock.On call
+// Page is a helper method to define mock.On call
 //   - ctx context.Context
 //   - q model.PaymentQuery
-func (_e *MockPaymentRepository_Expecter) List(ctx any, q any) *MockPaymentRepository_List_Call {
-	return &MockPaymentRepository_List_Call{Call: _e.mock.On("List", ctx, q)}
+//   - withSummary bool
+func (_e *MockPaymentRepository_Expecter) Page(ctx any, q any, withSummary any) *MockPaymentRepository_Page_Call {
+	return &MockPaymentRepository_Page_Call{Call: _e.mock.On("Page", ctx, q, withSummary)}
 }
 
-func (_c *MockPaymentRepository_List_Call) Run(run func(ctx context.Context, q model.PaymentQuery)) *MockPaymentRepository_List_Call {
+func (_c *MockPaymentRepository_Page_Call) Run(run func(ctx context.Context, q model.PaymentQuery, withSummary bool)) *MockPaymentRepository_Page_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -97,86 +96,25 @@ func (_c *MockPaymentRepository_List_Call) Run(run func(ctx context.Context, q m
 		if args[1] != nil {
 			arg1 = args[1].(model.PaymentQuery)
 		}
+		var arg2 bool
+		if args[2] != nil {
+			arg2 = args[2].(bool)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
 }
 
-func (_c *MockPaymentRepository_List_Call) Return(paymentRows []model.PaymentRow, err error) *MockPaymentRepository_List_Call {
-	_c.Call.Return(paymentRows, err)
+func (_c *MockPaymentRepository_Page_Call) Return(paymentPage model.PaymentPage, err error) *MockPaymentRepository_Page_Call {
+	_c.Call.Return(paymentPage, err)
 	return _c
 }
 
-func (_c *MockPaymentRepository_List_Call) RunAndReturn(run func(ctx context.Context, q model.PaymentQuery) ([]model.PaymentRow, error)) *MockPaymentRepository_List_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// Summary provides a mock function for the type MockPaymentRepository
-func (_mock *MockPaymentRepository) Summary(ctx context.Context, f model.PaymentFilter) (model.PaymentSummary, error) {
-	ret := _mock.Called(ctx, f)
-
-	if len(ret) == 0 {
-		panic("no return value specified for Summary")
-	}
-
-	var r0 model.PaymentSummary
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.PaymentFilter) (model.PaymentSummary, error)); ok {
-		return returnFunc(ctx, f)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.PaymentFilter) model.PaymentSummary); ok {
-		r0 = returnFunc(ctx, f)
-	} else {
-		r0 = ret.Get(0).(model.PaymentSummary)
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, model.PaymentFilter) error); ok {
-		r1 = returnFunc(ctx, f)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockPaymentRepository_Summary_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Summary'
-type MockPaymentRepository_Summary_Call struct {
-	*mock.Call
-}
-
-// Summary is a helper method to define mock.On call
-//   - ctx context.Context
-//   - f model.PaymentFilter
-func (_e *MockPaymentRepository_Expecter) Summary(ctx any, f any) *MockPaymentRepository_Summary_Call {
-	return &MockPaymentRepository_Summary_Call{Call: _e.mock.On("Summary", ctx, f)}
-}
-
-func (_c *MockPaymentRepository_Summary_Call) Run(run func(ctx context.Context, f model.PaymentFilter)) *MockPaymentRepository_Summary_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 model.PaymentFilter
-		if args[1] != nil {
-			arg1 = args[1].(model.PaymentFilter)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockPaymentRepository_Summary_Call) Return(paymentSummary model.PaymentSummary, err error) *MockPaymentRepository_Summary_Call {
-	_c.Call.Return(paymentSummary, err)
-	return _c
-}
-
-func (_c *MockPaymentRepository_Summary_Call) RunAndReturn(run func(ctx context.Context, f model.PaymentFilter) (model.PaymentSummary, error)) *MockPaymentRepository_Summary_Call {
+func (_c *MockPaymentRepository_Page_Call) RunAndReturn(run func(ctx context.Context, q model.PaymentQuery, withSummary bool) (model.PaymentPage, error)) *MockPaymentRepository_Page_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -366,6 +367,104 @@ func TestRepositoryRejectsInvalidQueries(t *testing.T) {
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
 	_, err = e.repo.Summary(ctx, model.PaymentFilter{Lifecycle: model.LifecycleArchived})
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
+}
+
+// insertOctoberPayment commits one more active October payment, for invoice 85033.
+func insertOctoberPayment(t *testing.T, conn interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}) {
+	t.Helper()
+	_, err := conn.Exec(context.Background(), `INSERT INTO payments (customer_id, invoice_id, method_type, amount, payment_date)
+		SELECT customer_id, id, 'cash', 10, '2026-10-19'
+		FROM billing_documents WHERE parent_type = 'invoice' AND document_number = '85033'`)
+	require.NoError(t, err)
+}
+
+func TestPage(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	q := query(october(), model.PaymentSortDate, true, 5)
+
+	t.Run("a first page carries the rows and the totals of the same set", func(t *testing.T) {
+		page, err := e.repo.Page(ctx, q, true)
+		require.NoError(t, err)
+
+		rows, err := e.repo.List(ctx, q)
+		require.NoError(t, err)
+		summary, err := e.repo.Summary(ctx, q.Filter)
+		require.NoError(t, err)
+
+		require.Equal(t, rows, page.Rows)
+		require.NotNil(t, page.Summary)
+		require.Equal(t, summary, *page.Summary)
+		require.EqualValues(t, octoberActive, page.Summary.Count)
+		require.Len(t, page.Rows, 6, "limit+1 rows, so the caller can tell another page follows")
+	})
+
+	t.Run("without a summary it is just the rows", func(t *testing.T) {
+		page, err := e.repo.Page(ctx, q, false)
+		require.NoError(t, err)
+
+		rows, err := e.repo.List(ctx, q)
+		require.NoError(t, err)
+		require.Equal(t, rows, page.Rows)
+		require.Nil(t, page.Summary)
+	})
+
+	t.Run("works on a repository bound to the caller's transaction", func(t *testing.T) {
+		tx, err := e.pool.Begin(ctx)
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback(ctx) }()
+		insertOctoberPayment(t, tx)
+
+		page, err := repository.NewPaymentRepository(tx).Page(ctx, q, true)
+		require.NoError(t, err)
+		require.EqualValues(t, octoberActive+1, page.Summary.Count, "the caller's transaction is the snapshot and sees its own row")
+	})
+
+	t.Run("invalid queries and cancelled contexts are errors, not partial pages", func(t *testing.T) {
+		bad := q
+		bad.Limit = 0
+		_, err := e.repo.Page(ctx, bad, true)
+		require.ErrorIs(t, err, repository.ErrInvalidQuery)
+
+		cancelled, cancel := context.WithCancel(ctx)
+		cancel()
+		page, err := e.repo.Page(cancelled, q, true)
+		require.ErrorIs(t, err, context.Canceled)
+		require.Empty(t, page.Rows)
+		require.Nil(t, page.Summary)
+	})
+}
+
+// The count and total must describe the rows they are shown with. A payment committed by someone else between
+// reading the rows and reading the totals would otherwise make the two disagree.
+func TestPageReadsRowsAndSummaryFromOneSnapshot(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	q := query(october(), model.PaymentSortDate, true, 100)
+
+	committed := 0
+	pool := testdb.SnapshotPool{Pool: e.pool, BeforeQueryRow: func() {
+		insertOctoberPayment(t, e.pool)
+		committed++
+	}}
+
+	page, err := repository.NewPaymentRepository(pool).Page(ctx, q, true)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, committed, "the concurrent insert must have happened between the two reads")
+	require.Len(t, page.Rows, octoberActive)
+	require.EqualValues(t, octoberActive, page.Summary.Count, "the count ignores the payment committed after the rows were read")
+	var rowsTotal model.Money
+	for _, r := range page.Rows {
+		rowsTotal += r.Amount
+	}
+	require.Equal(t, rowsTotal, page.Summary.Total, "the total is the sum of the rows it describes")
+
+	after, err := e.repo.Summary(ctx, q.Filter)
+	require.NoError(t, err)
+	require.EqualValues(t, octoberActive+1, after.Count, "the committed payment is real and visible to a later read")
 }
 
 func TestCancelledContextIsReturnedAsAnError(t *testing.T) {

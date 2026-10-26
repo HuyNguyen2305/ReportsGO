@@ -106,6 +106,13 @@ type PaymentRow struct {
 	SortValue string
 }
 
+// PaymentPage is one page of the report read from a single database snapshot. Summary is nil unless it was
+// requested, and when set it totals exactly the filtered set the rows were taken from.
+type PaymentPage struct {
+	Rows    []PaymentRow
+	Summary *PaymentSummary
+}
+
 // PaymentSummary totals the whole filtered set, not just one page. Total adds up every payment in scope,
 // whatever its status; narrow the Status filter to total only some.
 type PaymentSummary struct {

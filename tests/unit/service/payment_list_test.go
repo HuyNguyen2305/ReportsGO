@@ -69,13 +69,10 @@ func TestPaymentListPassesThePageSizeToTheRepository(t *testing.T) {
 func TestPaymentListSummaryOnFirstPageOnly(t *testing.T) {
 	t.Run("first page has it, computed from the same filter", func(t *testing.T) {
 		repo := servicemocks.NewMockPaymentRepository(t)
-		var listFilter, summaryFilter model.PaymentFilter
-		repo.EXPECT().List(mock.Anything, mock.Anything).
-			Run(func(_ context.Context, q model.PaymentQuery) { listFilter = q.Filter }).
-			Return(paymentRows(2), nil).Once()
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).
-			Run(func(_ context.Context, f model.PaymentFilter) { summaryFilter = f }).
-			Return(model.PaymentSummary{Count: 15, Total: 123450}, nil).Once()
+		var asked model.PaymentQuery
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).
+			Run(func(_ context.Context, q model.PaymentQuery, _ bool) { asked = q }).
+			Return(model.PaymentPage{Rows: paymentRows(2), Summary: &model.PaymentSummary{Count: 15, Total: 123450}}, nil).Once()
 
 		res, err := service.NewPaymentService(repo, fixedClock(october21)).List(context.Background(),
 			service.ListPaymentsParams{Status: []string{"paid"}, Method: []string{"card"}, Search: "850"})
@@ -83,14 +80,15 @@ func TestPaymentListSummaryOnFirstPageOnly(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, res.Summary)
 		require.Equal(t, model.PaymentSummary{Count: 15, Total: 123450}, *res.Summary)
-		require.Equal(t, listFilter, summaryFilter, "the totals cover exactly what the list filters on")
+		require.Equal(t, []model.PaymentStatus{model.PaymentPaid}, asked.Filter.Statuses,
+			"the repository is given the filter once, so the rows and the totals cover the same set")
 	})
 
 	t.Run("later pages do not run it", func(t *testing.T) {
 		cursor := service.EncodePaymentCursor(model.PaymentSort{Key: model.PaymentSortDate, Desc: true},
 			model.PaymentRow{ID: 3, SortValue: "2026-10-03"})
-		repo := servicemocks.NewMockPaymentRepository(t) // Summary has no expectation: calling it fails the test
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(paymentRows(1), nil).Once()
+		repo := servicemocks.NewMockPaymentRepository(t) // only Page(..., false) is expected: asking for a summary fails the test
+		repo.EXPECT().Page(mock.Anything, mock.Anything, false).Return(model.PaymentPage{Rows: paymentRows(1)}, nil).Once()
 
 		res, err := service.NewPaymentService(repo, fixedClock(october21)).List(context.Background(),
 			service.ListPaymentsParams{Cursor: cursor})
@@ -101,9 +99,9 @@ func TestPaymentListSummaryOnFirstPageOnly(t *testing.T) {
 }
 
 func TestPaymentListWrapsRepositoryErrors(t *testing.T) {
-	t.Run("list", func(t *testing.T) {
+	t.Run("page", func(t *testing.T) {
 		repo := servicemocks.NewMockPaymentRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, errBoom).Once()
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).Return(model.PaymentPage{}, errBoom).Once()
 
 		res, err := service.NewPaymentService(repo, fixedClock(october21)).List(context.Background(), service.ListPaymentsParams{})
 
@@ -113,21 +111,9 @@ func TestPaymentListWrapsRepositoryErrors(t *testing.T) {
 		require.NotErrorIs(t, err, model.ErrInvalidInput)
 	})
 
-	t.Run("summary", func(t *testing.T) {
-		repo := servicemocks.NewMockPaymentRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(paymentRows(1), nil).Once()
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.PaymentSummary{}, errBoom).Once()
-
-		res, err := service.NewPaymentService(repo, fixedClock(october21)).List(context.Background(), service.ListPaymentsParams{})
-
-		require.Nil(t, res)
-		require.ErrorIs(t, err, errBoom)
-		require.ErrorContains(t, err, "summarize payments")
-	})
-
 	t.Run("a cancelled context stays recognisable", func(t *testing.T) {
 		repo := servicemocks.NewMockPaymentRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, context.Canceled).Once()
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).Return(model.PaymentPage{}, context.Canceled).Once()
 
 		_, err := service.NewPaymentService(repo, nil).List(context.Background(), service.ListPaymentsParams{})
 		require.True(t, errors.Is(err, context.Canceled))
@@ -140,8 +126,7 @@ func TestPaymentListPassesTheRequestContextToTheRepository(t *testing.T) {
 	hasMarker := mock.MatchedBy(func(c context.Context) bool { return c.Value(key{}) == "marker" })
 
 	repo := servicemocks.NewMockPaymentRepository(t)
-	repo.EXPECT().List(hasMarker, mock.Anything).Return(nil, nil).Once()
-	repo.EXPECT().Summary(hasMarker, mock.Anything).Return(model.PaymentSummary{}, nil).Once()
+	repo.EXPECT().Page(hasMarker, mock.Anything, true).Return(model.PaymentPage{}, nil).Once()
 
 	_, err := service.NewPaymentService(repo, fixedClock(october21)).List(ctx, service.ListPaymentsParams{})
 	require.NoError(t, err)
@@ -154,8 +139,7 @@ func TestPaymentListDoesNotCallTheRepositoryForInvalidInput(t *testing.T) {
 
 func TestNewPaymentServiceDefaultsTheClock(t *testing.T) {
 	repo := servicemocks.NewMockPaymentRepository(t)
-	repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, nil).Once()
-	repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.PaymentSummary{}, nil).Once()
+	repo.EXPECT().Page(mock.Anything, mock.Anything, true).Return(model.PaymentPage{}, nil).Once()
 
 	res, err := service.NewPaymentService(repo, nil).List(context.Background(), service.ListPaymentsParams{})
 

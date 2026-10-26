@@ -29,12 +29,15 @@ func runPayments(t *testing.T, p service.ListPaymentsParams, rows []model.Paymen
 
 	repo := servicemocks.NewMockPaymentRepository(t)
 	var got model.PaymentQuery
-	repo.EXPECT().List(mock.Anything, mock.Anything).
-		Run(func(_ context.Context, q model.PaymentQuery) { got = q }).
-		Return(rows, nil).Once()
-	if strings.TrimSpace(p.Cursor) == "" {
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.PaymentSummary{}, nil).Once()
+	// the summary is asked for on the first page only
+	withSummary := strings.TrimSpace(p.Cursor) == ""
+	page := model.PaymentPage{Rows: rows}
+	if withSummary {
+		page.Summary = &model.PaymentSummary{}
 	}
+	repo.EXPECT().Page(mock.Anything, mock.Anything, withSummary).
+		Run(func(_ context.Context, q model.PaymentQuery, _ bool) { got = q }).
+		Return(page, nil).Once()
 
 	res, err := service.NewPaymentService(repo, fixedClock(october21)).List(context.Background(), p)
 	require.NoError(t, err)
@@ -81,10 +84,9 @@ func TestPaymentListDateRange(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := servicemocks.NewMockPaymentRepository(t)
 			var got model.PaymentQuery
-			repo.EXPECT().List(mock.Anything, mock.Anything).
-				Run(func(_ context.Context, q model.PaymentQuery) { got = q }).
-				Return(nil, nil).Once()
-			repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.PaymentSummary{}, nil).Once()
+			repo.EXPECT().Page(mock.Anything, mock.Anything, true).
+				Run(func(_ context.Context, q model.PaymentQuery, _ bool) { got = q }).
+				Return(model.PaymentPage{}, nil).Once()
 
 			res, err := service.NewPaymentService(repo, fixedClock(tt.now)).List(context.Background(),
 				service.ListPaymentsParams{From: tt.from, To: tt.to})

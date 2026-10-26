@@ -10,8 +10,9 @@ import (
 
 // PaymentRepository is what the service needs from storage. *repository.PaymentRepository satisfies it.
 type PaymentRepository interface {
-	List(ctx context.Context, q model.PaymentQuery) ([]model.PaymentRow, error)
-	Summary(ctx context.Context, f model.PaymentFilter) (model.PaymentSummary, error)
+	// Page returns one page and, when withSummary is set, the count and total of the whole filtered set, both
+	// read from one snapshot so the summary always describes the rows' set.
+	Page(ctx context.Context, q model.PaymentQuery, withSummary bool) (model.PaymentPage, error)
 }
 
 // PaymentService implements the Payments report.
@@ -49,12 +50,14 @@ func (s *PaymentService) List(ctx context.Context, p ListPaymentsParams) (*ListP
 	}
 	q := req.query
 
-	rows, err := s.repo.List(ctx, q)
+	// The summary is wanted on the first page only; later pages keep the one the client already has.
+	page, err := s.repo.Page(ctx, q, q.After == nil)
 	if err != nil {
 		return nil, fmt.Errorf("list payments: %w", err)
 	}
+	rows := page.Rows
 
-	res := &ListPaymentsResult{Limit: q.Limit, From: req.from, To: req.to}
+	res := &ListPaymentsResult{Limit: q.Limit, From: req.from, To: req.to, Summary: page.Summary}
 	// The repository returns one row beyond the page size so we can tell whether another page exists.
 	if len(rows) > q.Limit {
 		rows = rows[:q.Limit]
@@ -65,13 +68,5 @@ func (s *PaymentService) List(ctx context.Context, p ListPaymentsParams) (*ListP
 		rows = []model.PaymentRow{}
 	}
 	res.Items = rows
-
-	if q.After == nil {
-		summary, err := s.repo.Summary(ctx, q.Filter)
-		if err != nil {
-			return nil, fmt.Errorf("summarize payments: %w", err)
-		}
-		res.Summary = &summary
-	}
 	return res, nil
 }
