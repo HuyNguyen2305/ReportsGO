@@ -75,13 +75,10 @@ func TestRecurringListTurnsANilResultIntoAnEmptyList(t *testing.T) {
 func TestRecurringListSummaryOnFirstPageOnly(t *testing.T) {
 	t.Run("first page has it, computed from the same filter", func(t *testing.T) {
 		repo := servicemocks.NewMockRecurringRepository(t)
-		var listFilter, summaryFilter model.RecurringFilter
-		repo.EXPECT().List(mock.Anything, mock.Anything).
-			Run(func(_ context.Context, q model.RecurringQuery) { listFilter = q.Filter }).
-			Return(recurringRows(2), nil).Once()
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).
-			Run(func(_ context.Context, f model.RecurringFilter) { summaryFilter = f }).
-			Return(model.RecurringSummary{Count: 7, Total: 71349}, nil).Once()
+		var asked model.RecurringQuery
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).
+			Run(func(_ context.Context, q model.RecurringQuery, _ bool) { asked = q }).
+			Return(model.RecurringPage{Rows: recurringRows(2), Summary: &model.RecurringSummary{Count: 7, Total: 71349}}, nil).Once()
 
 		res, err := service.NewRecurringService(repo).List(context.Background(),
 			service.ListRecurringParams{Status: []string{"active"}, Action: []string{"create_only"}, Search: "850"})
@@ -89,14 +86,15 @@ func TestRecurringListSummaryOnFirstPageOnly(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, res.Summary)
 		require.Equal(t, model.RecurringSummary{Count: 7, Total: 71349}, *res.Summary)
-		require.Equal(t, listFilter, summaryFilter, "the totals cover exactly what the list filters on")
+		require.Equal(t, []model.RecurringStatus{model.RecurringActive}, asked.Filter.Statuses,
+			"the repository is given the filter once, so the rows and the totals cover the same set")
 	})
 
 	t.Run("later pages do not run it", func(t *testing.T) {
 		cursor := service.EncodeRecurringCursor(model.RecurringSort{Key: model.RecurringSortStartedOn, Desc: true},
 			model.RecurringRow{ID: 3, SortValue: "2026-10-03"})
-		repo := servicemocks.NewMockRecurringRepository(t) // Summary has no expectation: calling it fails the test
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(recurringRows(1), nil).Once()
+		repo := servicemocks.NewMockRecurringRepository(t) // only Page(..., false) is expected: asking for a summary fails the test
+		repo.EXPECT().Page(mock.Anything, mock.Anything, false).Return(model.RecurringPage{Rows: recurringRows(1)}, nil).Once()
 
 		res, err := service.NewRecurringService(repo).List(context.Background(),
 			service.ListRecurringParams{Cursor: cursor})
@@ -107,9 +105,9 @@ func TestRecurringListSummaryOnFirstPageOnly(t *testing.T) {
 }
 
 func TestRecurringListWrapsRepositoryErrors(t *testing.T) {
-	t.Run("list", func(t *testing.T) {
+	t.Run("page", func(t *testing.T) {
 		repo := servicemocks.NewMockRecurringRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, errBoom).Once()
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).Return(model.RecurringPage{}, errBoom).Once()
 
 		res, err := service.NewRecurringService(repo).List(context.Background(), service.ListRecurringParams{})
 
@@ -119,21 +117,9 @@ func TestRecurringListWrapsRepositoryErrors(t *testing.T) {
 		require.NotErrorIs(t, err, model.ErrInvalidInput)
 	})
 
-	t.Run("summary", func(t *testing.T) {
-		repo := servicemocks.NewMockRecurringRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(recurringRows(1), nil).Once()
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.RecurringSummary{}, errBoom).Once()
-
-		res, err := service.NewRecurringService(repo).List(context.Background(), service.ListRecurringParams{})
-
-		require.Nil(t, res)
-		require.ErrorIs(t, err, errBoom)
-		require.ErrorContains(t, err, "summarize recurring invoices")
-	})
-
 	t.Run("a cancelled context stays recognisable", func(t *testing.T) {
 		repo := servicemocks.NewMockRecurringRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, context.Canceled).Once()
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).Return(model.RecurringPage{}, context.Canceled).Once()
 
 		_, err := service.NewRecurringService(repo).List(context.Background(), service.ListRecurringParams{})
 		require.True(t, errors.Is(err, context.Canceled))
@@ -146,8 +132,7 @@ func TestRecurringListPassesTheRequestContextToTheRepository(t *testing.T) {
 	hasMarker := mock.MatchedBy(func(c context.Context) bool { return c.Value(key{}) == "marker" })
 
 	repo := servicemocks.NewMockRecurringRepository(t)
-	repo.EXPECT().List(hasMarker, mock.Anything).Return(nil, nil).Once()
-	repo.EXPECT().Summary(hasMarker, mock.Anything).Return(model.RecurringSummary{}, nil).Once()
+	repo.EXPECT().Page(hasMarker, mock.Anything, true).Return(model.RecurringPage{}, nil).Once()
 
 	_, err := service.NewRecurringService(repo).List(ctx, service.ListRecurringParams{})
 	require.NoError(t, err)

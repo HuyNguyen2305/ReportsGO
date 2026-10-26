@@ -47,47 +47,46 @@ func (_m *MockRecurringRepository) EXPECT() *MockRecurringRepository_Expecter {
 	return &MockRecurringRepository_Expecter{mock: &_m.Mock}
 }
 
-// List provides a mock function for the type MockRecurringRepository
-func (_mock *MockRecurringRepository) List(ctx context.Context, q model.RecurringQuery) ([]model.RecurringRow, error) {
-	ret := _mock.Called(ctx, q)
+// Page provides a mock function for the type MockRecurringRepository
+func (_mock *MockRecurringRepository) Page(ctx context.Context, q model.RecurringQuery, withSummary bool) (model.RecurringPage, error) {
+	ret := _mock.Called(ctx, q, withSummary)
 
 	if len(ret) == 0 {
-		panic("no return value specified for List")
+		panic("no return value specified for Page")
 	}
 
-	var r0 []model.RecurringRow
+	var r0 model.RecurringPage
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.RecurringQuery) ([]model.RecurringRow, error)); ok {
-		return returnFunc(ctx, q)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, model.RecurringQuery, bool) (model.RecurringPage, error)); ok {
+		return returnFunc(ctx, q, withSummary)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.RecurringQuery) []model.RecurringRow); ok {
-		r0 = returnFunc(ctx, q)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, model.RecurringQuery, bool) model.RecurringPage); ok {
+		r0 = returnFunc(ctx, q, withSummary)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]model.RecurringRow)
-		}
+		r0 = ret.Get(0).(model.RecurringPage)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, model.RecurringQuery) error); ok {
-		r1 = returnFunc(ctx, q)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, model.RecurringQuery, bool) error); ok {
+		r1 = returnFunc(ctx, q, withSummary)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
 }
 
-// MockRecurringRepository_List_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'List'
-type MockRecurringRepository_List_Call struct {
+// MockRecurringRepository_Page_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Page'
+type MockRecurringRepository_Page_Call struct {
 	*mock.Call
 }
 
-// List is a helper method to define mock.On call
+// Page is a helper method to define mock.On call
 //   - ctx context.Context
 //   - q model.RecurringQuery
-func (_e *MockRecurringRepository_Expecter) List(ctx any, q any) *MockRecurringRepository_List_Call {
-	return &MockRecurringRepository_List_Call{Call: _e.mock.On("List", ctx, q)}
+//   - withSummary bool
+func (_e *MockRecurringRepository_Expecter) Page(ctx any, q any, withSummary any) *MockRecurringRepository_Page_Call {
+	return &MockRecurringRepository_Page_Call{Call: _e.mock.On("Page", ctx, q, withSummary)}
 }
 
-func (_c *MockRecurringRepository_List_Call) Run(run func(ctx context.Context, q model.RecurringQuery)) *MockRecurringRepository_List_Call {
+func (_c *MockRecurringRepository_Page_Call) Run(run func(ctx context.Context, q model.RecurringQuery, withSummary bool)) *MockRecurringRepository_Page_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -97,86 +96,25 @@ func (_c *MockRecurringRepository_List_Call) Run(run func(ctx context.Context, q
 		if args[1] != nil {
 			arg1 = args[1].(model.RecurringQuery)
 		}
+		var arg2 bool
+		if args[2] != nil {
+			arg2 = args[2].(bool)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
 }
 
-func (_c *MockRecurringRepository_List_Call) Return(recurringRows []model.RecurringRow, err error) *MockRecurringRepository_List_Call {
-	_c.Call.Return(recurringRows, err)
+func (_c *MockRecurringRepository_Page_Call) Return(recurringPage model.RecurringPage, err error) *MockRecurringRepository_Page_Call {
+	_c.Call.Return(recurringPage, err)
 	return _c
 }
 
-func (_c *MockRecurringRepository_List_Call) RunAndReturn(run func(ctx context.Context, q model.RecurringQuery) ([]model.RecurringRow, error)) *MockRecurringRepository_List_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// Summary provides a mock function for the type MockRecurringRepository
-func (_mock *MockRecurringRepository) Summary(ctx context.Context, f model.RecurringFilter) (model.RecurringSummary, error) {
-	ret := _mock.Called(ctx, f)
-
-	if len(ret) == 0 {
-		panic("no return value specified for Summary")
-	}
-
-	var r0 model.RecurringSummary
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.RecurringFilter) (model.RecurringSummary, error)); ok {
-		return returnFunc(ctx, f)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.RecurringFilter) model.RecurringSummary); ok {
-		r0 = returnFunc(ctx, f)
-	} else {
-		r0 = ret.Get(0).(model.RecurringSummary)
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, model.RecurringFilter) error); ok {
-		r1 = returnFunc(ctx, f)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockRecurringRepository_Summary_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Summary'
-type MockRecurringRepository_Summary_Call struct {
-	*mock.Call
-}
-
-// Summary is a helper method to define mock.On call
-//   - ctx context.Context
-//   - f model.RecurringFilter
-func (_e *MockRecurringRepository_Expecter) Summary(ctx any, f any) *MockRecurringRepository_Summary_Call {
-	return &MockRecurringRepository_Summary_Call{Call: _e.mock.On("Summary", ctx, f)}
-}
-
-func (_c *MockRecurringRepository_Summary_Call) Run(run func(ctx context.Context, f model.RecurringFilter)) *MockRecurringRepository_Summary_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 model.RecurringFilter
-		if args[1] != nil {
-			arg1 = args[1].(model.RecurringFilter)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockRecurringRepository_Summary_Call) Return(recurringSummary model.RecurringSummary, err error) *MockRecurringRepository_Summary_Call {
-	_c.Call.Return(recurringSummary, err)
-	return _c
-}
-
-func (_c *MockRecurringRepository_Summary_Call) RunAndReturn(run func(ctx context.Context, f model.RecurringFilter) (model.RecurringSummary, error)) *MockRecurringRepository_Summary_Call {
+func (_c *MockRecurringRepository_Page_Call) RunAndReturn(run func(ctx context.Context, q model.RecurringQuery, withSummary bool) (model.RecurringPage, error)) *MockRecurringRepository_Page_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -29,12 +29,15 @@ func runRecurring(t *testing.T, p service.ListRecurringParams, rows []model.Recu
 
 	repo := servicemocks.NewMockRecurringRepository(t)
 	var got model.RecurringQuery
-	repo.EXPECT().List(mock.Anything, mock.Anything).
-		Run(func(_ context.Context, q model.RecurringQuery) { got = q }).
-		Return(rows, nil).Once()
-	if strings.TrimSpace(p.Cursor) == "" {
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.RecurringSummary{}, nil).Once()
+	// the summary is asked for on the first page only
+	withSummary := strings.TrimSpace(p.Cursor) == ""
+	page := model.RecurringPage{Rows: rows}
+	if withSummary {
+		page.Summary = &model.RecurringSummary{}
 	}
+	repo.EXPECT().Page(mock.Anything, mock.Anything, withSummary).
+		Run(func(_ context.Context, q model.RecurringQuery, _ bool) { got = q }).
+		Return(page, nil).Once()
 
 	res, err := service.NewRecurringService(repo).List(context.Background(), p)
 	require.NoError(t, err)

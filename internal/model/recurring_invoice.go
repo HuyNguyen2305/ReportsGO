@@ -129,6 +129,13 @@ type RecurringRow struct {
 	SortValue string
 }
 
+// RecurringPage is one page of the report read from a single database snapshot. Summary is nil unless it was
+// requested, and when set it totals exactly the filtered set the rows were taken from.
+type RecurringPage struct {
+	Rows    []RecurringRow
+	Summary *RecurringSummary
+}
+
 // RecurringSummary totals the whole filtered set, not just one page. Total adds up every recurring invoice in
 // scope, whatever its status.
 type RecurringSummary struct {

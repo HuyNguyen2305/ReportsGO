@@ -95,7 +95,9 @@ Number columns are identifiers, not quantities: `account_number` sort as text, c
   ended has none of the three.
 - `ends_on` is `null` when there is no end date.
 - `summary` counts and totals the **whole filtered set**, not just this page, and is only present on the
-  **first page** (when no `cursor` is sent). It is `null` on later pages. `total` adds up `total_value` of every
+  **first page** (when no `cursor` is sent). It is `null` on later pages. The rows and the summary are read from
+  one database snapshot, so the count and total always describe exactly the set the rows were taken from, even
+  while recurring invoices are being added. `total` adds up `total_value` of every
   recurring invoice in scope whatever its status; send `status=active` to total only the active ones.
 - `range` is the start-date range actually applied; an end that was not sent is `null`, so with no dates it is
   `{ "from": null, "to": null }`.

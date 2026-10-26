@@ -10,8 +10,9 @@ import (
 
 // RecurringRepository is what the service needs from storage. *repository.RecurringRepository satisfies it.
 type RecurringRepository interface {
-	List(ctx context.Context, q model.RecurringQuery) ([]model.RecurringRow, error)
-	Summary(ctx context.Context, f model.RecurringFilter) (model.RecurringSummary, error)
+	// Page returns one page and, when withSummary is set, the count and total of the whole filtered set, both
+	// read from one snapshot so the summary always describes the rows' set.
+	Page(ctx context.Context, q model.RecurringQuery, withSummary bool) (model.RecurringPage, error)
 }
 
 // RecurringService implements the Recurring Invoices report. It needs no clock: the report has no default date
@@ -46,12 +47,14 @@ func (s *RecurringService) List(ctx context.Context, p ListRecurringParams) (*Li
 	}
 	q := req.query
 
-	rows, err := s.repo.List(ctx, q)
+	// The summary is wanted on the first page only; later pages keep the one the client already has.
+	page, err := s.repo.Page(ctx, q, q.After == nil)
 	if err != nil {
 		return nil, fmt.Errorf("list recurring invoices: %w", err)
 	}
+	rows := page.Rows
 
-	res := &ListRecurringResult{Limit: q.Limit, From: req.from, To: req.to}
+	res := &ListRecurringResult{Limit: q.Limit, From: req.from, To: req.to, Summary: page.Summary}
 	// The repository returns one row beyond the page size so we can tell whether another page exists.
 	if len(rows) > q.Limit {
 		rows = rows[:q.Limit]
@@ -62,13 +65,5 @@ func (s *RecurringService) List(ctx context.Context, p ListRecurringParams) (*Li
 		rows = []model.RecurringRow{}
 	}
 	res.Items = rows
-
-	if q.After == nil {
-		summary, err := s.repo.Summary(ctx, q.Filter)
-		if err != nil {
-			return nil, fmt.Errorf("summarize recurring invoices: %w", err)
-		}
-		res.Summary = &summary
-	}
 	return res, nil
 }
