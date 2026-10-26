@@ -14,16 +14,21 @@ const recurringAlias = "r"
 const noDate = `DATE '9999-12-31'`
 
 // periodDays is the approximate length of one repeat in days (a month counts as 30 and a year as 365). It only
-// orders the Repeats column: "every day" < "every week" < "every month" < "every year".
-const periodDays = `r.frequency_interval * CASE r.frequency_unit
+// orders the Repeats column: "every day" < "every week" < "every month" < "every year". The interval is widened
+// to bigint first: the column is a 32-bit integer and an interval of about 5.9 million years would overflow it.
+const periodDays = `r.frequency_interval::bigint * CASE r.frequency_unit
     WHEN 'day' THEN 1 WHEN 'week' THEN 7 WHEN 'month' THEN 30 ELSE 365 END`
+
+// periodWidth is how many digits the Repeats sort key is padded to, so text order matches numeric order. The
+// longest period is the largest interval (2,147,483,647) times 365 days = 783,831,531,155, which has 12 digits.
+const periodWidth = "12"
 
 // recurringSorts is the complete list of things the report can be sorted by. SQL text for ORDER BY and the
 // keyset condition comes only from this table, never from the caller.
 var recurringSorts = map[model.RecurringSortKey]sortSpec{
 	model.RecurringSortCustomer:        {expr: `lower(c.display_name)`, cast: "text"},
 	model.RecurringSortAccountNumber:   {expr: `c.account_number`, cast: "text"},
-	model.RecurringSortRepeats:         {expr: `lpad((` + periodDays + `)::text, 10, '0')`, cast: "text"},
+	model.RecurringSortRepeats:         {expr: `lpad((` + periodDays + `)::text, ` + periodWidth + `, '0')`, cast: "text"},
 	model.RecurringSortAction:          {expr: `r.action::text`, cast: "text"},
 	model.RecurringSortStatus:          {expr: `r.status::text`, cast: "text"},
 	model.RecurringSortTotalValue:      {expr: `r.total_value`, cast: "numeric"},

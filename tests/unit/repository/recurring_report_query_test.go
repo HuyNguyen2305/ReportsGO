@@ -45,8 +45,8 @@ func TestBuildRecurringListQueryDefault(t *testing.T) {
 }
 
 func TestBuildRecurringListQueryEverySortKeyAndDirection(t *testing.T) {
-	const period = `lpad((r.frequency_interval * CASE r.frequency_unit
-    WHEN 'day' THEN 1 WHEN 'week' THEN 7 WHEN 'month' THEN 30 ELSE 365 END)::text, 10, '0')`
+	const period = `lpad((r.frequency_interval::bigint * CASE r.frequency_unit
+    WHEN 'day' THEN 1 WHEN 'week' THEN 7 WHEN 'month' THEN 30 ELSE 365 END)::text, 12, '0')`
 	wantExpr := map[model.RecurringSortKey]struct{ expr, cast string }{
 		model.RecurringSortCustomer:        {"lower(c.display_name)", "text"},
 		model.RecurringSortAccountNumber:   {"c.account_number", "text"},

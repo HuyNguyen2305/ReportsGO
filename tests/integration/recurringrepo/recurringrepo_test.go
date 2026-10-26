@@ -207,6 +207,58 @@ func TestRepeatsSortByPeriodLength(t *testing.T) {
 	require.Equal(t, []string{"3 day", "1 week", "1 week", "2 week", "1 month", "2 month", "1 year"}, got)
 }
 
+// The period is ordered with a bigint product, so an interval too large for 32-bit arithmetic (6,000,000 years is
+// 2.19e9 days, past 2^31) still sorts, in both directions and across pages, instead of failing the whole request.
+func TestRepeatsSortSurvivesHugeIntervals(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	for _, interval := range []int{6_000_000, 2_147_483_647} {
+		_, err := e.pool.Exec(ctx, `INSERT INTO recurring_invoices (customer_id, frequency_unit, frequency_interval, started_on)
+			SELECT id, 'year', $1, '2026-10-19' FROM customers WHERE account_number = '63733'`, interval)
+		require.NoError(t, err)
+	}
+	intervals := func(rows []model.RecurringRow) []int {
+		out := make([]int, len(rows))
+		for i, r := range rows {
+			out[i] = r.Interval
+		}
+		return out
+	}
+
+	asc := e.listAll(t, model.RecurringFilter{}, model.RecurringSortRepeats, false)
+	require.Len(t, asc, allRecurring+2)
+	require.Equal(t, []int{6_000_000, 2_147_483_647}, intervals(asc[len(asc)-2:]), "ascending: the longest periods are last")
+	require.Equal(t, 1, asc[len(asc)-3].Interval, "the seeded every-year rule comes right before them")
+
+	desc := e.listAll(t, model.RecurringFilter{}, model.RecurringSortRepeats, true)
+	require.Equal(t, []int{2_147_483_647, 6_000_000}, intervals(desc[:2]), "descending: the longest periods are first")
+
+	for _, isDesc := range []bool{false, true} {
+		var got []int64
+		q := query(model.RecurringFilter{}, model.RecurringSortRepeats, isDesc, 2)
+		for pages := 0; ; pages++ {
+			require.Less(t, pages, 20, "paging must terminate")
+			rows, err := e.repo.List(ctx, q)
+			require.NoError(t, err)
+			page := rows
+			if len(rows) > q.Limit {
+				page = rows[:q.Limit]
+			}
+			got = append(got, ids(page)...)
+			if len(rows) <= q.Limit {
+				break
+			}
+			last := page[len(page)-1]
+			q.After = &model.RecurringCursor{SortValue: last.SortValue, ID: last.ID}
+		}
+		want := asc
+		if isDesc {
+			want = desc
+		}
+		require.Equal(t, ids(want), got, "paging in order desc=%v neither skips nor repeats a row", isDesc)
+	}
+}
+
 func TestMissingDatesSortLastWhenAscending(t *testing.T) {
 	e := newEnv(t)
 
