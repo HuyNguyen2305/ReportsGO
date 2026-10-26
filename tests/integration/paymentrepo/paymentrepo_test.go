@@ -194,6 +194,49 @@ func TestCreditsSortAsTheWordCredit(t *testing.T) {
 	require.Equal(t, "credit", asc[len(asc)-1].SortValue)
 }
 
+// An invoice numbered "credit" (any case) has the same sort key as the credit payments. The sort has to stay
+// stable: those rows are ordered by payment id, in the same direction as the sort, and the row itself is still
+// reported as an invoice payment.
+func TestAnInvoiceNumberedCreditSortsAmongTheCredits(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	_, err := e.pool.Exec(ctx, `INSERT INTO billing_documents (parent_type, document_number, customer_id, document_date, total)
+		SELECT 'invoice', 'Credit', id, '2026-10-20', 10 FROM customers WHERE account_number = '63733'`)
+	require.NoError(t, err)
+	_, err = e.pool.Exec(ctx, `INSERT INTO payments (customer_id, invoice_id, method_type, amount, payment_date)
+		SELECT customer_id, id, 'cash', 10, '2026-10-20' FROM billing_documents
+		WHERE parent_type = 'invoice' AND document_number = 'Credit'`)
+	require.NoError(t, err)
+
+	for _, desc := range []bool{false, true} {
+		rows := e.listAll(t, october(), model.PaymentSortPaymentFor, desc)
+
+		var tied []model.PaymentRow
+		for _, r := range rows {
+			if r.SortValue == "credit" {
+				tied = append(tied, r)
+			}
+		}
+		require.Len(t, tied, 3, "the two credits and the invoice numbered Credit share the sort key (desc=%v)", desc)
+		for i := 1; i < len(tied); i++ {
+			if desc {
+				require.Greater(t, tied[i-1].ID, tied[i].ID, "ties are broken by id, descending")
+			} else {
+				require.Less(t, tied[i-1].ID, tied[i].ID, "ties are broken by id, ascending")
+			}
+		}
+
+		var invoiceRows int
+		for _, r := range tied {
+			if r.InvoiceID != nil {
+				invoiceRows++
+				require.Equal(t, "Credit", *r.InvoiceNumber, "it is still an invoice payment, with its own number")
+			}
+		}
+		require.Equal(t, 1, invoiceRows)
+	}
+}
+
 func walk(t *testing.T, repo *repository.PaymentRepository, key model.PaymentSortKey, desc bool, limit int) []int64 {
 	t.Helper()
 	var got []int64

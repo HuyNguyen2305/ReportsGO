@@ -36,8 +36,9 @@ reports: `signature_status`, `service_id`, `tag_id`, `payment_term_id` and `docu
 trimmed and case-insensitive; blanks and duplicates are ignored.
 
 `payment_for` sorts by the invoice number; a payment made for a **credit** has no invoice number and sorts as the
-word `credit`, so in ascending order the invoice payments come first and the credits last. Every sort is stable:
-ties are broken by payment id in the same direction.
+word `credit`, so in ascending order the invoice payments come first and the credits last. An invoice whose number
+is literally `credit` (any case) shares that sort key, so its payment sorts among the credits; it is still reported
+as an invoice payment. Every sort is stable: ties are broken by payment id in the same direction.
 
 ### Response
 
