@@ -29,12 +29,15 @@ func runCredits(t *testing.T, p service.ListCreditsParams, rows []model.CreditRo
 
 	repo := servicemocks.NewMockCreditRepository(t)
 	var got model.CreditQuery
-	repo.EXPECT().List(mock.Anything, mock.Anything).
-		Run(func(_ context.Context, q model.CreditQuery) { got = q }).
-		Return(rows, nil).Once()
-	if strings.TrimSpace(p.Cursor) == "" {
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.CreditSummary{}, nil).Once()
+	// the summary is asked for on the first page only
+	withSummary := strings.TrimSpace(p.Cursor) == ""
+	page := model.CreditPage{Rows: rows}
+	if withSummary {
+		page.Summary = &model.CreditSummary{}
 	}
+	repo.EXPECT().Page(mock.Anything, mock.Anything, withSummary).
+		Run(func(_ context.Context, q model.CreditQuery, _ bool) { got = q }).
+		Return(page, nil).Once()
 
 	res, err := service.NewCreditService(repo, fixedClock(october21)).List(context.Background(), p)
 	require.NoError(t, err)
@@ -77,10 +80,9 @@ func TestCreditListDateRange(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := servicemocks.NewMockCreditRepository(t)
 			var got model.CreditQuery
-			repo.EXPECT().List(mock.Anything, mock.Anything).
-				Run(func(_ context.Context, q model.CreditQuery) { got = q }).
-				Return(nil, nil).Once()
-			repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.CreditSummary{}, nil).Once()
+			repo.EXPECT().Page(mock.Anything, mock.Anything, true).
+				Run(func(_ context.Context, q model.CreditQuery, _ bool) { got = q }).
+				Return(model.CreditPage{}, nil).Once()
 
 			res, err := service.NewCreditService(repo, fixedClock(tt.now)).List(context.Background(),
 				service.ListCreditsParams{From: tt.from, To: tt.to})

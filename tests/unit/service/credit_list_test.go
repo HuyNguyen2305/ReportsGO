@@ -76,13 +76,10 @@ func TestCreditListTurnsANilResultIntoAnEmptyList(t *testing.T) {
 func TestCreditListSummaryOnFirstPageOnly(t *testing.T) {
 	t.Run("first page has it, computed from the same filter", func(t *testing.T) {
 		repo := servicemocks.NewMockCreditRepository(t)
-		var listFilter, summaryFilter model.CreditFilter
-		repo.EXPECT().List(mock.Anything, mock.Anything).
-			Run(func(_ context.Context, q model.CreditQuery) { listFilter = q.Filter }).
-			Return(creditRows(2), nil).Once()
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).
-			Run(func(_ context.Context, f model.CreditFilter) { summaryFilter = f }).
-			Return(model.CreditSummary{Count: 7, Total: 57525}, nil).Once()
+		var asked model.CreditQuery
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).
+			Run(func(_ context.Context, q model.CreditQuery, _ bool) { asked = q }).
+			Return(model.CreditPage{Rows: creditRows(2), Summary: &model.CreditSummary{Count: 7, Total: 57525}}, nil).Once()
 
 		res, err := service.NewCreditService(repo, fixedClock(october21)).List(context.Background(),
 			service.ListCreditsParams{Method: []string{"card"}, Search: "stripe"})
@@ -90,14 +87,15 @@ func TestCreditListSummaryOnFirstPageOnly(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, res.Summary)
 		require.Equal(t, model.CreditSummary{Count: 7, Total: 57525}, *res.Summary)
-		require.Equal(t, listFilter, summaryFilter, "the totals cover exactly what the list filters on")
+		require.Equal(t, []model.PaymentMethod{model.MethodCard}, asked.Filter.Methods,
+			"the repository is given the filter once, so the rows and the totals cover the same set")
 	})
 
 	t.Run("later pages do not run it", func(t *testing.T) {
 		cursor := service.EncodeCreditCursor(model.CreditSort{Key: model.CreditSortDate, Desc: true},
 			model.CreditRow{ID: 3, SortValue: "2026-10-03"})
-		repo := servicemocks.NewMockCreditRepository(t) // Summary has no expectation: calling it fails the test
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(creditRows(1), nil).Once()
+		repo := servicemocks.NewMockCreditRepository(t) // only Page(..., false) is expected: asking for a summary fails the test
+		repo.EXPECT().Page(mock.Anything, mock.Anything, false).Return(model.CreditPage{Rows: creditRows(1)}, nil).Once()
 
 		res, err := service.NewCreditService(repo, fixedClock(october21)).List(context.Background(),
 			service.ListCreditsParams{Cursor: cursor})
@@ -108,9 +106,9 @@ func TestCreditListSummaryOnFirstPageOnly(t *testing.T) {
 }
 
 func TestCreditListWrapsRepositoryErrors(t *testing.T) {
-	t.Run("list", func(t *testing.T) {
+	t.Run("page", func(t *testing.T) {
 		repo := servicemocks.NewMockCreditRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, errBoom).Once()
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).Return(model.CreditPage{}, errBoom).Once()
 
 		res, err := service.NewCreditService(repo, fixedClock(october21)).List(context.Background(), service.ListCreditsParams{})
 
@@ -120,21 +118,9 @@ func TestCreditListWrapsRepositoryErrors(t *testing.T) {
 		require.NotErrorIs(t, err, model.ErrInvalidInput)
 	})
 
-	t.Run("summary", func(t *testing.T) {
-		repo := servicemocks.NewMockCreditRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(creditRows(1), nil).Once()
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.CreditSummary{}, errBoom).Once()
-
-		res, err := service.NewCreditService(repo, fixedClock(october21)).List(context.Background(), service.ListCreditsParams{})
-
-		require.Nil(t, res)
-		require.ErrorIs(t, err, errBoom)
-		require.ErrorContains(t, err, "summarize credits")
-	})
-
 	t.Run("a cancelled context stays recognisable", func(t *testing.T) {
 		repo := servicemocks.NewMockCreditRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, context.Canceled).Once()
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).Return(model.CreditPage{}, context.Canceled).Once()
 
 		_, err := service.NewCreditService(repo, nil).List(context.Background(), service.ListCreditsParams{})
 		require.True(t, errors.Is(err, context.Canceled))
@@ -147,8 +133,7 @@ func TestCreditListPassesTheRequestContextToTheRepository(t *testing.T) {
 	hasMarker := mock.MatchedBy(func(c context.Context) bool { return c.Value(key{}) == "marker" })
 
 	repo := servicemocks.NewMockCreditRepository(t)
-	repo.EXPECT().List(hasMarker, mock.Anything).Return(nil, nil).Once()
-	repo.EXPECT().Summary(hasMarker, mock.Anything).Return(model.CreditSummary{}, nil).Once()
+	repo.EXPECT().Page(hasMarker, mock.Anything, true).Return(model.CreditPage{}, nil).Once()
 
 	_, err := service.NewCreditService(repo, fixedClock(october21)).List(ctx, service.ListCreditsParams{})
 	require.NoError(t, err)
@@ -161,8 +146,7 @@ func TestCreditListDoesNotCallTheRepositoryForInvalidInput(t *testing.T) {
 
 func TestNewCreditServiceDefaultsTheClock(t *testing.T) {
 	repo := servicemocks.NewMockCreditRepository(t)
-	repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, nil).Once()
-	repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.CreditSummary{}, nil).Once()
+	repo.EXPECT().Page(mock.Anything, mock.Anything, true).Return(model.CreditPage{}, nil).Once()
 
 	res, err := service.NewCreditService(repo, nil).List(context.Background(), service.ListCreditsParams{})
 

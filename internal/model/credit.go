@@ -71,6 +71,13 @@ type CreditRow struct {
 	SortValue string
 }
 
+// CreditPage is one page of the report read from a single database snapshot. Summary is nil unless it was
+// requested, and when set it totals exactly the filtered set the rows were taken from.
+type CreditPage struct {
+	Rows    []CreditRow
+	Summary *CreditSummary
+}
+
 // CreditSummary totals the whole filtered set, not just one page.
 type CreditSummary struct {
 	Count int64

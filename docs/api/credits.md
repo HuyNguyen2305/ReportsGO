@@ -75,7 +75,9 @@ creator sorts as an empty name under `created_by`.
   such as `Stripe **** 3222 Credit`; it is an empty string `""` when none was stored.
 - `created_by` is `null` when the creator is unknown.
 - `summary` counts and totals the **whole filtered set**, not just this page, and is only present on the
-  **first page** (when no `cursor` is sent). It is `null` on later pages.
+  **first page** (when no `cursor` is sent). It is `null` on later pages. The rows and the summary are read from
+  one database snapshot, so the count and total always describe exactly the set the rows were taken from, even
+  while credits are being added.
 - `range` is the date range actually applied, so a client can show the defaulted month. An open end is `null`.
 - `page.next_cursor` is `null` and `has_more` is `false` on the last page. `data` is always an array, never `null`.
 

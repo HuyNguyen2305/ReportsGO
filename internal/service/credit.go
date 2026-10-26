@@ -10,8 +10,9 @@ import (
 
 // CreditRepository is what the service needs from storage. *repository.CreditRepository satisfies it.
 type CreditRepository interface {
-	List(ctx context.Context, q model.CreditQuery) ([]model.CreditRow, error)
-	Summary(ctx context.Context, f model.CreditFilter) (model.CreditSummary, error)
+	// Page returns one page and, when withSummary is set, the count and total of the whole filtered set, both
+	// read from one snapshot so the summary always describes the rows' set.
+	Page(ctx context.Context, q model.CreditQuery, withSummary bool) (model.CreditPage, error)
 }
 
 // CreditService implements the Credits report.
@@ -49,12 +50,14 @@ func (s *CreditService) List(ctx context.Context, p ListCreditsParams) (*ListCre
 	}
 	q := req.query
 
-	rows, err := s.repo.List(ctx, q)
+	// The summary is wanted on the first page only; later pages keep the one the client already has.
+	page, err := s.repo.Page(ctx, q, q.After == nil)
 	if err != nil {
 		return nil, fmt.Errorf("list credits: %w", err)
 	}
+	rows := page.Rows
 
-	res := &ListCreditsResult{Limit: q.Limit, From: req.from, To: req.to}
+	res := &ListCreditsResult{Limit: q.Limit, From: req.from, To: req.to, Summary: page.Summary}
 	// The repository returns one row beyond the page size so we can tell whether another page exists.
 	if len(rows) > q.Limit {
 		rows = rows[:q.Limit]
@@ -65,13 +68,5 @@ func (s *CreditService) List(ctx context.Context, p ListCreditsParams) (*ListCre
 		rows = []model.CreditRow{}
 	}
 	res.Items = rows
-
-	if q.After == nil {
-		summary, err := s.repo.Summary(ctx, q.Filter)
-		if err != nil {
-			return nil, fmt.Errorf("summarize credits: %w", err)
-		}
-		res.Summary = &summary
-	}
 	return res, nil
 }
