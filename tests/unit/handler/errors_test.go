@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
 	"reportsgo/internal/dto"
@@ -46,6 +47,16 @@ func TestRespondErrorMapsErrorsToStatusAndCode(t *testing.T) {
 			[]dto.ErrorDetail{{Field: "to", Message: "must not be before from"}},
 		},
 		{"deadline exceeded", fmt.Errorf("query: %w", context.DeadlineExceeded), http.StatusGatewayTimeout, "timeout", nil},
+		{
+			"postgres statement timeout",
+			fmt.Errorf("query invoices: %w", &pgconn.PgError{Code: "57014", Message: "canceling statement due to statement timeout"}),
+			http.StatusGatewayTimeout, "timeout", nil,
+		},
+		{
+			"other postgres error stays internal",
+			fmt.Errorf("query invoices: %w", &pgconn.PgError{Code: "23505"}),
+			http.StatusInternalServerError, "internal_error", nil,
+		},
 		{"canceled", fmt.Errorf("query: %w", context.Canceled), 499, "client_closed_request", nil},
 		{"json syntax error", syntaxErr, http.StatusBadRequest, "invalid_request", nil},
 		{
@@ -92,6 +103,14 @@ func TestRespondErrorDoesNotLogClientErrors(t *testing.T) {
 	logger, logs := newLogger()
 	do(errorRouter(logger, "", model.ErrNotFound), http.MethodGet, "/api/v1/reports/boom", "")
 	require.Empty(t, logs.String())
+}
+
+func TestRespondErrorLogsTimeoutsAtWarn(t *testing.T) {
+	logger, logs := newLogger()
+	do(errorRouter(logger, "", &pgconn.PgError{Code: "57014"}), http.MethodGet, "/api/v1/reports/boom", "")
+	require.Contains(t, logs.String(), "level=WARN")
+	require.Contains(t, logs.String(), "request timed out")
+	require.NotContains(t, logs.String(), "level=ERROR")
 }
 
 func TestRespondErrorLogsCanceledAtDebugOnly(t *testing.T) {

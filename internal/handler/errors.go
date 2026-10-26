@@ -19,6 +19,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"reportsgo/internal/dto"
 	"reportsgo/internal/model"
@@ -29,6 +30,10 @@ const requestIDHeader = "X-Request-ID"
 
 // statusClientClosedRequest is the de-facto status for a client that went away mid-request.
 const statusClientClosedRequest = 499
+
+// sqlStateQueryCanceled is what Postgres reports when it stops a statement, including when the
+// connection's statement_timeout expires.
+const sqlStateQueryCanceled = "57014"
 
 // RespondError is the one place where errors become HTTP responses. It aborts the request with the
 // standard error envelope. Unexpected errors are logged and reported to the client as a generic 500.
@@ -44,6 +49,9 @@ func RespondError(c *gin.Context, logger *slog.Logger, err error) {
 	switch status {
 	case http.StatusInternalServerError:
 		logger.ErrorContext(c.Request.Context(), "request failed",
+			"error", err, "request_id", body.RequestID, "method", c.Request.Method, "path", c.FullPath())
+	case http.StatusGatewayTimeout:
+		logger.WarnContext(c.Request.Context(), "request timed out",
 			"error", err, "request_id", body.RequestID, "method", c.Request.Method, "path", c.FullPath())
 	case statusClientClosedRequest:
 		logger.DebugContext(c.Request.Context(), "client closed request",
@@ -70,6 +78,7 @@ func mapError(err error) (int, dto.ErrorBody) {
 		typeErr        *json.UnmarshalTypeError
 		numErr         *strconv.NumError
 		timeErr        *time.ParseError
+		pgErr          *pgconn.PgError
 	)
 
 	switch {
@@ -110,7 +119,8 @@ func mapError(err error) (int, dto.ErrorBody) {
 	case errors.Is(err, model.ErrConflict):
 		return http.StatusConflict, dto.ErrorBody{Code: "conflict", Message: "request conflicts with the current state"}
 
-	case errors.Is(err, context.DeadlineExceeded):
+	case errors.Is(err, context.DeadlineExceeded),
+		errors.As(err, &pgErr) && pgErr.Code == sqlStateQueryCanceled:
 		return http.StatusGatewayTimeout, dto.ErrorBody{Code: "timeout", Message: "request timed out"}
 
 	case errors.Is(err, context.Canceled):
