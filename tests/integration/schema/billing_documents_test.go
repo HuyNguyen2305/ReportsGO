@@ -190,3 +190,76 @@ func TestBillingDocumentsMigrationKeepsData(t *testing.T) {
 	require.NoError(t, m.Migrate(9))
 	require.Len(t, merged(), 3, "migrating up again after a rollback keeps everything")
 }
+
+// The merge rewrites the foreign keys of payments, tag links and recurring invoices. Those must survive on rows
+// that exist when the migration runs, and must afterwards refuse to point at an estimate, in both directions.
+func TestBillingDocumentsMigrationRewritesForeignKeysOnRealData(t *testing.T) {
+	ctx := context.Background()
+	dbURL := testdb.NewDatabase(t)
+	m := testdb.NewMigrator(t, dbURL)
+	require.NoError(t, m.Migrate(8))
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+
+	for _, stmt := range []string{
+		`INSERT INTO customers (account_number, display_name) VALUES ('5001', 'William Saliba')`,
+		`INSERT INTO invoices (invoice_number, customer_id, invoice_date, total, status)
+		 SELECT 'INV1', id, '2026-10-26', 65, 'sent' FROM customers`,
+		`INSERT INTO estimates (estimate_number, customer_id, estimate_date, total)
+		 SELECT 'EST1', id, '2026-10-19', 1 FROM customers`,
+		`INSERT INTO payments (customer_id, invoice_id, method_type, amount, payment_date)
+		 SELECT customer_id, id, 'cash', 20, '2026-10-27' FROM invoices`,
+		`INSERT INTO invoice_tags (name) VALUES ('a')`,
+		`INSERT INTO invoice_tag_links (invoice_id, tag_id) SELECT i.id, t.id FROM invoices i, invoice_tags t`,
+		`INSERT INTO recurring_invoices (customer_id, frequency_unit, started_on, next_invoice_id)
+		 SELECT customer_id, 'month', '2026-10-01', id FROM invoices`,
+		`UPDATE invoices SET recurring_invoice_id = (SELECT id FROM recurring_invoices)`,
+	} {
+		_, err := pool.Exec(ctx, stmt)
+		require.NoError(t, err, stmt)
+	}
+
+	// refs reads every reference that points at the invoice, from whichever table currently holds invoices.
+	type refs struct{ InvoiceID, PaymentInvoice, LinkInvoice, NextInvoice, RecurringID, InvoiceRecurring int64 }
+	readRefs := func(invoices string) refs {
+		t.Helper()
+		var r refs
+		require.NoError(t, pool.QueryRow(ctx, `SELECT i.id, p.invoice_id, l.invoice_id, r.next_invoice_id, r.id, i.recurring_invoice_id
+			FROM `+invoices+` i, payments p, invoice_tag_links l, recurring_invoices r`).
+			Scan(&r.InvoiceID, &r.PaymentInvoice, &r.LinkInvoice, &r.NextInvoice, &r.RecurringID, &r.InvoiceRecurring))
+		return r
+	}
+	before := readRefs("invoices")
+	require.Equal(t, before.InvoiceID, before.PaymentInvoice)
+	require.Equal(t, before.InvoiceID, before.LinkInvoice)
+	require.Equal(t, before.InvoiceID, before.NextInvoice)
+	require.Equal(t, before.RecurringID, before.InvoiceRecurring)
+
+	require.NoError(t, m.Migrate(9))
+	require.Equal(t, before, readRefs("billing_documents"), "invoice ids and every reference to them are unchanged")
+
+	var paymentType, linkType, nextType string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT p.invoice_parent_type::text, l.invoice_parent_type::text, r.next_invoice_parent_type::text
+		FROM payments p, invoice_tag_links l, recurring_invoices r`).Scan(&paymentType, &linkType, &nextType))
+	require.Equal(t, []string{"invoice", "invoice", "invoice"}, []string{paymentType, linkType, nextType})
+
+	var estimateID int64
+	require.NoError(t, pool.QueryRow(ctx, `SELECT id FROM billing_documents WHERE parent_type = 'estimate'`).Scan(&estimateID))
+	require.NotEqual(t, before.InvoiceID, estimateID)
+
+	_, err = pool.Exec(ctx, `INSERT INTO payments (customer_id, invoice_id, method_type, amount, payment_date)
+		SELECT customer_id, $1, 'cash', 1, '2026-10-28' FROM billing_documents WHERE id = $1`, estimateID)
+	requireViolation(t, err, "23503", "payments_invoice_id_fkey")
+	_, err = pool.Exec(ctx, `INSERT INTO invoice_tag_links (invoice_id, tag_id) SELECT $1, id FROM invoice_tags`, estimateID)
+	requireViolation(t, err, "23503", "invoice_tag_links_invoice_id_fkey")
+	_, err = pool.Exec(ctx, `UPDATE recurring_invoices SET next_invoice_id = $1`, estimateID)
+	requireViolation(t, err, "23503", "recurring_invoices_next_invoice_id_fkey")
+
+	require.NoError(t, m.Migrate(8))
+	require.Equal(t, before, readRefs("invoices"), "rolling back keeps every reference")
+
+	require.NoError(t, m.Migrate(9))
+	require.Equal(t, before, readRefs("billing_documents"), "migrating up again keeps every reference")
+}
