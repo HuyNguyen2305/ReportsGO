@@ -11,7 +11,7 @@ import (
 // ListCustomersParams are the request values as received, all strings, so that every problem can be reported
 // as a field-level validation error. Field names in errors are the query parameter names.
 type ListCustomersParams struct {
-	From, To string // from, to: YYYY-MM-DD, on the date the customer was created (UTC)
+	From, To string // from, to: YYYY-MM-DD, on the day the customer was created, in the server's time zone
 
 	LeadSourceIDs []string // lead_source_id
 
@@ -35,12 +35,8 @@ func parseCustomerParams(p ListCustomersParams, now time.Time) (customerRequest,
 	filter := model.CustomerFilter{}
 
 	from, to := v.dateRange(p.From, p.To, now)
-	// The dates are inclusive calendar days; the filter works on instants: from the start of the first day up to
-	// (not including) the start of the day after the last one.
-	filter.CreatedFrom = from
-	if !to.IsZero() {
-		filter.CreatedBefore = to.AddDate(0, 0, 1)
-	}
+	// The dates are inclusive calendar days in the clock's time zone; the filter works on instants.
+	filter.CreatedFrom, filter.CreatedBefore = createdRange(from, to, now.Location())
 
 	filter.LeadSourceIDs = v.ids("lead_source_id", p.LeadSourceIDs)
 	filter.Search = v.search(p.Search)

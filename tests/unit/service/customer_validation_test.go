@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	_ "time/tzdata" // so the zones in the date-range table load on machines without OS zone data
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -58,6 +59,10 @@ func TestCustomerListDefaults(t *testing.T) {
 }
 
 func TestCustomerListDateRange(t *testing.T) {
+	utc7 := time.FixedZone("UTC+7", 7*3600)
+	la, err := time.LoadLocation("America/Los_Angeles")
+	require.NoError(t, err)
+
 	tests := []struct {
 		name       string
 		now        time.Time
@@ -70,7 +75,12 @@ func TestCustomerListDateRange(t *testing.T) {
 		{"defaulted month", october21, "", "", date(2026, 10, 1), date(2026, 11, 1), date(2026, 10, 1), date(2026, 10, 31)},
 		{"february of a leap year", time.Date(2028, 2, 15, 0, 0, 0, 0, time.UTC), "", "", date(2028, 2, 1), date(2028, 3, 1), date(2028, 2, 1), date(2028, 2, 29)},
 		{"december rolls into the next year", time.Date(2026, 12, 31, 23, 59, 0, 0, time.UTC), "", "", date(2026, 12, 1), date(2027, 1, 1), date(2026, 12, 1), date(2026, 12, 31)},
-		{"month is taken in the clock's zone", time.Date(2026, 11, 1, 3, 0, 0, 0, time.FixedZone("UTC+7", 7*3600)), "", "", date(2026, 11, 1), date(2026, 12, 1), date(2026, 11, 1), date(2026, 11, 30)},
+		{"month and day boundaries are taken in the clock's zone", time.Date(2026, 11, 1, 3, 0, 0, 0, utc7), "", "", time.Date(2026, 11, 1, 0, 0, 0, 0, utc7), time.Date(2026, 12, 1, 0, 0, 0, 0, utc7), date(2026, 11, 1), date(2026, 11, 30)},
+		{"an explicit day is read in the clock's zone", time.Date(2026, 10, 21, 9, 30, 0, 0, utc7), "2026-10-05", "2026-10-05", time.Date(2026, 10, 5, 0, 0, 0, 0, utc7), time.Date(2026, 10, 6, 0, 0, 0, 0, utc7), date(2026, 10, 5), date(2026, 10, 5)},
+		{"open ends stay open in another zone", time.Date(2026, 10, 21, 9, 30, 0, 0, utc7), "2026-10-05", "", time.Date(2026, 10, 5, 0, 0, 0, 0, utc7), time.Time{}, date(2026, 10, 5), time.Time{}},
+		// Daylight saving: the spring-forward day lasts 23 hours (08:00Z to 07:00Z) and the fall-back day 25.
+		{"a 23-hour day in Los Angeles", time.Date(2026, 3, 20, 12, 0, 0, 0, la), "2026-03-08", "2026-03-08", time.Date(2026, 3, 8, 8, 0, 0, 0, time.UTC), time.Date(2026, 3, 9, 7, 0, 0, 0, time.UTC), date(2026, 3, 8), date(2026, 3, 8)},
+		{"a 25-hour day in Los Angeles", time.Date(2026, 11, 20, 12, 0, 0, 0, la), "2026-11-01", "2026-11-01", time.Date(2026, 11, 1, 7, 0, 0, 0, time.UTC), time.Date(2026, 11, 2, 8, 0, 0, 0, time.UTC), date(2026, 11, 1), date(2026, 11, 1)},
 		{"the same instant read in UTC is still October", time.Date(2026, 11, 1, 3, 0, 0, 0, time.FixedZone("UTC+7", 7*3600)).UTC(), "", "", date(2026, 10, 1), date(2026, 11, 1), date(2026, 10, 1), date(2026, 10, 31)},
 		{"explicit", october21, "2026-09-01", "2026-09-30", date(2026, 9, 1), date(2026, 10, 1), date(2026, 9, 1), date(2026, 9, 30)},
 		{"same day covers 24 hours", october21, "2026-10-05", "2026-10-05", date(2026, 10, 5), date(2026, 10, 6), date(2026, 10, 5), date(2026, 10, 5)},
@@ -92,8 +102,8 @@ func TestCustomerListDateRange(t *testing.T) {
 				service.ListCustomersParams{From: tt.from, To: tt.to})
 
 			require.NoError(t, err)
-			require.Equal(t, tt.wantFrom, got.Filter.CreatedFrom)
-			require.Equal(t, tt.wantBefore, got.Filter.CreatedBefore)
+			require.True(t, tt.wantFrom.Equal(got.Filter.CreatedFrom), "first instant: want %s, got %s", tt.wantFrom, got.Filter.CreatedFrom)
+			require.True(t, tt.wantBefore.Equal(got.Filter.CreatedBefore), "first excluded instant: want %s, got %s", tt.wantBefore, got.Filter.CreatedBefore)
 			require.Equal(t, tt.respFrom, res.From)
 			require.Equal(t, tt.respTo, res.To)
 		})

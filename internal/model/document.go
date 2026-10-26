@@ -48,7 +48,8 @@ type DocumentSort struct {
 
 // DocumentFilter narrows the document report. An empty list means "All".
 type DocumentFilter struct {
-	// CreatedFrom is the first instant included and CreatedBefore the first instant excluded, both in UTC.
+	// CreatedFrom is the first instant included and CreatedBefore the first instant excluded. The service builds
+	// them from calendar days in the business time zone.
 	// A zero value leaves that side open.
 	CreatedFrom, CreatedBefore time.Time
 	Lifecycle                  Lifecycle

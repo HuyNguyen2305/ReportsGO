@@ -4,7 +4,7 @@ Read-only. Both endpoints are `GET` and live under `/api/v1/reports`. Every resp
 JSON and carries `Cache-Control: no-store` and an `X-Request-ID` header. Timestamps are UTC with six fractional
 digits (`"2026-10-22T08:15:30.123456Z"`); dates are `YYYY-MM-DD`.
 
-It works like the [New Jobs](new-jobs.md) report: the date is a UTC creation timestamp and the filter choices
+It works like the [New Jobs](new-jobs.md) report: the date is a creation timestamp (shown in UTC, filtered by day in `APP_TIMEZONE`) and the filter choices
 come from the database. Customers have no status and no Active / Deleted tab, so there are no `status` or
 `lifecycle` parameters. The summary is a count only, because customers have no monetary value to total.
 
@@ -22,7 +22,7 @@ parameters of the other reports, such as `service_type_id` and `method`.
 
 | Parameter | Type | Meaning | Default |
 |---|---|---|---|
-| `from`, `to` | `YYYY-MM-DD` | Inclusive range on the day the customer was **created** (UTC). If **both** are missing the range is the current calendar month (in the server's `APP_TIMEZONE`, UTC by default). If only one is sent, the other end is open. `to` must not be before `from`. | current month |
+| `from`, `to` | `YYYY-MM-DD` | Inclusive range on the day the customer was **created**, read in the server's `APP_TIMEZONE` (UTC by default); `from` and `to` are days in that zone, whether sent or defaulted. If **both** are missing the range is the current calendar month (in the server's `APP_TIMEZONE`, UTC by default). If only one is sent, the other end is open. `to` must not be before `from`. | current month |
 | `lead_source_id` | multi | Lead source ids (from `/filters`). Customers without a lead source are only matched when no source filter is sent. | all |
 | `q` | text | Case-insensitive substring search over name, account number, email and the phone shown in the report (the customer's first phone). `%`, `_` and `\` are matched literally. At most 100 characters. | none |
 | `sort` | key | `customer`, `account_number`, `email`, `phone`, `source`, `created_at` | `created_at` |
@@ -66,7 +66,7 @@ parameters of the other reports, such as `service_type_id` and `method`.
 - `id` and `customer.id` are the same customer id; `customer` has the same shape as in the other reports.
 - `email`, `phone` and `source` are `null` when the customer has none. A customer with several phone numbers shows
   the first one only.
-- `created_at` is always UTC with exactly six fractional digits, so every value has the same shape.
+- `created_at` is always UTC with exactly six fractional digits, so every value has the same shape, whatever `APP_TIMEZONE` is. Only the `from`/`to` day boundaries follow `APP_TIMEZONE`.
 - `summary` counts the **whole filtered set**, not just this page, and is only present on the **first page**
   (when no `cursor` is sent). It is `null` on later pages.
 - `range` is the date range actually applied, so a client can show the defaulted month. An open end is `null`.

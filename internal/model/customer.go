@@ -31,7 +31,8 @@ type CustomerSort struct {
 // CustomerFilter narrows the new customers report. An empty list means "All". Customers have neither a status
 // nor a tab.
 type CustomerFilter struct {
-	// CreatedFrom is the first instant included and CreatedBefore the first instant excluded, both in UTC.
+	// CreatedFrom is the first instant included and CreatedBefore the first instant excluded. The service builds
+	// them from calendar days in the business time zone.
 	// A zero value leaves that side open.
 	CreatedFrom, CreatedBefore time.Time
 	LeadSourceIDs              []int64

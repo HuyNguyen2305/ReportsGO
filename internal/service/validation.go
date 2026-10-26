@@ -57,6 +57,21 @@ func (v *validator) dateRange(rawFrom, rawTo string, now time.Time) (from, to ti
 	return v.parseRange(rawFrom, rawTo)
 }
 
+// createdRange turns the inclusive calendar days from dateRange into the instants a created-timestamp filter
+// compares against: the start of the first day (inclusive) up to the start of the day after the last one
+// (exclusive). The days are read in loc, the business time zone the clock carries, so a record created late on
+// the last day of a month, or early on the first, lands in the month it belongs to locally. A zero from or to
+// leaves that side open. time.Date handles daylight-saving days, which last 23 or 25 hours.
+func createdRange(from, to time.Time, loc *time.Location) (createdFrom, createdBefore time.Time) {
+	if !from.IsZero() {
+		createdFrom = time.Date(from.Year(), from.Month(), from.Day(), 0, 0, 0, 0, loc)
+	}
+	if !to.IsZero() {
+		createdBefore = time.Date(to.Year(), to.Month(), to.Day()+1, 0, 0, 0, 0, loc)
+	}
+	return createdFrom, createdBefore
+}
+
 // openDateRange parses from/to for reports without a default range: with neither given both sides stay open
 // (zero time), and when only one is given the other stays open too.
 func (v *validator) openDateRange(rawFrom, rawTo string) (from, to time.Time) {

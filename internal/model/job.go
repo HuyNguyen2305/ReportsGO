@@ -46,7 +46,8 @@ type JobSort struct {
 // JobFilter narrows the new jobs report. An empty list means "All". Jobs cannot be deleted or archived, so there
 // is no tab.
 type JobFilter struct {
-	// CreatedFrom is the first instant included and CreatedBefore the first instant excluded, both in UTC.
+	// CreatedFrom is the first instant included and CreatedBefore the first instant excluded. The service builds
+	// them from calendar days in the business time zone.
 	// A zero value leaves that side open.
 	CreatedFrom, CreatedBefore time.Time
 	Statuses                   []JobStatus

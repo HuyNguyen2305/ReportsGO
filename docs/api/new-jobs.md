@@ -4,7 +4,7 @@ Read-only. Both endpoints are `GET` and live under `/api/v1/reports`. Every resp
 JSON and carries `Cache-Control: no-store` and an `X-Request-ID` header. Timestamps are UTC with six fractional
 digits (`"2026-10-22T08:15:30.123456Z"`); dates are `YYYY-MM-DD`; money is a decimal string with two places.
 
-It works like the [Documents](documents.md) report: the date is a UTC creation timestamp and the filter choices
+It works like the [Documents](documents.md) report: the date is a creation timestamp (shown in UTC, filtered by day in `APP_TIMEZONE`) and the filter choices
 come from the database. Jobs have no Active / Deleted tab, so there is no `lifecycle` parameter.
 
 | Endpoint | Purpose |
@@ -21,7 +21,7 @@ of the other reports, such as `method` and `document_type_id`.
 
 | Parameter | Type | Meaning | Default |
 |---|---|---|---|
-| `from`, `to` | `YYYY-MM-DD` | Inclusive range on the day the job was **created** (UTC). If **both** are missing the range is the current calendar month (in the server's `APP_TIMEZONE`, UTC by default). If only one is sent, the other end is open. `to` must not be before `from`. | current month |
+| `from`, `to` | `YYYY-MM-DD` | Inclusive range on the day the job was **created**, read in the server's `APP_TIMEZONE` (UTC by default); `from` and `to` are days in that zone, whether sent or defaulted. If **both** are missing the range is the current calendar month (in the server's `APP_TIMEZONE`, UTC by default). If only one is sent, the other end is open. `to` must not be before `from`. | current month |
 | `status` | multi | `unconfirmed`, `confirmed`, `completed`, `cancelled` | all |
 | `service_type_id` | multi | Service type ids (from `/filters`). | all |
 | `lead_source_id` | multi | Lead source ids (from `/filters`). Jobs without a source are only matched when no source filter is sent. | all |
@@ -69,7 +69,7 @@ of the other reports, such as `method` and `document_type_id`.
 
 - `source` is `null` when the job has no lead source.
 - `invoice_value` is the job's invoice value.
-- `created_at` is always UTC with exactly six fractional digits, so every value has the same shape.
+- `created_at` is always UTC with exactly six fractional digits, so every value has the same shape, whatever `APP_TIMEZONE` is. Only the `from`/`to` day boundaries follow `APP_TIMEZONE`.
 - `summary` counts and totals the **whole filtered set**, not just this page, whatever the status of the jobs, and
   is only present on the **first page** (when no `cursor` is sent). It is `null` on later pages.
 - `range` is the date range actually applied, so a client can show the defaulted month. An open end is `null`.

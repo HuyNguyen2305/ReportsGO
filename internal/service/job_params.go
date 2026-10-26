@@ -11,7 +11,7 @@ import (
 // ListJobsParams are the request values as received, all strings, so that every problem can be reported
 // as a field-level validation error. Field names in errors are the query parameter names.
 type ListJobsParams struct {
-	From, To string // from, to: YYYY-MM-DD, on the date the job was created (UTC)
+	From, To string // from, to: YYYY-MM-DD, on the day the job was created, in the server's time zone
 
 	Status         []string // status
 	ServiceTypeIDs []string // service_type_id
@@ -37,12 +37,8 @@ func parseJobParams(p ListJobsParams, now time.Time) (jobRequest, error) {
 	filter := model.JobFilter{}
 
 	from, to := v.dateRange(p.From, p.To, now)
-	// The dates are inclusive calendar days; the filter works on instants: from the start of the first day up to
-	// (not including) the start of the day after the last one.
-	filter.CreatedFrom = from
-	if !to.IsZero() {
-		filter.CreatedBefore = to.AddDate(0, 0, 1)
-	}
+	// The dates are inclusive calendar days in the clock's time zone; the filter works on instants.
+	filter.CreatedFrom, filter.CreatedBefore = createdRange(from, to, now.Location())
 
 	filter.Statuses = parseEnums(&v, "status", p.Status, model.JobStatuses)
 	filter.ServiceTypeIDs = v.ids("service_type_id", p.ServiceTypeIDs)

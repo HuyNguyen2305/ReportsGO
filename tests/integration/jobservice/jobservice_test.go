@@ -232,3 +232,51 @@ func TestListHonorsContextCancellation(t *testing.T) {
 	_, err = svc.FilterOptions(ctx)
 	require.ErrorIs(t, err, context.Canceled)
 }
+
+// The day boundaries of the created range follow the clock's time zone (APP_TIMEZONE in the app), not UTC.
+// One record is created at 01:00 on Nov 1 in UTC+7 (still Oct 31 in UTC); another at 23:59 on Oct 31 in UTC+7.
+func TestCreatedDaysFollowTheClocksTimezone(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.SeededPool(t)
+	insert := func(at string) int64 {
+		var id int64
+		require.NoError(t, pool.QueryRow(ctx, `INSERT INTO jobs (customer_id, location_id, service_type_id, created_at)
+			SELECT l.customer_id, l.id, st.id, $1::timestamptz
+			FROM (SELECT id, customer_id FROM service_locations ORDER BY id LIMIT 1) l,
+			     (SELECT id FROM service_types ORDER BY id LIMIT 1) st RETURNING id`, at).Scan(&id))
+		return id
+	}
+	early := insert("2026-10-31 18:00:00+00") // Nov 1, 01:00 in UTC+7
+	late := insert("2026-10-31 16:59:00+00")  // Oct 31, 23:59 in UTC+7
+
+	utc7 := time.FixedZone("UTC+7", 7*3600)
+	list := func(now time.Time, p service.ListJobsParams) []int64 {
+		t.Helper()
+		p.Limit = "200"
+		svc := service.NewJobService(repository.NewJobRepository(pool), func() time.Time { return now })
+		res, err := svc.List(ctx, p)
+		require.NoError(t, err)
+		return ids(res.Items)
+	}
+	october := service.ListJobsParams{From: "2026-10-01", To: "2026-10-31"}
+
+	t.Run("a UTC+7 clock reads the default month, and explicit days, in UTC+7", func(t *testing.T) {
+		november := list(time.Date(2026, 11, 15, 12, 0, 0, 0, utc7), service.ListJobsParams{})
+		require.Contains(t, november, early)
+		require.NotContains(t, november, late)
+
+		inOctober := list(time.Date(2026, 11, 15, 12, 0, 0, 0, utc7), october)
+		require.Contains(t, inOctober, late)
+		require.NotContains(t, inOctober, early)
+	})
+
+	t.Run("a UTC clock reads the same days in UTC", func(t *testing.T) {
+		november := list(time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC), service.ListJobsParams{})
+		require.NotContains(t, november, early)
+		require.NotContains(t, november, late)
+
+		inOctober := list(time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC), october)
+		require.Contains(t, inOctober, early)
+		require.Contains(t, inOctober, late)
+	})
+}

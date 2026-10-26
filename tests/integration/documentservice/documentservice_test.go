@@ -280,3 +280,58 @@ func TestDocumentListNeverContainsOtherReportsRows(t *testing.T) {
 	require.Len(t, res.Items, 1)
 	require.EqualValues(t, 1, res.Summary.Count)
 }
+
+// The day boundaries of the created range follow the clock's time zone (APP_TIMEZONE in the app), not UTC.
+// One record is created at 01:00 on Nov 1 in UTC+7 (still Oct 31 in UTC); another at 23:59 on Oct 31 in UTC+7.
+func TestCreatedDaysFollowTheClocksTimezone(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.SeededPool(t)
+	insert := func(at string) int64 {
+		var id int64
+		require.NoError(t, pool.QueryRow(ctx, `INSERT INTO documents (document_number, document_type_id, customer_id, created_at)
+			SELECT 'ZONE-' || nextval(pg_get_serial_sequence('documents', 'id')), dt.id, c.id, $1::timestamptz
+			FROM document_types dt, customers c WHERE c.account_number = '63716' ORDER BY dt.id LIMIT 1 RETURNING id`, at).Scan(&id))
+		return id
+	}
+	early := insert("2026-10-31 18:00:00+00") // Nov 1, 01:00 in UTC+7
+	late := insert("2026-10-31 16:59:00+00")  // Oct 31, 23:59 in UTC+7
+
+	utc7 := time.FixedZone("UTC+7", 7*3600)
+	list := func(now time.Time, p service.ListDocumentsParams) []int64 {
+		t.Helper()
+		p.Limit = "200"
+		svc := service.NewDocumentService(repository.NewDocumentRepository(pool), func() time.Time { return now })
+		res, err := svc.List(ctx, p)
+		require.NoError(t, err)
+		return ids(res.Items)
+	}
+	october := service.ListDocumentsParams{From: "2026-10-01", To: "2026-10-31"}
+
+	t.Run("a UTC+7 clock reads the default month, and explicit days, in UTC+7", func(t *testing.T) {
+		november := list(time.Date(2026, 11, 15, 12, 0, 0, 0, utc7), service.ListDocumentsParams{})
+		require.Contains(t, november, early)
+		require.NotContains(t, november, late)
+
+		inOctober := list(time.Date(2026, 11, 15, 12, 0, 0, 0, utc7), october)
+		require.Contains(t, inOctober, late)
+		require.NotContains(t, inOctober, early)
+	})
+
+	t.Run("a UTC clock reads the same days in UTC", func(t *testing.T) {
+		november := list(time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC), service.ListDocumentsParams{})
+		require.NotContains(t, november, early)
+		require.NotContains(t, november, late)
+
+		inOctober := list(time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC), october)
+		require.Contains(t, inOctober, early)
+		require.Contains(t, inOctober, late)
+	})
+}
+
+func ids(rows []model.DocumentRow) []int64 {
+	out := make([]int64, len(rows))
+	for i, r := range rows {
+		out[i] = r.ID
+	}
+	return out
+}

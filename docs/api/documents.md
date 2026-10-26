@@ -21,7 +21,7 @@ reports: `signature_status`, `service_id`, `tag_id` and `payment_term_id`.
 
 | Parameter | Type | Meaning | Default |
 |---|---|---|---|
-| `from`, `to` | `YYYY-MM-DD` | Inclusive range on the day the document was **created** (UTC). If **both** are missing the range is the current calendar month (in the server's `APP_TIMEZONE`, UTC by default). If only one is sent, the other end is open. `to` must not be before `from`. | current month |
+| `from`, `to` | `YYYY-MM-DD` | Inclusive range on the day the document was **created**, read in the server's `APP_TIMEZONE` (UTC by default); `from` and `to` are days in that zone, whether sent or defaulted. If **both** are missing the range is the current calendar month (in the server's `APP_TIMEZONE`, UTC by default). If only one is sent, the other end is open. `to` must not be before `from`. | current month |
 | `lifecycle` | `active` \| `deleted` | The Active / Deleted tab. Documents cannot be archived, so there is no `archived` tab. | `active` |
 | `status` | multi | `draft`, `sent`, `signed` | all |
 | `document_type_id` | multi | Document type ids (from `/filters`). | all |
@@ -71,7 +71,7 @@ statuses (`accepted`, `declined`) are rejected here.
 ```
 
 - `created_by` is `null` when the creator is unknown.
-- `created_at` is always UTC with exactly six fractional digits, so every value has the same shape.
+- `created_at` is always UTC with exactly six fractional digits, so every value has the same shape, whatever `APP_TIMEZONE` is. Only the `from`/`to` day boundaries follow `APP_TIMEZONE`.
 - `summary` counts the **whole filtered set**, not just this page, and is only present on the **first page**
   (when no `cursor` is sent). It is `null` on later pages.
 - `range` is the date range actually applied, so a client can show the defaulted month. An open end is `null`.
