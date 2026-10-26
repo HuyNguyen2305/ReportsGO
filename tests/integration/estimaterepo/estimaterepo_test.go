@@ -319,6 +319,25 @@ func TestSummary(t *testing.T) {
 		require.Equal(t, model.Money(29280+9622+300+8060+15000+7550), s.Total)
 	})
 
+	t.Run("totals include declined and draft estimates unless a status filter leaves them out", func(t *testing.T) {
+		all, err := e.repo.Summary(ctx, octoberActive())
+		require.NoError(t, err)
+
+		f := octoberActive()
+		f.Statuses = []model.EstimateStatus{model.EstimateDeclined}
+		declined, err := e.repo.Summary(ctx, f)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, declined.Count)
+		require.Equal(t, model.Money(7550), declined.Total, "estimate 123189 is declined")
+
+		f.Statuses = []model.EstimateStatus{model.EstimateDraft, model.EstimateSent, model.EstimateAccepted}
+		others, err := e.repo.Summary(ctx, f)
+		require.NoError(t, err)
+
+		require.Equal(t, all.Count, others.Count+declined.Count)
+		require.Equal(t, all.Total, others.Total+declined.Total, "the default total counts the declined estimate")
+	})
+
 	t.Run("archived and deleted tabs have their own totals", func(t *testing.T) {
 		f := octoberActive()
 		f.Lifecycle = model.LifecycleArchived

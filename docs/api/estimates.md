@@ -93,10 +93,13 @@ An estimate whose customer has a phone and an email, from `?q=123183`:
 }
 ```
 
-- `phone` is the customer's first phone number. It is `null` when the customer has none. `billing_email` and
+- `phone` is the customer's first phone number, meaning the one added first (lowest id); the phone's kind
+  (mobile, home, ...) is not considered. It is `null` when the customer has none. `billing_email` and
   `created_by` are `null` when unknown.
 - `summary` totals the **whole filtered set**, not just this page, and is only present on the **first page**
   (when no `cursor` is sent). It is `null` on later pages.
+  `total` includes every estimate in the filtered set, declined and draft estimates too; add a `status` filter
+  (for example `status=sent,accepted`) to leave them out.
 - `range` is the date range actually applied, so a client can show the defaulted month. An open end is `null`.
 - `page.next_cursor` is `null` and `has_more` is `false` on the last page. `data` is always an array, never `null`.
 
