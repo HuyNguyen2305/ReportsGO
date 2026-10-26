@@ -21,7 +21,7 @@ type CustomerService struct {
 	now  Clock
 }
 
-// NewCustomerService returns a service over repo. A nil clock uses time.Now.
+// NewCustomerService returns a service over repo. A nil clock reads the current time in UTC.
 func NewCustomerService(repo CustomerRepository, clock Clock) *CustomerService {
 	if clock == nil {
 		clock = utcNow

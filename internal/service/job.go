@@ -22,7 +22,7 @@ type JobService struct {
 	now  Clock
 }
 
-// NewJobService returns a service over repo. A nil clock uses time.Now.
+// NewJobService returns a service over repo. A nil clock reads the current time in UTC.
 func NewJobService(repo JobRepository, clock Clock) *JobService {
 	if clock == nil {
 		clock = utcNow

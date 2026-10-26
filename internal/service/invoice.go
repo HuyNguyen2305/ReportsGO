@@ -32,7 +32,7 @@ type InvoiceService struct {
 	now  Clock
 }
 
-// NewInvoiceService returns a service over repo. A nil clock uses time.Now.
+// NewInvoiceService returns a service over repo. A nil clock reads the current time in UTC.
 func NewInvoiceService(repo InvoiceRepository, clock Clock) *InvoiceService {
 	if clock == nil {
 		clock = utcNow

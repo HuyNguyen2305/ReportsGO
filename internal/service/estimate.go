@@ -20,7 +20,7 @@ type EstimateService struct {
 	now  Clock
 }
 
-// NewEstimateService returns a service over repo. A nil clock uses time.Now.
+// NewEstimateService returns a service over repo. A nil clock reads the current time in UTC.
 func NewEstimateService(repo EstimateRepository, clock Clock) *EstimateService {
 	if clock == nil {
 		clock = utcNow

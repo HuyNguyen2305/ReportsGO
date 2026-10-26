@@ -21,7 +21,7 @@ type DocumentService struct {
 	now  Clock
 }
 
-// NewDocumentService returns a service over repo. A nil clock uses time.Now.
+// NewDocumentService returns a service over repo. A nil clock reads the current time in UTC.
 func NewDocumentService(repo DocumentRepository, clock Clock) *DocumentService {
 	if clock == nil {
 		clock = utcNow
