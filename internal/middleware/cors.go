@@ -16,7 +16,8 @@ const (
 
 // CORS allows cross-origin browser requests from an exact-match allowlist of origins. An empty list
 // means same-origin only and the middleware does nothing. It never answers with "*" and never allows
-// credentials. Browsers enforce CORS, so requests from other origins still reach the handler; they just
+// credentials. Every response varies on Origin, including those to requests without one, so a shared cache
+// cannot serve a response that lacks CORS headers to a cross-origin caller. Browsers enforce CORS, so requests from other origins still reach the handler; they just
 // receive no Access-Control-Allow-* headers.
 func CORS(allowedOrigins []string) gin.HandlerFunc {
 	allowed := make(map[string]struct{}, len(allowedOrigins))
@@ -30,14 +31,15 @@ func CORS(allowedOrigins []string) gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
+		h := c.Writer.Header()
+		h.Add("Vary", "Origin")
+
 		origin := c.GetHeader("Origin")
 		if origin == "" {
 			c.Next() // not a cross-origin browser request
 			return
 		}
 
-		h := c.Writer.Header()
-		h.Add("Vary", "Origin")
 		_, originAllowed := allowed[normalizeOrigin(origin)]
 
 		if isPreflight(c.Request) {

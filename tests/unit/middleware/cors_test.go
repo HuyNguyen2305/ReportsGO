@@ -25,7 +25,7 @@ func TestCORSSimpleRequests(t *testing.T) {
 		wantAllowed bool
 		wantVary    bool
 	}{
-		{"no origin header", "", false, false},
+		{"no origin header", "", false, true},
 		{"allowed origin", "https://app.example.com", true, true},
 		{"allowed with different case", "HTTPS://APP.EXAMPLE.COM", true, true},
 		{"allowed, configured with trailing slash", "http://localhost:3000", true, true},
