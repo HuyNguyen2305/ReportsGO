@@ -78,13 +78,10 @@ func TestJobListPassesThePageSizeToTheRepository(t *testing.T) {
 func TestJobListSummaryOnFirstPageOnly(t *testing.T) {
 	t.Run("first page has it, computed from the same filter", func(t *testing.T) {
 		repo := servicemocks.NewMockJobRepository(t)
-		var listFilter, summaryFilter model.JobFilter
-		repo.EXPECT().List(mock.Anything, mock.Anything).
-			Run(func(_ context.Context, q model.JobQuery) { listFilter = q.Filter }).
-			Return(jobRows(2), nil).Once()
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).
-			Run(func(_ context.Context, f model.JobFilter) { summaryFilter = f }).
-			Return(model.JobSummary{Count: 18, Total: 123456}, nil).Once()
+		var asked model.JobQuery
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).
+			Run(func(_ context.Context, q model.JobQuery, _ bool) { asked = q }).
+			Return(model.JobPage{Rows: jobRows(2), Summary: &model.JobSummary{Count: 18, Total: 123456}}, nil).Once()
 
 		res, err := service.NewJobService(repo, fixedClock(october21)).List(context.Background(),
 			service.ListJobsParams{Status: []string{"completed"}, Search: "customer", ServiceTypeIDs: []string{"1"}, LeadSourceIDs: []string{"2"}})
@@ -93,14 +90,15 @@ func TestJobListSummaryOnFirstPageOnly(t *testing.T) {
 		require.NotNil(t, res.Summary)
 		require.EqualValues(t, 18, res.Summary.Count)
 		require.Equal(t, model.Money(123456), res.Summary.Total)
-		require.Equal(t, listFilter, summaryFilter, "the totals cover exactly what the list filters on")
+		require.Equal(t, []model.JobStatus{model.JobCompleted}, asked.Filter.Statuses,
+			"the repository is given the filter once, so the rows and the totals cover the same set")
 	})
 
 	t.Run("later pages do not run it", func(t *testing.T) {
 		cursor := service.EncodeJobCursor(model.JobSort{Key: model.JobSortCreatedAt, Desc: true},
 			model.JobRow{ID: 3, SortValue: "2026-10-03T08:00:00.000000Z"})
-		repo := servicemocks.NewMockJobRepository(t) // Summary has no expectation: calling it fails the test
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(jobRows(1), nil).Once()
+		repo := servicemocks.NewMockJobRepository(t) // only Page(..., false) is expected: asking for a summary fails the test
+		repo.EXPECT().Page(mock.Anything, mock.Anything, false).Return(model.JobPage{Rows: jobRows(1)}, nil).Once()
 
 		res, err := service.NewJobService(repo, fixedClock(october21)).List(context.Background(),
 			service.ListJobsParams{Cursor: cursor})
@@ -111,9 +109,9 @@ func TestJobListSummaryOnFirstPageOnly(t *testing.T) {
 }
 
 func TestJobListWrapsRepositoryErrors(t *testing.T) {
-	t.Run("list", func(t *testing.T) {
+	t.Run("page", func(t *testing.T) {
 		repo := servicemocks.NewMockJobRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, errBoom).Once()
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).Return(model.JobPage{}, errBoom).Once()
 
 		res, err := service.NewJobService(repo, fixedClock(october21)).List(context.Background(), service.ListJobsParams{})
 
@@ -123,21 +121,9 @@ func TestJobListWrapsRepositoryErrors(t *testing.T) {
 		require.NotErrorIs(t, err, model.ErrInvalidInput)
 	})
 
-	t.Run("summary", func(t *testing.T) {
-		repo := servicemocks.NewMockJobRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(jobRows(1), nil).Once()
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.JobSummary{}, errBoom).Once()
-
-		res, err := service.NewJobService(repo, fixedClock(october21)).List(context.Background(), service.ListJobsParams{})
-
-		require.Nil(t, res)
-		require.ErrorIs(t, err, errBoom)
-		require.ErrorContains(t, err, "summarize jobs")
-	})
-
 	t.Run("a cancelled context stays recognisable", func(t *testing.T) {
 		repo := servicemocks.NewMockJobRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, context.Canceled).Once()
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).Return(model.JobPage{}, context.Canceled).Once()
 
 		_, err := service.NewJobService(repo, nil).List(context.Background(), service.ListJobsParams{})
 		require.True(t, errors.Is(err, context.Canceled))
@@ -150,8 +136,7 @@ func TestJobListPassesTheRequestContextToTheRepository(t *testing.T) {
 	hasMarker := mock.MatchedBy(func(c context.Context) bool { return c.Value(key{}) == "marker" })
 
 	repo := servicemocks.NewMockJobRepository(t)
-	repo.EXPECT().List(hasMarker, mock.Anything).Return(nil, nil).Once()
-	repo.EXPECT().Summary(hasMarker, mock.Anything).Return(model.JobSummary{}, nil).Once()
+	repo.EXPECT().Page(hasMarker, mock.Anything, true).Return(model.JobPage{}, nil).Once()
 	repo.EXPECT().ServiceTypes(hasMarker).Return(nil, nil).Once()
 	repo.EXPECT().LeadSources(hasMarker).Return(nil, nil).Once()
 
@@ -164,8 +149,7 @@ func TestJobListPassesTheRequestContextToTheRepository(t *testing.T) {
 
 func TestNewJobServiceDefaultsTheClock(t *testing.T) {
 	repo := servicemocks.NewMockJobRepository(t)
-	repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, nil).Once()
-	repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.JobSummary{}, nil).Once()
+	repo.EXPECT().Page(mock.Anything, mock.Anything, true).Return(model.JobPage{}, nil).Once()
 
 	res, err := service.NewJobService(repo, nil).List(context.Background(), service.ListJobsParams{})
 

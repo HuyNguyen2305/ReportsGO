@@ -10,8 +10,9 @@ import (
 
 // JobRepository is what the service needs from storage. *repository.JobRepository satisfies it.
 type JobRepository interface {
-	List(ctx context.Context, q model.JobQuery) ([]model.JobRow, error)
-	Summary(ctx context.Context, f model.JobFilter) (model.JobSummary, error)
+	// Page returns one page and, when withSummary is set, the count and total of the whole filtered set, both
+	// read from one snapshot so the summary always describes the rows' set.
+	Page(ctx context.Context, q model.JobQuery, withSummary bool) (model.JobPage, error)
 	ServiceTypes(ctx context.Context) ([]model.ServiceType, error)
 	LeadSources(ctx context.Context) ([]model.LeadSource, error)
 }
@@ -51,12 +52,14 @@ func (s *JobService) List(ctx context.Context, p ListJobsParams) (*ListJobsResul
 	}
 	q := req.query
 
-	rows, err := s.repo.List(ctx, q)
+	// The summary is wanted on the first page only; later pages keep the one the client already has.
+	page, err := s.repo.Page(ctx, q, q.After == nil)
 	if err != nil {
 		return nil, fmt.Errorf("list jobs: %w", err)
 	}
+	rows := page.Rows
 
-	res := &ListJobsResult{Limit: q.Limit, From: req.from, To: req.to}
+	res := &ListJobsResult{Limit: q.Limit, From: req.from, To: req.to, Summary: page.Summary}
 	// The repository returns one row beyond the page size so we can tell whether another page exists.
 	if len(rows) > q.Limit {
 		rows = rows[:q.Limit]
@@ -67,14 +70,6 @@ func (s *JobService) List(ctx context.Context, p ListJobsParams) (*ListJobsResul
 		rows = []model.JobRow{}
 	}
 	res.Items = rows
-
-	if q.After == nil {
-		summary, err := s.repo.Summary(ctx, q.Filter)
-		if err != nil {
-			return nil, fmt.Errorf("summarize jobs: %w", err)
-		}
-		res.Summary = &summary
-	}
 	return res, nil
 }
 

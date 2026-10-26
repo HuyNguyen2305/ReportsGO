@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
+
 	"reportsgo/internal/model"
 	"reportsgo/internal/repository/db"
 )
@@ -21,12 +23,55 @@ func NewJobRepository(conn db.DBTX) *JobRepository {
 
 // List returns one page of the report: up to q.Limit+1 rows, so the caller can tell whether more follow.
 func (r *JobRepository) List(ctx context.Context, q model.JobQuery) ([]model.JobRow, error) {
+	return listJobs(ctx, r.conn, q)
+}
+
+// Summary counts and totals the whole filtered set (not just one page).
+func (r *JobRepository) Summary(ctx context.Context, f model.JobFilter) (model.JobSummary, error) {
+	return summarizeJobs(ctx, r.conn, f)
+}
+
+// Page returns one page of the report and, when withSummary is set, the count and total of the whole filtered
+// set. The rows and the summary come from one snapshot, so the summary always describes the rows' set even while
+// other connections commit. On a pool that is a read-only REPEATABLE READ transaction; a repository already
+// bound to a transaction uses the caller's, which is its snapshot.
+func (r *JobRepository) Page(ctx context.Context, q model.JobQuery, withSummary bool) (model.JobPage, error) {
+	if !withSummary {
+		rows, err := listJobs(ctx, r.conn, q)
+		if err != nil {
+			return model.JobPage{}, err
+		}
+		return model.JobPage{Rows: rows}, nil
+	}
+
+	var page model.JobPage
+	read := func(ctx context.Context, conn db.DBTX) error {
+		rows, err := listJobs(ctx, conn, q)
+		if err != nil {
+			return err
+		}
+		summary, err := summarizeJobs(ctx, conn, q.Filter)
+		if err != nil {
+			return err
+		}
+		page = model.JobPage{Rows: rows, Summary: &summary}
+		return nil
+	}
+
+	if pool, ok := r.conn.(TxOptionsBeginner); ok {
+		err := WithReadSnapshot(ctx, pool, func(ctx context.Context, tx pgx.Tx) error { return read(ctx, tx) })
+		return page, err
+	}
+	return page, read(ctx, r.conn)
+}
+
+func listJobs(ctx context.Context, conn db.DBTX, q model.JobQuery) ([]model.JobRow, error) {
 	stmt, err := BuildJobListQuery(q)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := r.conn.Query(ctx, stmt.SQL, stmt.Args...)
+	rows, err := conn.Query(ctx, stmt.SQL, stmt.Args...)
 	if err != nil {
 		return nil, fmt.Errorf("query new jobs report: %w", err)
 	}
@@ -56,8 +101,7 @@ func (r *JobRepository) List(ctx context.Context, q model.JobQuery) ([]model.Job
 	return out, nil
 }
 
-// Summary counts and totals the whole filtered set (not just one page).
-func (r *JobRepository) Summary(ctx context.Context, f model.JobFilter) (model.JobSummary, error) {
+func summarizeJobs(ctx context.Context, conn db.DBTX, f model.JobFilter) (model.JobSummary, error) {
 	stmt, err := BuildJobSummaryQuery(f)
 	if err != nil {
 		return model.JobSummary{}, err
@@ -67,7 +111,7 @@ func (r *JobRepository) Summary(ctx context.Context, f model.JobFilter) (model.J
 		s     model.JobSummary
 		total int64
 	)
-	if err := r.conn.QueryRow(ctx, stmt.SQL, stmt.Args...).Scan(&s.Count, &total); err != nil {
+	if err := conn.QueryRow(ctx, stmt.SQL, stmt.Args...).Scan(&s.Count, &total); err != nil {
 		return model.JobSummary{}, fmt.Errorf("query new jobs summary: %w", err)
 	}
 	s.Total = model.Money(total)

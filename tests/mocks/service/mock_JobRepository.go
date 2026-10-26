@@ -109,47 +109,46 @@ func (_c *MockJobRepository_LeadSources_Call) RunAndReturn(run func(ctx context.
 	return _c
 }
 
-// List provides a mock function for the type MockJobRepository
-func (_mock *MockJobRepository) List(ctx context.Context, q model.JobQuery) ([]model.JobRow, error) {
-	ret := _mock.Called(ctx, q)
+// Page provides a mock function for the type MockJobRepository
+func (_mock *MockJobRepository) Page(ctx context.Context, q model.JobQuery, withSummary bool) (model.JobPage, error) {
+	ret := _mock.Called(ctx, q, withSummary)
 
 	if len(ret) == 0 {
-		panic("no return value specified for List")
+		panic("no return value specified for Page")
 	}
 
-	var r0 []model.JobRow
+	var r0 model.JobPage
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.JobQuery) ([]model.JobRow, error)); ok {
-		return returnFunc(ctx, q)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, model.JobQuery, bool) (model.JobPage, error)); ok {
+		return returnFunc(ctx, q, withSummary)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.JobQuery) []model.JobRow); ok {
-		r0 = returnFunc(ctx, q)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, model.JobQuery, bool) model.JobPage); ok {
+		r0 = returnFunc(ctx, q, withSummary)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]model.JobRow)
-		}
+		r0 = ret.Get(0).(model.JobPage)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, model.JobQuery) error); ok {
-		r1 = returnFunc(ctx, q)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, model.JobQuery, bool) error); ok {
+		r1 = returnFunc(ctx, q, withSummary)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
 }
 
-// MockJobRepository_List_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'List'
-type MockJobRepository_List_Call struct {
+// MockJobRepository_Page_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Page'
+type MockJobRepository_Page_Call struct {
 	*mock.Call
 }
 
-// List is a helper method to define mock.On call
+// Page is a helper method to define mock.On call
 //   - ctx context.Context
 //   - q model.JobQuery
-func (_e *MockJobRepository_Expecter) List(ctx any, q any) *MockJobRepository_List_Call {
-	return &MockJobRepository_List_Call{Call: _e.mock.On("List", ctx, q)}
+//   - withSummary bool
+func (_e *MockJobRepository_Expecter) Page(ctx any, q any, withSummary any) *MockJobRepository_Page_Call {
+	return &MockJobRepository_Page_Call{Call: _e.mock.On("Page", ctx, q, withSummary)}
 }
 
-func (_c *MockJobRepository_List_Call) Run(run func(ctx context.Context, q model.JobQuery)) *MockJobRepository_List_Call {
+func (_c *MockJobRepository_Page_Call) Run(run func(ctx context.Context, q model.JobQuery, withSummary bool)) *MockJobRepository_Page_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -159,20 +158,25 @@ func (_c *MockJobRepository_List_Call) Run(run func(ctx context.Context, q model
 		if args[1] != nil {
 			arg1 = args[1].(model.JobQuery)
 		}
+		var arg2 bool
+		if args[2] != nil {
+			arg2 = args[2].(bool)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
 }
 
-func (_c *MockJobRepository_List_Call) Return(jobRows []model.JobRow, err error) *MockJobRepository_List_Call {
-	_c.Call.Return(jobRows, err)
+func (_c *MockJobRepository_Page_Call) Return(jobPage model.JobPage, err error) *MockJobRepository_Page_Call {
+	_c.Call.Return(jobPage, err)
 	return _c
 }
 
-func (_c *MockJobRepository_List_Call) RunAndReturn(run func(ctx context.Context, q model.JobQuery) ([]model.JobRow, error)) *MockJobRepository_List_Call {
+func (_c *MockJobRepository_Page_Call) RunAndReturn(run func(ctx context.Context, q model.JobQuery, withSummary bool) (model.JobPage, error)) *MockJobRepository_Page_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -235,72 +239,6 @@ func (_c *MockJobRepository_ServiceTypes_Call) Return(serviceTypes []model.Servi
 }
 
 func (_c *MockJobRepository_ServiceTypes_Call) RunAndReturn(run func(ctx context.Context) ([]model.ServiceType, error)) *MockJobRepository_ServiceTypes_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// Summary provides a mock function for the type MockJobRepository
-func (_mock *MockJobRepository) Summary(ctx context.Context, f model.JobFilter) (model.JobSummary, error) {
-	ret := _mock.Called(ctx, f)
-
-	if len(ret) == 0 {
-		panic("no return value specified for Summary")
-	}
-
-	var r0 model.JobSummary
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.JobFilter) (model.JobSummary, error)); ok {
-		return returnFunc(ctx, f)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.JobFilter) model.JobSummary); ok {
-		r0 = returnFunc(ctx, f)
-	} else {
-		r0 = ret.Get(0).(model.JobSummary)
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, model.JobFilter) error); ok {
-		r1 = returnFunc(ctx, f)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockJobRepository_Summary_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Summary'
-type MockJobRepository_Summary_Call struct {
-	*mock.Call
-}
-
-// Summary is a helper method to define mock.On call
-//   - ctx context.Context
-//   - f model.JobFilter
-func (_e *MockJobRepository_Expecter) Summary(ctx any, f any) *MockJobRepository_Summary_Call {
-	return &MockJobRepository_Summary_Call{Call: _e.mock.On("Summary", ctx, f)}
-}
-
-func (_c *MockJobRepository_Summary_Call) Run(run func(ctx context.Context, f model.JobFilter)) *MockJobRepository_Summary_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 model.JobFilter
-		if args[1] != nil {
-			arg1 = args[1].(model.JobFilter)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockJobRepository_Summary_Call) Return(jobSummary model.JobSummary, err error) *MockJobRepository_Summary_Call {
-	_c.Call.Return(jobSummary, err)
-	return _c
-}
-
-func (_c *MockJobRepository_Summary_Call) RunAndReturn(run func(ctx context.Context, f model.JobFilter) (model.JobSummary, error)) *MockJobRepository_Summary_Call {
 	_c.Call.Return(run)
 	return _c
 }

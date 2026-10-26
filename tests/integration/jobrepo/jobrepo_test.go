@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -392,6 +393,105 @@ func TestRepositoryRejectsInvalidQueries(t *testing.T) {
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
 	_, err = e.repo.List(ctx, query(october(), model.JobSortCreatedAt, false, 0))
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
+}
+
+// insertOctoberJob commits one more October job of 10.00.
+func insertOctoberJob(t *testing.T, conn interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}) {
+	t.Helper()
+	_, err := conn.Exec(context.Background(), `INSERT INTO jobs (customer_id, location_id, service_type_id, invoice_value, created_at)
+		SELECT l.customer_id, l.id, st.id, 10, '2026-10-19 08:00:00+00'
+		FROM (SELECT id, customer_id FROM service_locations ORDER BY id LIMIT 1) l,
+		     (SELECT id FROM service_types ORDER BY id LIMIT 1) st`)
+	require.NoError(t, err)
+}
+
+func TestPage(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	q := query(october(), model.JobSortCreatedAt, true, 5)
+
+	t.Run("a first page carries the rows and the totals of the same set", func(t *testing.T) {
+		page, err := e.repo.Page(ctx, q, true)
+		require.NoError(t, err)
+
+		rows, err := e.repo.List(ctx, q)
+		require.NoError(t, err)
+		summary, err := e.repo.Summary(ctx, q.Filter)
+		require.NoError(t, err)
+
+		require.Equal(t, rows, page.Rows)
+		require.NotNil(t, page.Summary)
+		require.Equal(t, summary, *page.Summary)
+		require.EqualValues(t, octoberJobs, page.Summary.Count)
+		require.Len(t, page.Rows, 6, "limit+1 rows, so the caller can tell another page follows")
+	})
+
+	t.Run("without a summary it is just the rows", func(t *testing.T) {
+		page, err := e.repo.Page(ctx, q, false)
+		require.NoError(t, err)
+
+		rows, err := e.repo.List(ctx, q)
+		require.NoError(t, err)
+		require.Equal(t, rows, page.Rows)
+		require.Nil(t, page.Summary)
+	})
+
+	t.Run("works on a repository bound to the caller's transaction", func(t *testing.T) {
+		tx, err := e.pool.Begin(ctx)
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback(ctx) }()
+		insertOctoberJob(t, tx)
+
+		page, err := repository.NewJobRepository(tx).Page(ctx, q, true)
+		require.NoError(t, err)
+		require.EqualValues(t, octoberJobs+1, page.Summary.Count, "the caller's transaction is the snapshot and sees its own row")
+	})
+
+	t.Run("invalid queries and cancelled contexts are errors, not partial pages", func(t *testing.T) {
+		bad := q
+		bad.Limit = 0
+		_, err := e.repo.Page(ctx, bad, true)
+		require.ErrorIs(t, err, repository.ErrInvalidQuery)
+
+		cancelled, cancel := context.WithCancel(ctx)
+		cancel()
+		page, err := e.repo.Page(cancelled, q, true)
+		require.ErrorIs(t, err, context.Canceled)
+		require.Empty(t, page.Rows)
+		require.Nil(t, page.Summary)
+	})
+}
+
+// The count and total must describe the rows they are shown with. A job committed by someone else between
+// reading the rows and reading the totals would otherwise make the two disagree.
+func TestPageReadsRowsAndSummaryFromOneSnapshot(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	q := query(october(), model.JobSortCreatedAt, true, 100)
+
+	committed := 0
+	pool := testdb.SnapshotPool{Pool: e.pool, BeforeQueryRow: func() {
+		insertOctoberJob(t, e.pool)
+		committed++
+	}}
+
+	page, err := repository.NewJobRepository(pool).Page(ctx, q, true)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, committed, "the concurrent insert must have happened between the two reads")
+	require.Len(t, page.Rows, octoberJobs)
+	require.EqualValues(t, octoberJobs, page.Summary.Count, "the count ignores the job committed after the rows were read")
+	var rowsTotal model.Money
+	for _, r := range page.Rows {
+		rowsTotal += r.InvoiceValue
+	}
+	require.Equal(t, rowsTotal, page.Summary.Total, "the total is the sum of the rows it describes")
+
+	after, err := e.repo.Summary(ctx, q.Filter)
+	require.NoError(t, err)
+	require.EqualValues(t, octoberJobs+1, after.Count, "the committed job is real and visible to a later read")
 }
 
 func TestCancelledContextIsReturnedAsAnError(t *testing.T) {

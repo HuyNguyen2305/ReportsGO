@@ -73,7 +73,9 @@ Number columns are identifiers, not quantities: `account_number` sorts as text, 
 - `invoice_value` is the job's invoice value.
 - `created_at` is always UTC with exactly six fractional digits, so every value has the same shape, whatever `APP_TIMEZONE` is. Only the `from`/`to` day boundaries follow `APP_TIMEZONE`.
 - `summary` counts and totals the **whole filtered set**, not just this page, whatever the status of the jobs, and
-  is only present on the **first page** (when no `cursor` is sent). It is `null` on later pages.
+  is only present on the **first page** (when no `cursor` is sent). It is `null` on later pages. The rows and the
+  summary are read from one database snapshot, so the count and total always describe exactly the set the rows
+  were taken from, even while jobs are being added.
 - `range` is the date range actually applied, so a client can show the defaulted month. An open end is `null`.
 - `page.next_cursor` is `null` and `has_more` is `false` on the last page. `data` is always an array, never `null`.
 

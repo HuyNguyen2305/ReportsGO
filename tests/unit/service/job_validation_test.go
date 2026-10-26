@@ -30,12 +30,15 @@ func runJobs(t *testing.T, p service.ListJobsParams, rows []model.JobRow) (model
 
 	repo := servicemocks.NewMockJobRepository(t)
 	var got model.JobQuery
-	repo.EXPECT().List(mock.Anything, mock.Anything).
-		Run(func(_ context.Context, q model.JobQuery) { got = q }).
-		Return(rows, nil).Once()
-	if strings.TrimSpace(p.Cursor) == "" {
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.JobSummary{}, nil).Once()
+	// the summary is asked for on the first page only
+	withSummary := strings.TrimSpace(p.Cursor) == ""
+	page := model.JobPage{Rows: rows}
+	if withSummary {
+		page.Summary = &model.JobSummary{}
 	}
+	repo.EXPECT().Page(mock.Anything, mock.Anything, withSummary).
+		Run(func(_ context.Context, q model.JobQuery, _ bool) { got = q }).
+		Return(page, nil).Once()
 
 	res, err := service.NewJobService(repo, fixedClock(october21)).List(context.Background(), p)
 	require.NoError(t, err)
@@ -93,10 +96,9 @@ func TestJobListDateRange(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := servicemocks.NewMockJobRepository(t)
 			var got model.JobQuery
-			repo.EXPECT().List(mock.Anything, mock.Anything).
-				Run(func(_ context.Context, q model.JobQuery) { got = q }).
-				Return(nil, nil).Once()
-			repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.JobSummary{}, nil).Once()
+			repo.EXPECT().Page(mock.Anything, mock.Anything, true).
+				Run(func(_ context.Context, q model.JobQuery, _ bool) { got = q }).
+				Return(model.JobPage{}, nil).Once()
 
 			res, err := service.NewJobService(repo, fixedClock(tt.now)).List(context.Background(),
 				service.ListJobsParams{From: tt.from, To: tt.to})
