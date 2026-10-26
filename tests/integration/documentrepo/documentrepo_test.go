@@ -446,6 +446,95 @@ func TestRepositoryWorksInsideATransaction(t *testing.T) {
 	require.Contains(t, numbers(rows), "TX1")
 }
 
+func TestPage(t *testing.T) {
+	e := newEnv(t, true)
+	ctx := context.Background()
+	q := query(october(), model.DocumentSortCreatedAt, true, 5)
+
+	t.Run("a first page carries the rows and the count of the same set", func(t *testing.T) {
+		page, err := e.repo.Page(ctx, q, true)
+		require.NoError(t, err)
+
+		rows, err := e.repo.List(ctx, q)
+		require.NoError(t, err)
+		summary, err := e.repo.Summary(ctx, q.Filter)
+		require.NoError(t, err)
+
+		require.Equal(t, rows, page.Rows)
+		require.NotNil(t, page.Summary)
+		require.Equal(t, summary, *page.Summary)
+		require.EqualValues(t, 21, page.Summary.Count, "18 seeded October documents plus 3 added by newEnv")
+		require.Len(t, page.Rows, 6, "limit+1 rows, so the caller can tell another page follows")
+	})
+
+	t.Run("without a summary it is just the rows", func(t *testing.T) {
+		page, err := e.repo.Page(ctx, q, false)
+		require.NoError(t, err)
+
+		rows, err := e.repo.List(ctx, q)
+		require.NoError(t, err)
+		require.Equal(t, rows, page.Rows)
+		require.Nil(t, page.Summary)
+	})
+
+	t.Run("works on a repository bound to the caller's transaction", func(t *testing.T) {
+		tx, err := e.pool.Begin(ctx)
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback(ctx) }()
+
+		_, err = tx.Exec(ctx, `INSERT INTO documents (document_number, document_type_id, customer_id, created_at)
+			SELECT 'TXP1', dt.id, c.id, '2026-10-15 00:00:00+00'
+			FROM document_types dt, customers c WHERE c.account_number = '5001' LIMIT 1`)
+		require.NoError(t, err)
+
+		page, err := repository.NewDocumentRepository(tx).Page(ctx, q, true)
+		require.NoError(t, err)
+		require.EqualValues(t, 22, page.Summary.Count, "the caller's transaction is the snapshot and sees its own row")
+	})
+
+	t.Run("invalid queries and cancelled contexts are errors, not partial pages", func(t *testing.T) {
+		bad := q
+		bad.Limit = 0
+		_, err := e.repo.Page(ctx, bad, true)
+		require.ErrorIs(t, err, repository.ErrInvalidQuery)
+
+		cancelled, cancel := context.WithCancel(ctx)
+		cancel()
+		page, err := e.repo.Page(cancelled, q, true)
+		require.ErrorIs(t, err, context.Canceled)
+		require.Empty(t, page.Rows)
+		require.Nil(t, page.Summary)
+	})
+}
+
+// The count must describe the rows it is shown with. A change committed by someone else between reading the
+// rows and reading the count would otherwise make the two disagree.
+func TestPageReadsRowsAndSummaryFromOneSnapshot(t *testing.T) {
+	e := newEnv(t, false)
+	ctx := context.Background()
+	q := query(october(), model.DocumentSortCreatedAt, true, 100)
+
+	committed := 0
+	pool := testdb.SnapshotPool{Pool: e.pool, BeforeQueryRow: func() {
+		_, err := e.pool.Exec(ctx, `INSERT INTO documents (document_number, document_type_id, customer_id, created_at)
+			SELECT 'SNAP1', dt.id, c.id, '2026-10-15 00:00:00+00'
+			FROM document_types dt, customers c WHERE c.account_number = '5001' LIMIT 1`)
+		require.NoError(t, err)
+		committed++
+	}}
+
+	page, err := repository.NewDocumentRepository(pool).Page(ctx, q, true)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, committed, "the concurrent insert must have happened between the two reads")
+	require.Len(t, page.Rows, 18)
+	require.EqualValues(t, 18, page.Summary.Count, "the count ignores the document committed after the rows were read")
+
+	after, err := e.repo.Summary(ctx, q.Filter)
+	require.NoError(t, err)
+	require.EqualValues(t, 19, after.Count, "the committed document is real and visible to a later read")
+}
+
 func TestQueriesHonorContextCancellation(t *testing.T) {
 	e := newEnv(t, false)
 	ctx, cancel := context.WithCancel(context.Background())

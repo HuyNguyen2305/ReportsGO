@@ -10,8 +10,9 @@ import (
 
 // DocumentRepository is what the service needs from storage. *repository.DocumentRepository satisfies it.
 type DocumentRepository interface {
-	List(ctx context.Context, q model.DocumentQuery) ([]model.DocumentRow, error)
-	Summary(ctx context.Context, f model.DocumentFilter) (model.DocumentSummary, error)
+	// Page returns one page and, when withSummary is set, the count of the whole filtered set, both read from
+	// one snapshot so the summary always describes the rows' set.
+	Page(ctx context.Context, q model.DocumentQuery, withSummary bool) (model.DocumentPage, error)
 	DocumentTypes(ctx context.Context) ([]model.DocumentType, error)
 }
 
@@ -50,12 +51,14 @@ func (s *DocumentService) List(ctx context.Context, p ListDocumentsParams) (*Lis
 	}
 	q := req.query
 
-	rows, err := s.repo.List(ctx, q)
+	// The summary is wanted on the first page only; later pages keep the one the client already has.
+	page, err := s.repo.Page(ctx, q, q.After == nil)
 	if err != nil {
 		return nil, fmt.Errorf("list documents: %w", err)
 	}
+	rows := page.Rows
 
-	res := &ListDocumentsResult{Limit: q.Limit, From: req.from, To: req.to}
+	res := &ListDocumentsResult{Limit: q.Limit, From: req.from, To: req.to, Summary: page.Summary}
 	// The repository returns one row beyond the page size so we can tell whether another page exists.
 	if len(rows) > q.Limit {
 		rows = rows[:q.Limit]
@@ -66,14 +69,6 @@ func (s *DocumentService) List(ctx context.Context, p ListDocumentsParams) (*Lis
 		rows = []model.DocumentRow{}
 	}
 	res.Items = rows
-
-	if q.After == nil {
-		summary, err := s.repo.Summary(ctx, q.Filter)
-		if err != nil {
-			return nil, fmt.Errorf("summarize documents: %w", err)
-		}
-		res.Summary = &summary
-	}
 	return res, nil
 }
 

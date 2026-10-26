@@ -70,15 +70,14 @@ func TestDocumentListPassesThePageSizeToTheRepository(t *testing.T) {
 }
 
 func TestDocumentListSummaryOnFirstPageOnly(t *testing.T) {
-	t.Run("first page has it, computed from the same filter", func(t *testing.T) {
+	t.Run("first page asks for it together with the rows, from one filtered query", func(t *testing.T) {
 		repo := servicemocks.NewMockDocumentRepository(t)
-		var listFilter, summaryFilter model.DocumentFilter
-		repo.EXPECT().List(mock.Anything, mock.Anything).
-			Run(func(_ context.Context, q model.DocumentQuery) { listFilter = q.Filter }).
-			Return(documentRows(2), nil).Once()
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).
-			Run(func(_ context.Context, f model.DocumentFilter) { summaryFilter = f }).
-			Return(model.DocumentSummary{Count: 18}, nil).Once()
+		var asked model.DocumentQuery
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).
+			RunAndReturn(func(_ context.Context, q model.DocumentQuery, _ bool) (model.DocumentPage, error) {
+				asked = q
+				return model.DocumentPage{Rows: documentRows(2), Summary: &model.DocumentSummary{Count: 18}}, nil
+			}).Once()
 
 		res, err := service.NewDocumentService(repo, fixedClock(october21)).List(context.Background(),
 			service.ListDocumentsParams{Status: []string{"signed"}, Search: "customer", DocumentTypeIDs: []string{"1"}})
@@ -86,14 +85,15 @@ func TestDocumentListSummaryOnFirstPageOnly(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, res.Summary)
 		require.EqualValues(t, 18, res.Summary.Count)
-		require.Equal(t, listFilter, summaryFilter, "the count covers exactly what the list filters on")
+		require.Equal(t, "customer", asked.Filter.Search, "rows and count are read from the one filtered query")
+		require.Equal(t, []model.DocumentStatus{model.DocumentSigned}, asked.Filter.Statuses)
 	})
 
 	t.Run("later pages do not run it", func(t *testing.T) {
 		cursor := service.EncodeDocumentCursor(model.DocumentSort{Key: model.DocumentSortCreatedAt, Desc: true},
 			model.DocumentRow{ID: 3, SortValue: "2026-10-03T08:00:00.000000Z"})
-		repo := servicemocks.NewMockDocumentRepository(t) // Summary has no expectation: calling it fails the test
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(documentRows(1), nil).Once()
+		repo := servicemocks.NewMockDocumentRepository(t) // an expectation on false: asking for a summary fails the test
+		repo.EXPECT().Page(mock.Anything, mock.Anything, false).Return(model.DocumentPage{Rows: documentRows(1)}, nil).Once()
 
 		res, err := service.NewDocumentService(repo, fixedClock(october21)).List(context.Background(),
 			service.ListDocumentsParams{Cursor: cursor})
@@ -106,7 +106,7 @@ func TestDocumentListSummaryOnFirstPageOnly(t *testing.T) {
 func TestDocumentListWrapsRepositoryErrors(t *testing.T) {
 	t.Run("list", func(t *testing.T) {
 		repo := servicemocks.NewMockDocumentRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, errBoom).Once()
+		repo.EXPECT().Page(mock.Anything, mock.Anything, mock.Anything).Return(model.DocumentPage{}, errBoom).Once()
 
 		res, err := service.NewDocumentService(repo, fixedClock(october21)).List(context.Background(), service.ListDocumentsParams{})
 
@@ -116,21 +116,21 @@ func TestDocumentListWrapsRepositoryErrors(t *testing.T) {
 		require.NotErrorIs(t, err, model.ErrInvalidInput)
 	})
 
-	t.Run("summary", func(t *testing.T) {
+	t.Run("a failure inside the snapshot is wrapped the same way, with no partial result", func(t *testing.T) {
 		repo := servicemocks.NewMockDocumentRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(documentRows(1), nil).Once()
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.DocumentSummary{}, errBoom).Once()
+		summaryErr := fmt.Errorf("query document summary: %w", errBoom)
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).Return(model.DocumentPage{}, summaryErr).Once()
 
 		res, err := service.NewDocumentService(repo, fixedClock(october21)).List(context.Background(), service.ListDocumentsParams{})
 
 		require.Nil(t, res)
 		require.ErrorIs(t, err, errBoom)
-		require.ErrorContains(t, err, "summarize documents")
+		require.ErrorContains(t, err, "list documents: query document summary")
 	})
 
 	t.Run("a cancelled context stays recognisable", func(t *testing.T) {
 		repo := servicemocks.NewMockDocumentRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, context.Canceled).Once()
+		repo.EXPECT().Page(mock.Anything, mock.Anything, mock.Anything).Return(model.DocumentPage{}, context.Canceled).Once()
 
 		_, err := service.NewDocumentService(repo, nil).List(context.Background(), service.ListDocumentsParams{})
 		require.True(t, errors.Is(err, context.Canceled))
@@ -143,8 +143,7 @@ func TestDocumentListPassesTheRequestContextToTheRepository(t *testing.T) {
 	hasMarker := mock.MatchedBy(func(c context.Context) bool { return c.Value(key{}) == "marker" })
 
 	repo := servicemocks.NewMockDocumentRepository(t)
-	repo.EXPECT().List(hasMarker, mock.Anything).Return(nil, nil).Once()
-	repo.EXPECT().Summary(hasMarker, mock.Anything).Return(model.DocumentSummary{}, nil).Once()
+	repo.EXPECT().Page(hasMarker, mock.Anything, mock.Anything).Return(documentPage(nil, true), nil).Once()
 	repo.EXPECT().DocumentTypes(hasMarker).Return(nil, nil).Once()
 
 	svc := service.NewDocumentService(repo, fixedClock(october21))
@@ -162,8 +161,7 @@ func TestDocumentListDoesNotCallTheRepositoryForInvalidInput(t *testing.T) {
 
 func TestNewDocumentServiceDefaultsTheClock(t *testing.T) {
 	repo := servicemocks.NewMockDocumentRepository(t)
-	repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, nil).Once()
-	repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.DocumentSummary{}, nil).Once()
+	repo.EXPECT().Page(mock.Anything, mock.Anything, true).Return(documentPage(nil, true), nil).Once()
 
 	res, err := service.NewDocumentService(repo, nil).List(context.Background(), service.ListDocumentsParams{})
 

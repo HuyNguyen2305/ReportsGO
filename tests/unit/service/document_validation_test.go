@@ -24,18 +24,27 @@ func rejectsDocument(t *testing.T, p service.ListDocumentsParams) map[string]str
 	return fields(t, err)
 }
 
+// documentPage is what a repository returns for one Page call: the rows, plus an empty summary when one was requested.
+func documentPage(rows []model.DocumentRow, withSummary bool) model.DocumentPage {
+	p := model.DocumentPage{Rows: rows}
+	if withSummary {
+		p.Summary = &model.DocumentSummary{}
+	}
+	return p
+}
+
 // runDocuments calls List on a service whose repository returns rows, and returns the query it received.
+// It also checks that the summary is requested on the first page only.
 func runDocuments(t *testing.T, p service.ListDocumentsParams, rows []model.DocumentRow) (model.DocumentQuery, *service.ListDocumentsResult) {
 	t.Helper()
 
 	repo := servicemocks.NewMockDocumentRepository(t)
 	var got model.DocumentQuery
-	repo.EXPECT().List(mock.Anything, mock.Anything).
-		Run(func(_ context.Context, q model.DocumentQuery) { got = q }).
-		Return(rows, nil).Once()
-	if strings.TrimSpace(p.Cursor) == "" {
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.DocumentSummary{}, nil).Once()
-	}
+	repo.EXPECT().Page(mock.Anything, mock.Anything, strings.TrimSpace(p.Cursor) == "").
+		RunAndReturn(func(_ context.Context, q model.DocumentQuery, withSummary bool) (model.DocumentPage, error) {
+			got = q
+			return documentPage(rows, withSummary), nil
+		}).Once()
 
 	res, err := service.NewDocumentService(repo, fixedClock(october21)).List(context.Background(), p)
 	require.NoError(t, err)
@@ -94,10 +103,11 @@ func TestDocumentListDateRange(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := servicemocks.NewMockDocumentRepository(t)
 			var got model.DocumentQuery
-			repo.EXPECT().List(mock.Anything, mock.Anything).
-				Run(func(_ context.Context, q model.DocumentQuery) { got = q }).
-				Return(nil, nil).Once()
-			repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.DocumentSummary{}, nil).Once()
+			repo.EXPECT().Page(mock.Anything, mock.Anything, true).
+				RunAndReturn(func(_ context.Context, q model.DocumentQuery, withSummary bool) (model.DocumentPage, error) {
+					got = q
+					return documentPage(nil, withSummary), nil
+				}).Once()
 
 			res, err := service.NewDocumentService(repo, fixedClock(tt.now)).List(context.Background(),
 				service.ListDocumentsParams{From: tt.from, To: tt.to})

@@ -91,6 +91,13 @@ type DocumentRow struct {
 	SortValue string
 }
 
+// DocumentPage is one page of the report read from a single database snapshot. Summary is nil unless it was
+// requested, and when set it counts exactly the filtered set the rows were taken from.
+type DocumentPage struct {
+	Rows    []DocumentRow
+	Summary *DocumentSummary
+}
+
 // DocumentSummary totals the whole filtered set, not just one page.
 type DocumentSummary struct {
 	Count int64

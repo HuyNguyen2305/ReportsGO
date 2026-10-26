@@ -109,47 +109,46 @@ func (_c *MockDocumentRepository_DocumentTypes_Call) RunAndReturn(run func(ctx c
 	return _c
 }
 
-// List provides a mock function for the type MockDocumentRepository
-func (_mock *MockDocumentRepository) List(ctx context.Context, q model.DocumentQuery) ([]model.DocumentRow, error) {
-	ret := _mock.Called(ctx, q)
+// Page provides a mock function for the type MockDocumentRepository
+func (_mock *MockDocumentRepository) Page(ctx context.Context, q model.DocumentQuery, withSummary bool) (model.DocumentPage, error) {
+	ret := _mock.Called(ctx, q, withSummary)
 
 	if len(ret) == 0 {
-		panic("no return value specified for List")
+		panic("no return value specified for Page")
 	}
 
-	var r0 []model.DocumentRow
+	var r0 model.DocumentPage
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.DocumentQuery) ([]model.DocumentRow, error)); ok {
-		return returnFunc(ctx, q)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, model.DocumentQuery, bool) (model.DocumentPage, error)); ok {
+		return returnFunc(ctx, q, withSummary)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.DocumentQuery) []model.DocumentRow); ok {
-		r0 = returnFunc(ctx, q)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, model.DocumentQuery, bool) model.DocumentPage); ok {
+		r0 = returnFunc(ctx, q, withSummary)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]model.DocumentRow)
-		}
+		r0 = ret.Get(0).(model.DocumentPage)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, model.DocumentQuery) error); ok {
-		r1 = returnFunc(ctx, q)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, model.DocumentQuery, bool) error); ok {
+		r1 = returnFunc(ctx, q, withSummary)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
 }
 
-// MockDocumentRepository_List_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'List'
-type MockDocumentRepository_List_Call struct {
+// MockDocumentRepository_Page_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Page'
+type MockDocumentRepository_Page_Call struct {
 	*mock.Call
 }
 
-// List is a helper method to define mock.On call
+// Page is a helper method to define mock.On call
 //   - ctx context.Context
 //   - q model.DocumentQuery
-func (_e *MockDocumentRepository_Expecter) List(ctx any, q any) *MockDocumentRepository_List_Call {
-	return &MockDocumentRepository_List_Call{Call: _e.mock.On("List", ctx, q)}
+//   - withSummary bool
+func (_e *MockDocumentRepository_Expecter) Page(ctx any, q any, withSummary any) *MockDocumentRepository_Page_Call {
+	return &MockDocumentRepository_Page_Call{Call: _e.mock.On("Page", ctx, q, withSummary)}
 }
 
-func (_c *MockDocumentRepository_List_Call) Run(run func(ctx context.Context, q model.DocumentQuery)) *MockDocumentRepository_List_Call {
+func (_c *MockDocumentRepository_Page_Call) Run(run func(ctx context.Context, q model.DocumentQuery, withSummary bool)) *MockDocumentRepository_Page_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -159,86 +158,25 @@ func (_c *MockDocumentRepository_List_Call) Run(run func(ctx context.Context, q 
 		if args[1] != nil {
 			arg1 = args[1].(model.DocumentQuery)
 		}
+		var arg2 bool
+		if args[2] != nil {
+			arg2 = args[2].(bool)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
 }
 
-func (_c *MockDocumentRepository_List_Call) Return(documentRows []model.DocumentRow, err error) *MockDocumentRepository_List_Call {
-	_c.Call.Return(documentRows, err)
+func (_c *MockDocumentRepository_Page_Call) Return(documentPage model.DocumentPage, err error) *MockDocumentRepository_Page_Call {
+	_c.Call.Return(documentPage, err)
 	return _c
 }
 
-func (_c *MockDocumentRepository_List_Call) RunAndReturn(run func(ctx context.Context, q model.DocumentQuery) ([]model.DocumentRow, error)) *MockDocumentRepository_List_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// Summary provides a mock function for the type MockDocumentRepository
-func (_mock *MockDocumentRepository) Summary(ctx context.Context, f model.DocumentFilter) (model.DocumentSummary, error) {
-	ret := _mock.Called(ctx, f)
-
-	if len(ret) == 0 {
-		panic("no return value specified for Summary")
-	}
-
-	var r0 model.DocumentSummary
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.DocumentFilter) (model.DocumentSummary, error)); ok {
-		return returnFunc(ctx, f)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.DocumentFilter) model.DocumentSummary); ok {
-		r0 = returnFunc(ctx, f)
-	} else {
-		r0 = ret.Get(0).(model.DocumentSummary)
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, model.DocumentFilter) error); ok {
-		r1 = returnFunc(ctx, f)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockDocumentRepository_Summary_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Summary'
-type MockDocumentRepository_Summary_Call struct {
-	*mock.Call
-}
-
-// Summary is a helper method to define mock.On call
-//   - ctx context.Context
-//   - f model.DocumentFilter
-func (_e *MockDocumentRepository_Expecter) Summary(ctx any, f any) *MockDocumentRepository_Summary_Call {
-	return &MockDocumentRepository_Summary_Call{Call: _e.mock.On("Summary", ctx, f)}
-}
-
-func (_c *MockDocumentRepository_Summary_Call) Run(run func(ctx context.Context, f model.DocumentFilter)) *MockDocumentRepository_Summary_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 model.DocumentFilter
-		if args[1] != nil {
-			arg1 = args[1].(model.DocumentFilter)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockDocumentRepository_Summary_Call) Return(documentSummary model.DocumentSummary, err error) *MockDocumentRepository_Summary_Call {
-	_c.Call.Return(documentSummary, err)
-	return _c
-}
-
-func (_c *MockDocumentRepository_Summary_Call) RunAndReturn(run func(ctx context.Context, f model.DocumentFilter) (model.DocumentSummary, error)) *MockDocumentRepository_Summary_Call {
+func (_c *MockDocumentRepository_Page_Call) RunAndReturn(run func(ctx context.Context, q model.DocumentQuery, withSummary bool) (model.DocumentPage, error)) *MockDocumentRepository_Page_Call {
 	_c.Call.Return(run)
 	return _c
 }
