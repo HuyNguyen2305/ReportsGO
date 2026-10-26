@@ -22,7 +22,7 @@ parameters of the other reports, such as `service_type_id` and `method`.
 
 | Parameter | Type | Meaning | Default |
 |---|---|---|---|
-| `from`, `to` | `YYYY-MM-DD` | Inclusive range on the day the customer was **created** (UTC). If **both** are missing the range is the current calendar month (UTC). If only one is sent, the other end is open. `to` must not be before `from`. | current month |
+| `from`, `to` | `YYYY-MM-DD` | Inclusive range on the day the customer was **created** (UTC). If **both** are missing the range is the current calendar month (in the server's `APP_TIMEZONE`, UTC by default). If only one is sent, the other end is open. `to` must not be before `from`. | current month |
 | `lead_source_id` | multi | Lead source ids (from `/filters`). Customers without a lead source are only matched when no source filter is sent. | all |
 | `q` | text | Case-insensitive substring search over name, account number, email and the phone shown in the report (the customer's first phone). `%`, `_` and `\` are matched literally. At most 100 characters. | none |
 | `sort` | key | `customer`, `account_number`, `email`, `phone`, `source`, `created_at` | `created_at` |

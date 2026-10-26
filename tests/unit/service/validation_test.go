@@ -213,7 +213,12 @@ func TestListAppliesDefaults(t *testing.T) {
 	require.Equal(t, service.DefaultPageSize, res.Limit)
 }
 
-func TestListDefaultDateRangeIsTheCurrentUTCMonth(t *testing.T) {
+// The clock decides the business time zone: the default range is the calendar month that now falls in, read in
+// the clock's own zone (the app passes a clock set to APP_TIMEZONE).
+func TestListDefaultDateRangeIsTheCurrentMonthInTheClocksZone(t *testing.T) {
+	pacific := time.FixedZone("UTC-7", -7*3600) // Los Angeles on October 31, before daylight saving ends
+	tokyo := time.FixedZone("UTC+9", 9*3600)
+
 	tests := []struct {
 		name     string
 		now      time.Time
@@ -227,10 +232,23 @@ func TestListDefaultDateRangeIsTheCurrentUTCMonth(t *testing.T) {
 		{"ordinary February", time.Date(2027, 2, 15, 12, 0, 0, 0, time.UTC), date(2027, 2, 1), date(2027, 2, 28)},
 		{"December", time.Date(2026, 12, 31, 23, 0, 0, 0, time.UTC), date(2026, 12, 1), date(2026, 12, 31)},
 		{"30-day month", time.Date(2026, 4, 30, 8, 0, 0, 0, time.UTC), date(2026, 4, 1), date(2026, 4, 30)},
+		{"leap February in Los Angeles", time.Date(2028, 2, 29, 23, 59, 0, 0, pacific), date(2028, 2, 1), date(2028, 2, 29)},
+		{"year end in Los Angeles", time.Date(2026, 12, 31, 20, 0, 0, 0, pacific), date(2026, 12, 1), date(2026, 12, 31)},
 		{
-			"local time late on Oct 31 is already November in UTC",
-			time.Date(2026, 10, 31, 23, 30, 0, 0, time.FixedZone("UTC-5", -5*3600)),
-			date(2026, 11, 1), date(2026, 11, 30),
+			"late on Oct 31 in Los Angeles it is still October",
+			time.Date(2026, 10, 31, 23, 30, 0, 0, pacific), date(2026, 10, 1), date(2026, 10, 31),
+		},
+		{
+			"the same instant read in UTC is already November",
+			time.Date(2026, 10, 31, 23, 30, 0, 0, pacific).UTC(), date(2026, 11, 1), date(2026, 11, 30),
+		},
+		{
+			"early on Nov 1 in Tokyo it is already November",
+			time.Date(2026, 11, 1, 5, 0, 0, 0, tokyo), date(2026, 11, 1), date(2026, 11, 30),
+		},
+		{
+			"the same instant read in UTC is still October",
+			time.Date(2026, 11, 1, 5, 0, 0, 0, tokyo).UTC(), date(2026, 10, 1), date(2026, 10, 31),
 		},
 	}
 

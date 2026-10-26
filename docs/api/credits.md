@@ -23,7 +23,7 @@ and the parameters of the other reports: `signature_status`, `service_id`, `tag_
 
 | Parameter | Type | Meaning | Default |
 |---|---|---|---|
-| `from`, `to` | `YYYY-MM-DD` | Inclusive range on the **credit date**. If **both** are missing the range is the current calendar month (UTC). If only one is sent, the other end is open. `to` must not be before `from`. | current month |
+| `from`, `to` | `YYYY-MM-DD` | Inclusive range on the **credit date**. If **both** are missing the range is the current calendar month (in the server's `APP_TIMEZONE`, UTC by default). If only one is sent, the other end is open. `to` must not be before `from`. | current month |
 | `method` | multi | `cash`, `check`, `card`, `other` | all |
 | `q` | text | Case-insensitive substring search over the customer name, the account number and the method detail text (for example `stripe` or `3222`). `%`, `_` and `\` are matched literally. At most 100 characters. | none |
 | `sort` | key | `customer`, `account_number`, `method`, `amount`, `credit_date`, `created_by` | `credit_date` |

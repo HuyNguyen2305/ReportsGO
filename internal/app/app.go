@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"time"
 
 	"reportsgo/internal/config"
 	"reportsgo/internal/handler"
@@ -38,23 +39,26 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger, opts Optio
 	}
 	defer pool.Close() // runs after the server has drained, so requests never lose their database
 
+	// The reports that default to the current month read it from this clock, in the business time zone.
+	clock := ClockIn(cfg.Location)
+
 	// Each report is wired the same way: repository -> service -> handler (a RouteRegistrar).
 	invoices := handler.NewInvoiceHandler(
-		service.NewInvoiceService(repository.NewInvoiceRepository(pool), nil), logger)
+		service.NewInvoiceService(repository.NewInvoiceRepository(pool), clock), logger)
 	estimates := handler.NewEstimateHandler(
-		service.NewEstimateService(repository.NewEstimateRepository(pool), nil), logger)
+		service.NewEstimateService(repository.NewEstimateRepository(pool), clock), logger)
 	documents := handler.NewDocumentHandler(
-		service.NewDocumentService(repository.NewDocumentRepository(pool), nil), logger)
+		service.NewDocumentService(repository.NewDocumentRepository(pool), clock), logger)
 	payments := handler.NewPaymentHandler(
-		service.NewPaymentService(repository.NewPaymentRepository(pool), nil), logger)
+		service.NewPaymentService(repository.NewPaymentRepository(pool), clock), logger)
 	credits := handler.NewCreditHandler(
-		service.NewCreditService(repository.NewCreditRepository(pool), nil), logger)
+		service.NewCreditService(repository.NewCreditRepository(pool), clock), logger)
 	recurring := handler.NewRecurringHandler(
 		service.NewRecurringService(repository.NewRecurringRepository(pool)), logger)
 	jobs := handler.NewJobHandler(
-		service.NewJobService(repository.NewJobRepository(pool), nil), logger)
+		service.NewJobService(repository.NewJobRepository(pool), clock), logger)
 	customers := handler.NewCustomerHandler(
-		service.NewCustomerService(repository.NewCustomerRepository(pool), nil), logger)
+		service.NewCustomerService(repository.NewCustomerRepository(pool), clock), logger)
 
 	engine := handler.NewRouter(handler.Deps{
 		Logger:     logger,
@@ -113,4 +117,12 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger, opts Optio
 
 	logger.Info("stopped")
 	return nil
+}
+
+// ClockIn returns a clock that reads the current time in loc; a nil loc means UTC.
+func ClockIn(loc *time.Location) service.Clock {
+	if loc == nil {
+		loc = time.UTC
+	}
+	return func() time.Time { return time.Now().In(loc) }
 }

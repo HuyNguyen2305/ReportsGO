@@ -20,7 +20,7 @@ Anything not listed here is rejected (see [Strictness](#strictness)). That inclu
 
 | Parameter | Type | Meaning | Default |
 |---|---|---|---|
-| `from`, `to` | `YYYY-MM-DD` | Inclusive estimate date range. If **both** are missing the range is the current calendar month (UTC). If only one is sent, the other end is open. `to` must not be before `from`. | current month |
+| `from`, `to` | `YYYY-MM-DD` | Inclusive estimate date range. If **both** are missing the range is the current calendar month (in the server's `APP_TIMEZONE`, UTC by default). If only one is sent, the other end is open. `to` must not be before `from`. | current month |
 | `lifecycle` | `active` \| `archived` \| `deleted` | The Active / Archived / Deleted tab. | `active` |
 | `status` | multi | `draft`, `sent`, `accepted`, `declined` | all |
 | `signature_status` | multi | `draft`, `pending`, `signed`, `declined` | all |

@@ -307,6 +307,44 @@ func TestServerServesTheInvoiceReportRoutes(t *testing.T) {
 	require.Equal(t, "limit", env.Error.Details[0].Field)
 }
 
+// The default date range is the current month in the configured business time zone, not in UTC. The zones are
+// 25 hours apart (UTC+14 and UTC-11), so a server that ignored its configuration would be caught around every
+// month boundary; the month is computed before and after the request so a rollover mid-test cannot fail it.
+func TestDefaultDateRangeFollowsTheConfiguredTimezone(t *testing.T) {
+	month := func(now time.Time) (from, to string) {
+		first := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+		return first.Format("2006-01-02"), first.AddDate(0, 1, -1).Format("2006-01-02")
+	}
+
+	for _, name := range []string{"", "UTC", "Pacific/Kiritimati", "Pacific/Pago_Pago"} {
+		t.Run("zone="+name, func(t *testing.T) {
+			var loc *time.Location // nil: no APP_TIMEZONE, which means UTC
+			if name != "" {
+				var err error
+				loc, err = time.LoadLocation(name)
+				require.NoError(t, err)
+			}
+			s := startServer(t, func(c *config.Config) { c.Location = loc })
+
+			inZone := time.UTC
+			if loc != nil {
+				inZone = loc
+			}
+			beforeFrom, beforeTo := month(time.Now().In(inZone))
+			resp, body := get(t, s.base+"/api/v1/reports/invoices", nil)
+			afterFrom, afterTo := month(time.Now().In(inZone))
+
+			require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", body)
+			var list dto.InvoiceListResponse
+			require.NoError(t, json.Unmarshal(body, &list))
+			require.NotNil(t, list.Range.From)
+			require.NotNil(t, list.Range.To)
+			require.Contains(t, []string{beforeFrom, afterFrom}, *list.Range.From)
+			require.Contains(t, []string{beforeTo, afterTo}, *list.Range.To)
+		})
+	}
+}
+
 func TestServerServesTheEstimateReportRoutes(t *testing.T) {
 	// The database is migrated but not seeded: the report must work, and be empty, rather than fail.
 	s := startServer(t, nil)

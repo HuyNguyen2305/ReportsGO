@@ -34,6 +34,7 @@ func TestLoadDefaults(t *testing.T) {
 		ShutdownTimeout:    15 * time.Second,
 		CORSAllowedOrigins: nil,
 		LogLevel:           "info",
+		Location:           time.UTC,
 
 		HTTPReadHeaderTimeout: 5 * time.Second,
 		HTTPReadTimeout:       15 * time.Second,
@@ -95,6 +96,54 @@ func TestLoadDefaultMinConnsNeverExceedsMaxConns(t *testing.T) {
 			require.Equal(t, tt.wantMin, cfg.DBMinConns)
 		})
 	}
+}
+
+func TestLoadTimezone(t *testing.T) {
+	losAngeles, err := time.LoadLocation("America/Los_Angeles")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name    string
+		env     map[string]string
+		want    *time.Location
+		wantErr string
+	}{
+		{"defaults to UTC", map[string]string{}, time.UTC, ""},
+		{"explicit UTC", map[string]string{"APP_TIMEZONE": "UTC"}, time.UTC, ""},
+		{"blank means the default", map[string]string{"APP_TIMEZONE": "  "}, time.UTC, ""},
+		{"named zone", map[string]string{"APP_TIMEZONE": " America/Los_Angeles "}, losAngeles, ""},
+		{"unknown zone", map[string]string{"APP_TIMEZONE": "Mars/Olympus_Mons"}, nil, "APP_TIMEZONE"},
+		{"local is refused", map[string]string{"APP_TIMEZONE": "Local"}, nil, "APP_TIMEZONE"},
+		{"not a zone name", map[string]string{"APP_TIMEZONE": "evening"}, nil, "APP_TIMEZONE"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.env["DATABASE_URL"] = validURL
+			cfg, err := config.Load(lookupFrom(tt.env))
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				require.ErrorContains(t, err, "IANA time zone name")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want.String(), cfg.Location.String())
+		})
+	}
+}
+
+func TestLogValueReportsTheTimezone(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+
+	cfg, err := config.Load(lookupFrom(map[string]string{"DATABASE_URL": validURL, "APP_TIMEZONE": "Asia/Tokyo"}))
+	require.NoError(t, err)
+	logger.Info("config", "config", cfg)
+	require.Contains(t, buf.String(), "config.timezone=Asia/Tokyo")
+
+	buf.Reset()
+	logger.Info("config", "config", config.Config{}) // no Location set: UTC
+	require.Contains(t, buf.String(), "config.timezone=UTC")
 }
 
 func TestLoadRejectsInvalidValues(t *testing.T) {

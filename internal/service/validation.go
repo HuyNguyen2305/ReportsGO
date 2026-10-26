@@ -45,11 +45,12 @@ func (v *validator) err() error {
 	return model.InvalidInput(v.fields...)
 }
 
-// dateRange parses from/to. With neither given the range is the current UTC calendar month; when only one is
-// given the other side stays open (zero time).
+// dateRange parses from/to. With neither given the range is the calendar month that now falls in, read in now's
+// own time zone (the clock decides the business time zone); when only one is given the other side stays open
+// (zero time). Dates are plain calendar dates, so the range itself is built at UTC midnight.
 func (v *validator) dateRange(rawFrom, rawTo string, now time.Time) (from, to time.Time) {
 	if strings.TrimSpace(rawFrom) == "" && strings.TrimSpace(rawTo) == "" {
-		n := now.UTC()
+		n := now
 		first := time.Date(n.Year(), n.Month(), 1, 0, 0, 0, 0, time.UTC)
 		return first, first.AddDate(0, 1, -1)
 	}

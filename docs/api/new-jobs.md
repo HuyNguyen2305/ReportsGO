@@ -21,7 +21,7 @@ of the other reports, such as `method` and `document_type_id`.
 
 | Parameter | Type | Meaning | Default |
 |---|---|---|---|
-| `from`, `to` | `YYYY-MM-DD` | Inclusive range on the day the job was **created** (UTC). If **both** are missing the range is the current calendar month (UTC). If only one is sent, the other end is open. `to` must not be before `from`. | current month |
+| `from`, `to` | `YYYY-MM-DD` | Inclusive range on the day the job was **created** (UTC). If **both** are missing the range is the current calendar month (in the server's `APP_TIMEZONE`, UTC by default). If only one is sent, the other end is open. `to` must not be before `from`. | current month |
 | `status` | multi | `unconfirmed`, `confirmed`, `completed`, `cancelled` | all |
 | `service_type_id` | multi | Service type ids (from `/filters`). | all |
 | `lead_source_id` | multi | Lead source ids (from `/filters`). Jobs without a source are only matched when no source filter is sent. | all |

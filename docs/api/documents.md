@@ -21,7 +21,7 @@ reports: `signature_status`, `service_id`, `tag_id` and `payment_term_id`.
 
 | Parameter | Type | Meaning | Default |
 |---|---|---|---|
-| `from`, `to` | `YYYY-MM-DD` | Inclusive range on the day the document was **created** (UTC). If **both** are missing the range is the current calendar month (UTC). If only one is sent, the other end is open. `to` must not be before `from`. | current month |
+| `from`, `to` | `YYYY-MM-DD` | Inclusive range on the day the document was **created** (UTC). If **both** are missing the range is the current calendar month (in the server's `APP_TIMEZONE`, UTC by default). If only one is sent, the other end is open. `to` must not be before `from`. | current month |
 | `lifecycle` | `active` \| `deleted` | The Active / Deleted tab. Documents cannot be archived, so there is no `archived` tab. | `active` |
 | `status` | multi | `draft`, `sent`, `signed` | all |
 | `document_type_id` | multi | Document type ids (from `/filters`). | all |

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	_ "time/tzdata" // embedded zone data, so APP_TIMEZONE works where the OS has none (Windows, minimal images)
 )
 
 // Environment names accepted by APP_ENV.
@@ -33,6 +34,9 @@ type Config struct {
 	ShutdownTimeout    time.Duration
 	CORSAllowedOrigins []string
 	LogLevel           string
+	// Location is the business time zone, from APP_TIMEZONE. It decides which calendar month is "current" for
+	// the reports' default date range. A nil Location means UTC.
+	Location *time.Location
 
 	HTTPReadHeaderTimeout time.Duration
 	HTTPReadTimeout       time.Duration
@@ -65,6 +69,7 @@ func Load(lookup Lookup) (Config, error) {
 		ShutdownTimeout:    l.duration("SHUTDOWN_TIMEOUT", 15*time.Second),
 		CORSAllowedOrigins: l.list("CORS_ALLOWED_ORIGINS"),
 		LogLevel:           l.oneOf("LOG_LEVEL", "info", "debug", "info", "warn", "error"),
+		Location:           l.location("APP_TIMEZONE", "UTC"),
 
 		HTTPReadHeaderTimeout: l.duration("HTTP_READ_HEADER_TIMEOUT", 5*time.Second),
 		HTTPReadTimeout:       l.duration("HTTP_READ_TIMEOUT", 15*time.Second),
@@ -132,6 +137,7 @@ func (c Config) LogValue() slog.Value {
 		slog.Duration("shutdown_timeout", c.ShutdownTimeout),
 		slog.Any("cors_allowed_origins", c.CORSAllowedOrigins),
 		slog.String("log_level", c.LogLevel),
+		slog.String("timezone", c.Location.String()), // a nil Location reports as UTC
 		slog.Duration("http_read_header_timeout", c.HTTPReadHeaderTimeout),
 		slog.Duration("http_read_timeout", c.HTTPReadTimeout),
 		slog.Duration("http_write_timeout", c.HTTPWriteTimeout),
@@ -281,6 +287,18 @@ func (l *loader) duration(key string, def time.Duration) time.Duration {
 		return def
 	}
 	return d
+}
+
+// location reads an IANA time zone name such as "UTC" or "America/New_York". "Local" is refused: it would make
+// the reports depend on the host's setting instead of on configuration.
+func (l *loader) location(key, def string) *time.Location {
+	name := l.str(key, def)
+	loc, err := time.LoadLocation(name)
+	if err != nil || name == "Local" {
+		l.fail(key, fmt.Sprintf("%q must be an IANA time zone name such as UTC or America/New_York", name))
+		return time.UTC
+	}
+	return loc
 }
 
 func (l *loader) list(key string) []string {

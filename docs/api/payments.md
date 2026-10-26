@@ -21,7 +21,7 @@ reports: `signature_status`, `service_id`, `tag_id`, `payment_term_id` and `docu
 
 | Parameter | Type | Meaning | Default |
 |---|---|---|---|
-| `from`, `to` | `YYYY-MM-DD` | Inclusive range on the **payment date**. If **both** are missing the range is the current calendar month (UTC). If only one is sent, the other end is open. `to` must not be before `from`. | current month |
+| `from`, `to` | `YYYY-MM-DD` | Inclusive range on the **payment date**. If **both** are missing the range is the current calendar month (in the server's `APP_TIMEZONE`, UTC by default). If only one is sent, the other end is open. `to` must not be before `from`. | current month |
 | `lifecycle` | `active` \| `deleted` | The Active / Deleted tab. Payments cannot be archived, so there is no `archived` tab. | `active` |
 | `status` | multi | `paid`, `pending`, `failed`, `refunded` | all |
 | `method` | multi | `cash`, `check`, `card`, `other` | all |

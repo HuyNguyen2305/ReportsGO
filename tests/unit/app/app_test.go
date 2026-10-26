@@ -15,6 +15,33 @@ import (
 	"reportsgo/internal/config"
 )
 
+func TestClockInReadsTimeInTheGivenZone(t *testing.T) {
+	tokyo, err := time.LoadLocation("Asia/Tokyo")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		loc  *time.Location
+		want *time.Location
+	}{
+		{"nil means UTC", nil, time.UTC},
+		{"UTC", time.UTC, time.UTC},
+		{"named zone", tokyo, tokyo},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			before := time.Now()
+			got := app.ClockIn(tt.loc)()
+			after := time.Now()
+
+			require.Same(t, tt.want, got.Location())
+			require.False(t, got.Before(before), "the clock reports the current time")
+			require.False(t, got.After(after))
+		})
+	}
+}
+
 func TestNewLogger(t *testing.T) {
 	tests := []struct {
 		name     string
