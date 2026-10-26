@@ -25,7 +25,7 @@ type JobService struct {
 // NewJobService returns a service over repo. A nil clock uses time.Now.
 func NewJobService(repo JobRepository, clock Clock) *JobService {
 	if clock == nil {
-		clock = time.Now
+		clock = utcNow
 	}
 	return &JobService{repo: repo, now: clock}
 }

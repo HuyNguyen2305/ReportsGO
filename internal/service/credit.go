@@ -23,7 +23,7 @@ type CreditService struct {
 // NewCreditService returns a service over repo. A nil clock uses time.Now.
 func NewCreditService(repo CreditRepository, clock Clock) *CreditService {
 	if clock == nil {
-		clock = time.Now
+		clock = utcNow
 	}
 	return &CreditService{repo: repo, now: clock}
 }

@@ -24,7 +24,7 @@ type CustomerService struct {
 // NewCustomerService returns a service over repo. A nil clock uses time.Now.
 func NewCustomerService(repo CustomerRepository, clock Clock) *CustomerService {
 	if clock == nil {
-		clock = time.Now
+		clock = utcNow
 	}
 	return &CustomerService{repo: repo, now: clock}
 }

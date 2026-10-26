@@ -23,7 +23,7 @@ type PaymentService struct {
 // NewPaymentService returns a service over repo. A nil clock uses time.Now.
 func NewPaymentService(repo PaymentRepository, clock Clock) *PaymentService {
 	if clock == nil {
-		clock = time.Now
+		clock = utcNow
 	}
 	return &PaymentService{repo: repo, now: clock}
 }
