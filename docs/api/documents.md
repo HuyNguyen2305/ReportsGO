@@ -38,6 +38,8 @@ case-insensitive; blanks and duplicates are ignored.
 A document's status is one of `draft`, `sent` or `signed`. The invoice statuses (`paid`, `void`) and the estimate
 statuses (`accepted`, `declined`) are rejected here.
 
+Number columns are identifiers, not quantities: `account_number` and `document_number` sort as text, character by character, not numerically, so `100` comes before `9`.
+
 ### Response
 
 ```json

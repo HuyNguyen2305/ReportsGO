@@ -46,6 +46,8 @@ week, every 2 weeks, every month, every 2 months, every year; a month counts as 
 `ends_on` and `next_invoice_date` sort recurring invoices **without** that date after all the others when
 ascending (and first when descending). Every sort is stable: ties are broken by id in the same direction.
 
+Number columns are identifiers, not quantities: `account_number` sort as text, character by character, not numerically, so `100` comes before `9`.
+
 ### Response
 
 ```json

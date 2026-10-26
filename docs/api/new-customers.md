@@ -33,6 +33,8 @@ parameters of the other reports, such as `service_type_id` and `method`.
 **Multi-value parameters** accept repeated keys, comma-separated lists, or both; these are equivalent:
 `?lead_source_id=1&lead_source_id=2`, `?lead_source_id=1,2`. Values are trimmed; blanks and duplicates are ignored.
 
+Number columns are identifiers, not quantities: `account_number` sort as text, character by character, not numerically, so `100` comes before `9`.
+
 ### Response
 
 ```json

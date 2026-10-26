@@ -37,6 +37,8 @@ Values are trimmed and case-insensitive; blanks and duplicates are ignored.
 Estimates and invoices have different statuses: `paid` and `void` are invoice statuses and are rejected here,
 and `accepted` and `declined` are rejected by the invoice report.
 
+Number columns are identifiers, not quantities: `account_number` and `estimate_number` sort as text, character by character, not numerically, so `100` comes before `9`.
+
 ### Response
 
 ```json

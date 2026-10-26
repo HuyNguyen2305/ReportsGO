@@ -34,6 +34,8 @@ Anything not listed here is rejected (see [Strictness](#strictness)).
 `?status=paid&status=sent`, `?status=paid,sent`, `?status=paid,sent&status=paid`. Values are trimmed and
 case-insensitive; blanks and duplicates are ignored.
 
+Number columns are identifiers, not quantities: `account_number` and `invoice_number` sort as text, character by character, not numerically, so `100` comes before `9`.
+
 ### Response
 
 ```json

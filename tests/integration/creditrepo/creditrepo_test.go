@@ -414,6 +414,34 @@ func TestPageReadsRowsAndSummaryFromOneSnapshot(t *testing.T) {
 	require.EqualValues(t, octoberCredits+1, after.Count, "the committed credit is real and visible to a later read")
 }
 
+// Account numbers are identifiers stored as text, so they sort as text: "100" comes before "9". The API docs say
+// so; this pins it so that a numeric ordering would be a deliberate change.
+func TestAccountNumbersSortAsTextNotNumerically(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	for _, account := range []string{"9", "100"} {
+		_, err := e.pool.Exec(ctx, `WITH c AS (INSERT INTO customers (account_number, display_name) VALUES ($1, 'Sort ' || $1) RETURNING id)
+			INSERT INTO credits (customer_id, amount, method_type, credit_date) SELECT id, 10, 'cash', '2026-10-19' FROM c`, account)
+		require.NoError(t, err)
+	}
+
+	position := func(rows []model.CreditRow, account string) int {
+		for i, r := range rows {
+			if r.AccountNumber == account {
+				return i
+			}
+		}
+		t.Fatalf("no credit for account %s", account)
+		return -1
+	}
+
+	asc := e.listAll(t, october(), model.CreditSortAccountNumber, false)
+	require.Less(t, position(asc, "100"), position(asc, "9"), "ascending: 100 before 9")
+
+	desc := e.listAll(t, october(), model.CreditSortAccountNumber, true)
+	require.Less(t, position(desc, "9"), position(desc, "100"), "descending: 9 before 100")
+}
+
 func TestCancelledContextIsReturnedAsAnError(t *testing.T) {
 	e := newEnv(t)
 	ctx, cancel := context.WithCancel(context.Background())

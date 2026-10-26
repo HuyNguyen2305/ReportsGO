@@ -40,6 +40,8 @@ word `credit`, so in ascending order the invoice payments come first and the cre
 is literally `credit` (any case) shares that sort key, so its payment sorts among the credits; it is still reported
 as an invoice payment. Every sort is stable: ties are broken by payment id in the same direction.
 
+Number columns are identifiers, not quantities: `payment_for` sorts as text on the invoice number, character by character, not numerically, so `100` comes before `9`.
+
 ### Response
 
 ```json
