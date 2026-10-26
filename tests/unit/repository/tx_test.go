@@ -141,3 +141,98 @@ func requireBoundedRollback(t *testing.T, ctx context.Context) {
 	require.True(t, ok, "rollback context must have a deadline")
 	require.WithinDuration(t, time.Now().Add(5*time.Second), deadline, 2*time.Second)
 }
+
+func TestWithReadSnapshot(t *testing.T) {
+	tests := []struct {
+		name    string
+		begin   error
+		fn      func(context.Context, pgx.Tx) error
+		setup   func(tx *pgxmocks.MockTx)
+		wantErr []error // each must be matched by errors.Is
+	}{
+		{
+			name:  "commits when fn succeeds",
+			fn:    func(context.Context, pgx.Tx) error { return nil },
+			setup: func(tx *pgxmocks.MockTx) { tx.EXPECT().Commit(mock.Anything).Return(nil).Once() },
+		},
+		{
+			name:    "rolls back and returns fn error",
+			fn:      func(context.Context, pgx.Tx) error { return errWork },
+			setup:   func(tx *pgxmocks.MockTx) { tx.EXPECT().Rollback(mock.Anything).Return(nil).Once() },
+			wantErr: []error{errWork},
+		},
+		{
+			name: "joins fn error and rollback error",
+			fn:   func(context.Context, pgx.Tx) error { return errWork },
+			setup: func(tx *pgxmocks.MockTx) {
+				tx.EXPECT().Rollback(mock.Anything).Return(errRollback).Once()
+			},
+			wantErr: []error{errWork, errRollback},
+		},
+		{
+			name:    "returns commit error",
+			fn:      func(context.Context, pgx.Tx) error { return nil },
+			setup:   func(tx *pgxmocks.MockTx) { tx.EXPECT().Commit(mock.Anything).Return(errCommit).Once() },
+			wantErr: []error{errCommit},
+		},
+		{
+			name:    "returns begin error without running fn",
+			begin:   errBegin,
+			fn:      func(context.Context, pgx.Tx) error { t.Fatal("fn must not run"); return nil },
+			wantErr: []error{errBegin},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tx := pgxmocks.NewMockTx(t)
+			db := repositorymocks.NewMockTxOptionsBeginner(t)
+			if tt.begin != nil {
+				db.EXPECT().BeginTx(mock.Anything, mock.Anything).Return(nil, tt.begin).Once()
+			} else {
+				db.EXPECT().BeginTx(mock.Anything, mock.Anything).Return(tx, nil).Once()
+				tt.setup(tx)
+			}
+
+			err := repository.WithReadSnapshot(context.Background(), db, tt.fn)
+
+			if len(tt.wantErr) == 0 {
+				require.NoError(t, err)
+				return
+			}
+			for _, want := range tt.wantErr {
+				require.ErrorIs(t, err, want)
+			}
+		})
+	}
+}
+
+func TestWithReadSnapshotBeginsAReadOnlyRepeatableReadTransaction(t *testing.T) {
+	tx := pgxmocks.NewMockTx(t)
+	db := repositorymocks.NewMockTxOptionsBeginner(t)
+	db.EXPECT().BeginTx(mock.Anything, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}).
+		Return(tx, nil).Once()
+	tx.EXPECT().Commit(mock.Anything).Return(nil).Once()
+
+	var got pgx.Tx
+	require.NoError(t, repository.WithReadSnapshot(context.Background(), db, func(_ context.Context, t pgx.Tx) error {
+		got = t
+		return nil
+	}))
+	require.Same(t, tx, got, "fn receives the snapshot transaction")
+}
+
+func TestWithReadSnapshotRollsBackAndRepanics(t *testing.T) {
+	tx := pgxmocks.NewMockTx(t)
+	db := repositorymocks.NewMockTxOptionsBeginner(t)
+	db.EXPECT().BeginTx(mock.Anything, mock.Anything).Return(tx, nil).Once()
+	tx.EXPECT().Rollback(mock.Anything).Run(func(rbCtx context.Context) {
+		requireBoundedRollback(t, rbCtx)
+	}).Return(nil).Once()
+
+	require.PanicsWithValue(t, "boom", func() {
+		_ = repository.WithReadSnapshot(context.Background(), db, func(context.Context, pgx.Tx) error {
+			panic("boom")
+		})
+	})
+}

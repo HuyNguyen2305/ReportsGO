@@ -10,8 +10,9 @@ import (
 
 // InvoiceRepository is what the service needs from storage. *repository.InvoiceRepository satisfies it.
 type InvoiceRepository interface {
-	List(ctx context.Context, q model.InvoiceQuery) ([]model.InvoiceRow, error)
-	Summary(ctx context.Context, f model.InvoiceFilter) (model.InvoiceSummary, error)
+	// Page returns one page and, when withSummary is set, the totals of the whole filtered set, both read from
+	// one snapshot so the summary always describes the rows' set.
+	Page(ctx context.Context, q model.InvoiceQuery, withSummary bool) (model.InvoicePage, error)
 	ServiceTypes(ctx context.Context) ([]model.ServiceType, error)
 	Tags(ctx context.Context) ([]model.InvoiceTag, error)
 	PaymentTerms(ctx context.Context) ([]model.PaymentTerm, error)
@@ -60,12 +61,14 @@ func (s *InvoiceService) List(ctx context.Context, p ListInvoicesParams) (*ListI
 	}
 	q := req.query
 
-	rows, err := s.repo.List(ctx, q)
+	// The summary is wanted on the first page only; later pages keep the one the client already has.
+	page, err := s.repo.Page(ctx, q, q.After == nil)
 	if err != nil {
 		return nil, fmt.Errorf("list invoices: %w", err)
 	}
+	rows := page.Rows
 
-	res := &ListInvoicesResult{Limit: q.Limit, From: req.from, To: req.to}
+	res := &ListInvoicesResult{Limit: q.Limit, From: req.from, To: req.to, Summary: page.Summary}
 	// The repository returns one row beyond the page size so we can tell whether another page exists.
 	if len(rows) > q.Limit {
 		rows = rows[:q.Limit]
@@ -76,14 +79,6 @@ func (s *InvoiceService) List(ctx context.Context, p ListInvoicesParams) (*ListI
 		rows = []model.InvoiceRow{}
 	}
 	res.Items = rows
-
-	if q.After == nil {
-		summary, err := s.repo.Summary(ctx, q.Filter)
-		if err != nil {
-			return nil, fmt.Errorf("summarize invoices: %w", err)
-		}
-		res.Summary = &summary
-	}
 	return res, nil
 }
 

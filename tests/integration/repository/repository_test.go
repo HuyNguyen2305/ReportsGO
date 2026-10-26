@@ -149,3 +149,41 @@ func TestWithTx(t *testing.T) {
 		require.Equal(t, 1, count())
 	})
 }
+
+func TestWithReadSnapshot(t *testing.T) {
+	pool := newPool(t, 5*time.Second)
+	ctx := context.Background()
+	_, err := pool.Exec(ctx, "CREATE TABLE items (name text PRIMARY KEY)")
+	require.NoError(t, err)
+
+	t.Run("later reads do not see rows committed after the first read", func(t *testing.T) {
+		var first, second int
+		err := repository.WithReadSnapshot(ctx, pool, func(ctx context.Context, tx pgx.Tx) error {
+			require.NoError(t, tx.QueryRow(ctx, "SELECT count(*) FROM items").Scan(&first))
+			_, err := pool.Exec(ctx, "INSERT INTO items (name) VALUES ('concurrent')") // another connection, committed
+			require.NoError(t, err)
+			return tx.QueryRow(ctx, "SELECT count(*) FROM items").Scan(&second)
+		})
+		require.NoError(t, err)
+		require.Equal(t, 0, first)
+		require.Equal(t, 0, second, "REPEATABLE READ keeps the snapshot of the first query")
+
+		var now int
+		require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM items").Scan(&now))
+		require.Equal(t, 1, now, "the concurrent insert did commit")
+	})
+
+	t.Run("the transaction is read-only", func(t *testing.T) {
+		err := repository.WithReadSnapshot(ctx, pool, func(ctx context.Context, tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, "INSERT INTO items (name) VALUES ('forbidden')")
+			return err
+		})
+		var pgErr *pgconn.PgError
+		require.ErrorAs(t, err, &pgErr)
+		require.Equal(t, "25006", pgErr.Code) // read_only_sql_transaction
+
+		var n int
+		require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM items WHERE name = 'forbidden'").Scan(&n))
+		require.Equal(t, 0, n)
+	})
+}

@@ -134,6 +134,13 @@ type InvoiceSummary struct {
 	Outstanding Money
 }
 
+// InvoicePage is one page of the report read from a single database snapshot. Summary is nil unless it was
+// requested, and when set it totals exactly the filtered set the rows were taken from.
+type InvoicePage struct {
+	Rows    []InvoiceRow
+	Summary *InvoiceSummary
+}
+
 // ServiceType is a service type option for the report's Service filter.
 type ServiceType struct {
 	ID   int64

@@ -47,47 +47,46 @@ func (_m *MockInvoiceRepository) EXPECT() *MockInvoiceRepository_Expecter {
 	return &MockInvoiceRepository_Expecter{mock: &_m.Mock}
 }
 
-// List provides a mock function for the type MockInvoiceRepository
-func (_mock *MockInvoiceRepository) List(ctx context.Context, q model.InvoiceQuery) ([]model.InvoiceRow, error) {
-	ret := _mock.Called(ctx, q)
+// Page provides a mock function for the type MockInvoiceRepository
+func (_mock *MockInvoiceRepository) Page(ctx context.Context, q model.InvoiceQuery, withSummary bool) (model.InvoicePage, error) {
+	ret := _mock.Called(ctx, q, withSummary)
 
 	if len(ret) == 0 {
-		panic("no return value specified for List")
+		panic("no return value specified for Page")
 	}
 
-	var r0 []model.InvoiceRow
+	var r0 model.InvoicePage
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.InvoiceQuery) ([]model.InvoiceRow, error)); ok {
-		return returnFunc(ctx, q)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, model.InvoiceQuery, bool) (model.InvoicePage, error)); ok {
+		return returnFunc(ctx, q, withSummary)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.InvoiceQuery) []model.InvoiceRow); ok {
-		r0 = returnFunc(ctx, q)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, model.InvoiceQuery, bool) model.InvoicePage); ok {
+		r0 = returnFunc(ctx, q, withSummary)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]model.InvoiceRow)
-		}
+		r0 = ret.Get(0).(model.InvoicePage)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, model.InvoiceQuery) error); ok {
-		r1 = returnFunc(ctx, q)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, model.InvoiceQuery, bool) error); ok {
+		r1 = returnFunc(ctx, q, withSummary)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
 }
 
-// MockInvoiceRepository_List_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'List'
-type MockInvoiceRepository_List_Call struct {
+// MockInvoiceRepository_Page_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Page'
+type MockInvoiceRepository_Page_Call struct {
 	*mock.Call
 }
 
-// List is a helper method to define mock.On call
+// Page is a helper method to define mock.On call
 //   - ctx context.Context
 //   - q model.InvoiceQuery
-func (_e *MockInvoiceRepository_Expecter) List(ctx any, q any) *MockInvoiceRepository_List_Call {
-	return &MockInvoiceRepository_List_Call{Call: _e.mock.On("List", ctx, q)}
+//   - withSummary bool
+func (_e *MockInvoiceRepository_Expecter) Page(ctx any, q any, withSummary any) *MockInvoiceRepository_Page_Call {
+	return &MockInvoiceRepository_Page_Call{Call: _e.mock.On("Page", ctx, q, withSummary)}
 }
 
-func (_c *MockInvoiceRepository_List_Call) Run(run func(ctx context.Context, q model.InvoiceQuery)) *MockInvoiceRepository_List_Call {
+func (_c *MockInvoiceRepository_Page_Call) Run(run func(ctx context.Context, q model.InvoiceQuery, withSummary bool)) *MockInvoiceRepository_Page_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -97,20 +96,25 @@ func (_c *MockInvoiceRepository_List_Call) Run(run func(ctx context.Context, q m
 		if args[1] != nil {
 			arg1 = args[1].(model.InvoiceQuery)
 		}
+		var arg2 bool
+		if args[2] != nil {
+			arg2 = args[2].(bool)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
 }
 
-func (_c *MockInvoiceRepository_List_Call) Return(invoiceRows []model.InvoiceRow, err error) *MockInvoiceRepository_List_Call {
-	_c.Call.Return(invoiceRows, err)
+func (_c *MockInvoiceRepository_Page_Call) Return(invoicePage model.InvoicePage, err error) *MockInvoiceRepository_Page_Call {
+	_c.Call.Return(invoicePage, err)
 	return _c
 }
 
-func (_c *MockInvoiceRepository_List_Call) RunAndReturn(run func(ctx context.Context, q model.InvoiceQuery) ([]model.InvoiceRow, error)) *MockInvoiceRepository_List_Call {
+func (_c *MockInvoiceRepository_Page_Call) RunAndReturn(run func(ctx context.Context, q model.InvoiceQuery, withSummary bool) (model.InvoicePage, error)) *MockInvoiceRepository_Page_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -235,72 +239,6 @@ func (_c *MockInvoiceRepository_ServiceTypes_Call) Return(serviceTypes []model.S
 }
 
 func (_c *MockInvoiceRepository_ServiceTypes_Call) RunAndReturn(run func(ctx context.Context) ([]model.ServiceType, error)) *MockInvoiceRepository_ServiceTypes_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// Summary provides a mock function for the type MockInvoiceRepository
-func (_mock *MockInvoiceRepository) Summary(ctx context.Context, f model.InvoiceFilter) (model.InvoiceSummary, error) {
-	ret := _mock.Called(ctx, f)
-
-	if len(ret) == 0 {
-		panic("no return value specified for Summary")
-	}
-
-	var r0 model.InvoiceSummary
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.InvoiceFilter) (model.InvoiceSummary, error)); ok {
-		return returnFunc(ctx, f)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.InvoiceFilter) model.InvoiceSummary); ok {
-		r0 = returnFunc(ctx, f)
-	} else {
-		r0 = ret.Get(0).(model.InvoiceSummary)
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, model.InvoiceFilter) error); ok {
-		r1 = returnFunc(ctx, f)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockInvoiceRepository_Summary_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Summary'
-type MockInvoiceRepository_Summary_Call struct {
-	*mock.Call
-}
-
-// Summary is a helper method to define mock.On call
-//   - ctx context.Context
-//   - f model.InvoiceFilter
-func (_e *MockInvoiceRepository_Expecter) Summary(ctx any, f any) *MockInvoiceRepository_Summary_Call {
-	return &MockInvoiceRepository_Summary_Call{Call: _e.mock.On("Summary", ctx, f)}
-}
-
-func (_c *MockInvoiceRepository_Summary_Call) Run(run func(ctx context.Context, f model.InvoiceFilter)) *MockInvoiceRepository_Summary_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 model.InvoiceFilter
-		if args[1] != nil {
-			arg1 = args[1].(model.InvoiceFilter)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockInvoiceRepository_Summary_Call) Return(invoiceSummary model.InvoiceSummary, err error) *MockInvoiceRepository_Summary_Call {
-	_c.Call.Return(invoiceSummary, err)
-	return _c
-}
-
-func (_c *MockInvoiceRepository_Summary_Call) RunAndReturn(run func(ctx context.Context, f model.InvoiceFilter) (model.InvoiceSummary, error)) *MockInvoiceRepository_Summary_Call {
 	_c.Call.Return(run)
 	return _c
 }

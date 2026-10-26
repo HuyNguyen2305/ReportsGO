@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -102,16 +103,14 @@ func TestListRejectsACursorFromAnotherSort(t *testing.T) {
 func TestListSummary(t *testing.T) {
 	summary := model.InvoiceSummary{Count: 21, Total: 242840, Discount: 123, Outstanding: 26400}
 
-	t.Run("computed once, with the same filter, on the first page", func(t *testing.T) {
+	t.Run("requested with the page query on the first page", func(t *testing.T) {
 		repo := servicemocks.NewMockInvoiceRepository(t)
-		var listed model.InvoiceQuery
-		var summarized model.InvoiceFilter
-		repo.EXPECT().List(mock.Anything, mock.Anything).
-			Run(func(_ context.Context, q model.InvoiceQuery) { listed = q }).
-			Return([]model.InvoiceRow{row(1, "2026-10-01")}, nil).Once()
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).
-			Run(func(_ context.Context, f model.InvoiceFilter) { summarized = f }).
-			Return(summary, nil).Once()
+		var asked model.InvoiceQuery
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).
+			RunAndReturn(func(_ context.Context, q model.InvoiceQuery, _ bool) (model.InvoicePage, error) {
+				asked = q
+				return model.InvoicePage{Rows: []model.InvoiceRow{row(1, "2026-10-01")}, Summary: &summary}, nil
+			}).Once()
 
 		res, err := service.NewInvoiceService(repo, fixedClock(october21)).List(context.Background(),
 			service.ListInvoicesParams{Search: "saliba", Status: []string{"paid"}})
@@ -119,14 +118,15 @@ func TestListSummary(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, res.Summary)
 		require.Equal(t, summary, *res.Summary)
-		require.Equal(t, listed.Filter, summarized, "the summary must describe exactly the filtered set")
+		require.Equal(t, "saliba", asked.Filter.Search, "rows and summary are read from the one filtered query")
 	})
 
-	t.Run("not computed when a cursor is sent", func(t *testing.T) {
+	t.Run("not requested when a cursor is sent", func(t *testing.T) {
 		_, page1 := run(t, service.ListInvoicesParams{Limit: "1"}, []model.InvoiceRow{row(2, "2026-10-02"), row(1, "2026-10-01")})
 
-		repo := servicemocks.NewMockInvoiceRepository(t) // Summary has no expectation: calling it fails the test
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return([]model.InvoiceRow{row(1, "2026-10-01")}, nil).Once()
+		repo := servicemocks.NewMockInvoiceRepository(t) // an expectation on false: asking for a summary fails the test
+		repo.EXPECT().Page(mock.Anything, mock.Anything, false).
+			Return(model.InvoicePage{Rows: []model.InvoiceRow{row(1, "2026-10-01")}}, nil).Once()
 
 		res, err := service.NewInvoiceService(repo, fixedClock(october21)).List(context.Background(),
 			service.ListInvoicesParams{Limit: "1", Cursor: page1.NextCursor})
@@ -135,54 +135,58 @@ func TestListSummary(t *testing.T) {
 		require.Nil(t, res.Summary)
 	})
 
-	t.Run("the summary ignores the cursor and the page size", func(t *testing.T) {
+	t.Run("the summary is passed through untouched, whatever the page size", func(t *testing.T) {
 		repo := servicemocks.NewMockInvoiceRepository(t)
-		var summarized model.InvoiceFilter
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, nil).Once()
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).
-			Run(func(_ context.Context, f model.InvoiceFilter) { summarized = f }).
-			Return(summary, nil).Once()
+		var asked model.InvoiceQuery
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).
+			RunAndReturn(func(_ context.Context, q model.InvoiceQuery, _ bool) (model.InvoicePage, error) {
+				asked = q
+				return model.InvoicePage{Summary: &summary}, nil
+			}).Once()
 
-		_, err := service.NewInvoiceService(repo, fixedClock(october21)).List(context.Background(),
+		res, err := service.NewInvoiceService(repo, fixedClock(october21)).List(context.Background(),
 			service.ListInvoicesParams{Limit: "5"})
 		require.NoError(t, err)
 
+		require.Equal(t, summary, *res.Summary)
+		require.Equal(t, 5, asked.Limit)
 		require.Equal(t, model.InvoiceFilter{
 			DateFrom:  date(2026, 10, 1),
 			DateTo:    date(2026, 10, 31),
 			Lifecycle: model.LifecycleActive,
-		}, summarized)
+		}, asked.Filter)
 	})
 }
 
 func TestListErrors(t *testing.T) {
-	t.Run("a List failure is wrapped, not turned into a validation error, and skips the summary", func(t *testing.T) {
+	t.Run("a Page failure is wrapped, not turned into a validation error", func(t *testing.T) {
 		repo := servicemocks.NewMockInvoiceRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, errBoom).Once()
-
-		_, err := service.NewInvoiceService(repo, fixedClock(october21)).List(context.Background(), service.ListInvoicesParams{})
-
-		require.ErrorIs(t, err, errBoom)
-		require.NotErrorIs(t, err, model.ErrInvalidInput)
-		require.ErrorContains(t, err, "list invoices")
-	})
-
-	t.Run("a Summary failure is wrapped", func(t *testing.T) {
-		repo := servicemocks.NewMockInvoiceRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return([]model.InvoiceRow{}, nil).Once()
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.InvoiceSummary{}, errBoom).Once()
+		repo.EXPECT().Page(mock.Anything, mock.Anything, mock.Anything).Return(model.InvoicePage{}, errBoom).Once()
 
 		res, err := service.NewInvoiceService(repo, fixedClock(october21)).List(context.Background(), service.ListInvoicesParams{})
 
 		require.ErrorIs(t, err, errBoom)
-		require.ErrorContains(t, err, "summarize invoices")
+		require.NotErrorIs(t, err, model.ErrInvalidInput)
+		require.ErrorContains(t, err, "list invoices")
+		require.Nil(t, res, "no partial result when the page cannot be read")
+	})
+
+	t.Run("a failure inside the snapshot is wrapped the same way", func(t *testing.T) {
+		repo := servicemocks.NewMockInvoiceRepository(t)
+		summaryErr := fmt.Errorf("query invoice summary: %w", errBoom)
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).Return(model.InvoicePage{}, summaryErr).Once()
+
+		res, err := service.NewInvoiceService(repo, fixedClock(october21)).List(context.Background(), service.ListInvoicesParams{})
+
+		require.ErrorIs(t, err, errBoom)
+		require.ErrorContains(t, err, "list invoices: query invoice summary")
 		require.Nil(t, res, "no partial result when the summary fails")
 	})
 
 	t.Run("context errors stay recognizable", func(t *testing.T) {
 		for _, ctxErr := range []error{context.Canceled, context.DeadlineExceeded} {
 			repo := servicemocks.NewMockInvoiceRepository(t)
-			repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, ctxErr).Once()
+			repo.EXPECT().Page(mock.Anything, mock.Anything, mock.Anything).Return(model.InvoicePage{}, ctxErr).Once()
 
 			_, err := service.NewInvoiceService(repo, fixedClock(october21)).List(context.Background(), service.ListInvoicesParams{})
 			require.ErrorIs(t, err, ctxErr)
@@ -194,10 +198,8 @@ func TestListErrors(t *testing.T) {
 		ctx := context.WithValue(context.Background(), key{}, "marker")
 
 		repo := servicemocks.NewMockInvoiceRepository(t)
-		repo.EXPECT().List(mock.MatchedBy(func(c context.Context) bool { return c.Value(key{}) == "marker" }), mock.Anything).
-			Return([]model.InvoiceRow{}, nil).Once()
-		repo.EXPECT().Summary(mock.MatchedBy(func(c context.Context) bool { return c.Value(key{}) == "marker" }), mock.Anything).
-			Return(model.InvoiceSummary{}, nil).Once()
+		repo.EXPECT().Page(mock.MatchedBy(func(c context.Context) bool { return c.Value(key{}) == "marker" }), mock.Anything, mock.Anything).
+			Return(page([]model.InvoiceRow{}, true), nil).Once()
 
 		_, err := service.NewInvoiceService(repo, fixedClock(october21)).List(ctx, service.ListInvoicesParams{})
 		require.NoError(t, err)

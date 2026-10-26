@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -537,6 +538,119 @@ func TestRepositoryWorksInsideATransaction(t *testing.T) {
 	rows, err := repository.NewInvoiceRepository(tx).List(ctx, query(octoberActive(), model.SortInvoiceNumber, false, 100))
 	require.NoError(t, err)
 	require.Contains(t, numbers(rows), "TX1")
+}
+
+func TestPage(t *testing.T) {
+	e := newEnv(t, true)
+	ctx := context.Background()
+	q := query(octoberActive(), model.SortDate, true, 5)
+
+	t.Run("a first page carries the rows and the summary of the same set", func(t *testing.T) {
+		page, err := e.repo.Page(ctx, q, true)
+		require.NoError(t, err)
+
+		rows, err := e.repo.List(ctx, q)
+		require.NoError(t, err)
+		summary, err := e.repo.Summary(ctx, q.Filter)
+		require.NoError(t, err)
+
+		require.Equal(t, rows, page.Rows)
+		require.NotNil(t, page.Summary)
+		require.Equal(t, summary, *page.Summary)
+		require.EqualValues(t, 24, page.Summary.Count, "21 seeded October invoices plus 3 added by newEnv")
+		require.Len(t, page.Rows, 6, "limit+1 rows, so the caller can tell another page follows")
+	})
+
+	t.Run("without a summary it is just the rows", func(t *testing.T) {
+		page, err := e.repo.Page(ctx, q, false)
+		require.NoError(t, err)
+
+		rows, err := e.repo.List(ctx, q)
+		require.NoError(t, err)
+		require.Equal(t, rows, page.Rows)
+		require.Nil(t, page.Summary)
+	})
+
+	t.Run("works on a repository bound to the caller's transaction", func(t *testing.T) {
+		tx, err := e.pool.Begin(ctx)
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback(ctx) }()
+
+		_, err = tx.Exec(ctx, `INSERT INTO billing_documents (document_number, customer_id, document_date, total)
+			SELECT 'TXP1', id, '2026-10-15', 5 FROM customers WHERE account_number = '5001'`)
+		require.NoError(t, err)
+
+		page, err := repository.NewInvoiceRepository(tx).Page(ctx, q, true)
+		require.NoError(t, err)
+		require.EqualValues(t, 25, page.Summary.Count, "the caller's transaction is the snapshot and sees its own row")
+	})
+
+	t.Run("invalid queries and cancelled contexts are errors, not partial pages", func(t *testing.T) {
+		bad := q
+		bad.Limit = 0
+		_, err := e.repo.Page(ctx, bad, true)
+		require.ErrorIs(t, err, repository.ErrInvalidQuery)
+
+		cancelled, cancel := context.WithCancel(ctx)
+		cancel()
+		page, err := e.repo.Page(cancelled, q, true)
+		require.ErrorIs(t, err, context.Canceled)
+		require.Empty(t, page.Rows)
+		require.Nil(t, page.Summary)
+	})
+}
+
+// snapshotPool wraps a pool so that a test can commit a change from another connection at the exact moment the
+// summary query is about to run inside the page's transaction.
+type snapshotPool struct {
+	*pgxpool.Pool
+	beforeSummary func()
+}
+
+func (p snapshotPool) BeginTx(ctx context.Context, opts pgx.TxOptions) (pgx.Tx, error) {
+	tx, err := p.Pool.BeginTx(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	return hookedTx{Tx: tx, beforeSummary: p.beforeSummary}, nil
+}
+
+// hookedTx runs the hook before the first QueryRow, which is how the repository reads the summary.
+type hookedTx struct {
+	pgx.Tx
+	beforeSummary func()
+}
+
+func (h hookedTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	h.beforeSummary()
+	return h.Tx.QueryRow(ctx, sql, args...)
+}
+
+// The summary must describe the rows it is shown with. A change committed by someone else between reading the
+// rows and reading the totals would otherwise make the two disagree.
+func TestPageReadsRowsAndSummaryFromOneSnapshot(t *testing.T) {
+	e := newEnv(t, false)
+	ctx := context.Background()
+	q := query(octoberActive(), model.SortDate, true, 100)
+
+	committed := 0
+	pool := snapshotPool{Pool: e.pool, beforeSummary: func() {
+		_, err := e.pool.Exec(ctx, `INSERT INTO billing_documents (document_number, customer_id, document_date, total, status)
+			SELECT 'SNAP1', id, '2026-10-15', 10, 'draft' FROM customers WHERE account_number = '5001'`)
+		require.NoError(t, err)
+		committed++
+	}}
+
+	page, err := repository.NewInvoiceRepository(pool).Page(ctx, q, true)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, committed, "the concurrent insert must have happened between the two reads")
+	require.Len(t, page.Rows, 21)
+	require.EqualValues(t, 21, page.Summary.Count, "the summary ignores the invoice committed after the rows were read")
+
+	after, err := e.repo.Summary(ctx, q.Filter)
+	require.NoError(t, err)
+	require.EqualValues(t, 22, after.Count, "the committed invoice is real and visible to a later read")
 }
 
 func TestQueriesHonorContextCancellation(t *testing.T) {

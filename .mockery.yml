@@ -8,6 +8,7 @@ packages:
   reportsgo/internal/repository:
     interfaces:
       TxBeginner:
+      TxOptionsBeginner:
   reportsgo/internal/service:
     interfaces:
       InvoiceRepository:

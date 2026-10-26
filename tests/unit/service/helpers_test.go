@@ -41,32 +41,39 @@ func row(id int64, sortValue string) model.InvoiceRow {
 	return model.InvoiceRow{ID: id, InvoiceNumber: "INV" + sortValue, SortValue: sortValue}
 }
 
-// run calls List on a service whose repository returns rows and summary, and returns the query the
-// repository received along with the result.
+// page is what a repository returns for one Page call: the rows, plus an empty summary when one was requested.
+func page(rows []model.InvoiceRow, withSummary bool) model.InvoicePage {
+	p := model.InvoicePage{Rows: rows}
+	if withSummary {
+		p.Summary = &model.InvoiceSummary{}
+	}
+	return p
+}
+
+// run calls List on a service whose repository returns rows, and returns the query the repository received
+// along with the result. It also checks that the summary is requested on the first page only.
 func run(t *testing.T, p service.ListInvoicesParams, rows []model.InvoiceRow) (model.InvoiceQuery, *service.ListInvoicesResult) {
 	t.Helper()
 
 	repo := servicemocks.NewMockInvoiceRepository(t)
 	var got model.InvoiceQuery
-	repo.EXPECT().List(mock.Anything, mock.Anything).
-		Run(func(_ context.Context, q model.InvoiceQuery) { got = q }).
-		Return(rows, nil).Once()
-	if p.Cursor == "" {
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.InvoiceSummary{}, nil).Once()
-	}
+	repo.EXPECT().Page(mock.Anything, mock.Anything, p.Cursor == "").
+		RunAndReturn(func(_ context.Context, q model.InvoiceQuery, withSummary bool) (model.InvoicePage, error) {
+			got = q
+			return page(rows, withSummary), nil
+		}).Once()
 
 	res, err := service.NewInvoiceService(repo, fixedClock(october21)).List(context.Background(), p)
 	require.NoError(t, err)
 	return got, res
 }
 
-// newRepoReturning is a repository whose List returns rows and whose Summary returns an empty summary,
-// each expected exactly once.
+// newRepoReturning is a repository whose Page returns rows with an empty summary, expected exactly once and
+// requested with a summary (a first page).
 func newRepoReturning(t *testing.T, rows []model.InvoiceRow) *servicemocks.MockInvoiceRepository {
 	t.Helper()
 	repo := servicemocks.NewMockInvoiceRepository(t)
-	repo.EXPECT().List(mock.Anything, mock.Anything).Return(rows, nil).Once()
-	repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.InvoiceSummary{}, nil).Once()
+	repo.EXPECT().Page(mock.Anything, mock.Anything, true).Return(page(rows, true), nil).Once()
 	return repo
 }
 
