@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -600,32 +599,6 @@ func TestPage(t *testing.T) {
 	})
 }
 
-// snapshotPool wraps a pool so that a test can commit a change from another connection at the exact moment the
-// summary query is about to run inside the page's transaction.
-type snapshotPool struct {
-	*pgxpool.Pool
-	beforeSummary func()
-}
-
-func (p snapshotPool) BeginTx(ctx context.Context, opts pgx.TxOptions) (pgx.Tx, error) {
-	tx, err := p.Pool.BeginTx(ctx, opts)
-	if err != nil {
-		return nil, err
-	}
-	return hookedTx{Tx: tx, beforeSummary: p.beforeSummary}, nil
-}
-
-// hookedTx runs the hook before the first QueryRow, which is how the repository reads the summary.
-type hookedTx struct {
-	pgx.Tx
-	beforeSummary func()
-}
-
-func (h hookedTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
-	h.beforeSummary()
-	return h.Tx.QueryRow(ctx, sql, args...)
-}
-
 // The summary must describe the rows it is shown with. A change committed by someone else between reading the
 // rows and reading the totals would otherwise make the two disagree.
 func TestPageReadsRowsAndSummaryFromOneSnapshot(t *testing.T) {
@@ -634,7 +607,7 @@ func TestPageReadsRowsAndSummaryFromOneSnapshot(t *testing.T) {
 	q := query(octoberActive(), model.SortDate, true, 100)
 
 	committed := 0
-	pool := snapshotPool{Pool: e.pool, beforeSummary: func() {
+	pool := testdb.SnapshotPool{Pool: e.pool, BeforeQueryRow: func() {
 		_, err := e.pool.Exec(ctx, `INSERT INTO billing_documents (document_number, customer_id, document_date, total, status)
 			SELECT 'SNAP1', id, '2026-10-15', 10, 'draft' FROM customers WHERE account_number = '5001'`)
 		require.NoError(t, err)

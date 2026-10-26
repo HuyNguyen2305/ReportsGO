@@ -23,18 +23,27 @@ func rejectsEstimate(t *testing.T, p service.ListEstimatesParams) map[string]str
 	return fields(t, err)
 }
 
+// estimatePage is what a repository returns for one Page call: the rows, plus an empty summary when one was requested.
+func estimatePage(rows []model.EstimateRow, withSummary bool) model.EstimatePage {
+	p := model.EstimatePage{Rows: rows}
+	if withSummary {
+		p.Summary = &model.EstimateSummary{}
+	}
+	return p
+}
+
 // runEstimates calls List on a service whose repository returns rows, and returns the query it received.
+// It also checks that the summary is requested on the first page only.
 func runEstimates(t *testing.T, p service.ListEstimatesParams, rows []model.EstimateRow) (model.EstimateQuery, *service.ListEstimatesResult) {
 	t.Helper()
 
 	repo := servicemocks.NewMockEstimateRepository(t)
 	var got model.EstimateQuery
-	repo.EXPECT().List(mock.Anything, mock.Anything).
-		Run(func(_ context.Context, q model.EstimateQuery) { got = q }).
-		Return(rows, nil).Once()
-	if strings.TrimSpace(p.Cursor) == "" {
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.EstimateSummary{}, nil).Once()
-	}
+	repo.EXPECT().Page(mock.Anything, mock.Anything, strings.TrimSpace(p.Cursor) == "").
+		RunAndReturn(func(_ context.Context, q model.EstimateQuery, withSummary bool) (model.EstimatePage, error) {
+			got = q
+			return estimatePage(rows, withSummary), nil
+		}).Once()
 
 	res, err := service.NewEstimateService(repo, fixedClock(october21)).List(context.Background(), p)
 	require.NoError(t, err)
@@ -82,10 +91,11 @@ func TestEstimateListDateRange(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := servicemocks.NewMockEstimateRepository(t)
 			var got model.EstimateQuery
-			repo.EXPECT().List(mock.Anything, mock.Anything).
-				Run(func(_ context.Context, q model.EstimateQuery) { got = q }).
-				Return(nil, nil).Once()
-			repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.EstimateSummary{}, nil).Once()
+			repo.EXPECT().Page(mock.Anything, mock.Anything, true).
+				RunAndReturn(func(_ context.Context, q model.EstimateQuery, withSummary bool) (model.EstimatePage, error) {
+					got = q
+					return estimatePage(nil, withSummary), nil
+				}).Once()
 
 			res, err := service.NewEstimateService(repo, fixedClock(tt.now)).List(context.Background(),
 				service.ListEstimatesParams{From: tt.from, To: tt.to})

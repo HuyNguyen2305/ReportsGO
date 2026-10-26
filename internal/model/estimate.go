@@ -91,6 +91,13 @@ type EstimateRow struct {
 	SortValue string
 }
 
+// EstimatePage is one page of the report read from a single database snapshot. Summary is nil unless it was
+// requested, and when set it totals exactly the filtered set the rows were taken from.
+type EstimatePage struct {
+	Rows    []EstimateRow
+	Summary *EstimateSummary
+}
+
 // EstimateSummary totals the whole filtered set, not just one page.
 type EstimateSummary struct {
 	Count int64

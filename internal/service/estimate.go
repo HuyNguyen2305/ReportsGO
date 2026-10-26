@@ -10,8 +10,9 @@ import (
 
 // EstimateRepository is what the service needs from storage. *repository.EstimateRepository satisfies it.
 type EstimateRepository interface {
-	List(ctx context.Context, q model.EstimateQuery) ([]model.EstimateRow, error)
-	Summary(ctx context.Context, f model.EstimateFilter) (model.EstimateSummary, error)
+	// Page returns one page and, when withSummary is set, the totals of the whole filtered set, both read from
+	// one snapshot so the summary always describes the rows' set.
+	Page(ctx context.Context, q model.EstimateQuery, withSummary bool) (model.EstimatePage, error)
 }
 
 // EstimateService implements the Estimates report.
@@ -49,12 +50,14 @@ func (s *EstimateService) List(ctx context.Context, p ListEstimatesParams) (*Lis
 	}
 	q := req.query
 
-	rows, err := s.repo.List(ctx, q)
+	// The summary is wanted on the first page only; later pages keep the one the client already has.
+	page, err := s.repo.Page(ctx, q, q.After == nil)
 	if err != nil {
 		return nil, fmt.Errorf("list estimates: %w", err)
 	}
+	rows := page.Rows
 
-	res := &ListEstimatesResult{Limit: q.Limit, From: req.from, To: req.to}
+	res := &ListEstimatesResult{Limit: q.Limit, From: req.from, To: req.to, Summary: page.Summary}
 	// The repository returns one row beyond the page size so we can tell whether another page exists.
 	if len(rows) > q.Limit {
 		rows = rows[:q.Limit]
@@ -65,13 +68,5 @@ func (s *EstimateService) List(ctx context.Context, p ListEstimatesParams) (*Lis
 		rows = []model.EstimateRow{}
 	}
 	res.Items = rows
-
-	if q.After == nil {
-		summary, err := s.repo.Summary(ctx, q.Filter)
-		if err != nil {
-			return nil, fmt.Errorf("summarize estimates: %w", err)
-		}
-		res.Summary = &summary
-	}
 	return res, nil
 }

@@ -72,15 +72,14 @@ func TestEstimateListAsksTheRepositoryForOneExtraRow(t *testing.T) {
 func TestEstimateListSummaryOnFirstPageOnly(t *testing.T) {
 	want := model.EstimateSummary{Count: 19, Total: 69812}
 
-	t.Run("first page has it, computed from the same filter", func(t *testing.T) {
+	t.Run("first page asks for it together with the rows, from one filtered query", func(t *testing.T) {
 		repo := servicemocks.NewMockEstimateRepository(t)
-		var listFilter, summaryFilter model.EstimateFilter
-		repo.EXPECT().List(mock.Anything, mock.Anything).
-			Run(func(_ context.Context, q model.EstimateQuery) { listFilter = q.Filter }).
-			Return(estimateRows(2), nil).Once()
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).
-			Run(func(_ context.Context, f model.EstimateFilter) { summaryFilter = f }).
-			Return(want, nil).Once()
+		var asked model.EstimateQuery
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).
+			RunAndReturn(func(_ context.Context, q model.EstimateQuery, _ bool) (model.EstimatePage, error) {
+				asked = q
+				return model.EstimatePage{Rows: estimateRows(2), Summary: &want}, nil
+			}).Once()
 
 		res, err := service.NewEstimateService(repo, fixedClock(october21)).List(context.Background(),
 			service.ListEstimatesParams{Status: []string{"draft"}, Search: "alaba"})
@@ -88,13 +87,14 @@ func TestEstimateListSummaryOnFirstPageOnly(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, res.Summary)
 		require.Equal(t, want, *res.Summary)
-		require.Equal(t, listFilter, summaryFilter, "the totals cover exactly what the list filters on")
+		require.Equal(t, "alaba", asked.Filter.Search, "rows and totals are read from the one filtered query")
+		require.Equal(t, []model.EstimateStatus{model.EstimateDraft}, asked.Filter.Statuses)
 	})
 
 	t.Run("later pages do not run it", func(t *testing.T) {
 		cursor := service.EncodeEstimateCursor(model.EstimateSort{Key: model.EstimateSortDate, Desc: true}, estimateRow(3, "2026-10-03"))
-		repo := servicemocks.NewMockEstimateRepository(t) // Summary has no expectation: calling it fails the test
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(estimateRows(1), nil).Once()
+		repo := servicemocks.NewMockEstimateRepository(t) // an expectation on false: asking for a summary fails the test
+		repo.EXPECT().Page(mock.Anything, mock.Anything, false).Return(model.EstimatePage{Rows: estimateRows(1)}, nil).Once()
 
 		res, err := service.NewEstimateService(repo, fixedClock(october21)).List(context.Background(),
 			service.ListEstimatesParams{Cursor: cursor})
@@ -107,7 +107,7 @@ func TestEstimateListSummaryOnFirstPageOnly(t *testing.T) {
 func TestEstimateListWrapsRepositoryErrors(t *testing.T) {
 	t.Run("list", func(t *testing.T) {
 		repo := servicemocks.NewMockEstimateRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, errBoom).Once()
+		repo.EXPECT().Page(mock.Anything, mock.Anything, mock.Anything).Return(model.EstimatePage{}, errBoom).Once()
 
 		res, err := service.NewEstimateService(repo, fixedClock(october21)).List(context.Background(), service.ListEstimatesParams{})
 
@@ -117,21 +117,21 @@ func TestEstimateListWrapsRepositoryErrors(t *testing.T) {
 		require.NotErrorIs(t, err, model.ErrInvalidInput)
 	})
 
-	t.Run("summary", func(t *testing.T) {
+	t.Run("a failure inside the snapshot is wrapped the same way, with no partial result", func(t *testing.T) {
 		repo := servicemocks.NewMockEstimateRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(estimateRows(1), nil).Once()
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.EstimateSummary{}, errBoom).Once()
+		summaryErr := fmt.Errorf("query estimate summary: %w", errBoom)
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).Return(model.EstimatePage{}, summaryErr).Once()
 
 		res, err := service.NewEstimateService(repo, fixedClock(october21)).List(context.Background(), service.ListEstimatesParams{})
 
 		require.Nil(t, res)
 		require.ErrorIs(t, err, errBoom)
-		require.ErrorContains(t, err, "summarize estimates")
+		require.ErrorContains(t, err, "list estimates: query estimate summary")
 	})
 
 	t.Run("a cancelled context stays recognisable", func(t *testing.T) {
 		repo := servicemocks.NewMockEstimateRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, context.Canceled).Once()
+		repo.EXPECT().Page(mock.Anything, mock.Anything, mock.Anything).Return(model.EstimatePage{}, context.Canceled).Once()
 
 		_, err := service.NewEstimateService(repo, nil).List(context.Background(), service.ListEstimatesParams{})
 		require.True(t, errors.Is(err, context.Canceled))
@@ -143,10 +143,8 @@ func TestEstimateListPassesTheRequestContextToTheRepository(t *testing.T) {
 	ctx := context.WithValue(context.Background(), key{}, "marker")
 
 	repo := servicemocks.NewMockEstimateRepository(t)
-	repo.EXPECT().List(mock.MatchedBy(func(c context.Context) bool { return c.Value(key{}) == "marker" }), mock.Anything).
-		Return(nil, nil).Once()
-	repo.EXPECT().Summary(mock.MatchedBy(func(c context.Context) bool { return c.Value(key{}) == "marker" }), mock.Anything).
-		Return(model.EstimateSummary{}, nil).Once()
+	repo.EXPECT().Page(mock.MatchedBy(func(c context.Context) bool { return c.Value(key{}) == "marker" }), mock.Anything, mock.Anything).
+		Return(estimatePage(nil, true), nil).Once()
 
 	_, err := service.NewEstimateService(repo, fixedClock(october21)).List(ctx, service.ListEstimatesParams{})
 	require.NoError(t, err)
@@ -160,8 +158,7 @@ func TestEstimateListDoesNotCallTheRepositoryForInvalidInput(t *testing.T) {
 
 func TestNewEstimateServiceDefaultsTheClock(t *testing.T) {
 	repo := servicemocks.NewMockEstimateRepository(t)
-	repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, nil).Once()
-	repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.EstimateSummary{}, nil).Once()
+	repo.EXPECT().Page(mock.Anything, mock.Anything, true).Return(estimatePage(nil, true), nil).Once()
 
 	res, err := service.NewEstimateService(repo, nil).List(context.Background(), service.ListEstimatesParams{})
 
