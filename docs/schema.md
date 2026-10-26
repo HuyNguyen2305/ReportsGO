@@ -25,6 +25,8 @@ document_types ┘              ├─< documents
 - Estimates have no job, recurring invoice, payment terms or discount (`billing_documents_estimate_chk`).
 - `payments.invoice_id`, `recurring_invoices.next_invoice_id` and `invoice_tag_links.invoice_id` can only reference invoices; a generated `*_parent_type` column plus a composite foreign key enforce it.
 
+**Estimate ids change in migration 000009.** The migration re-inserts the former `estimates` rows into `billing_documents`, so each estimate gets a new id from the shared sequence (rolling back gives them new ids again). Numbers, dates, statuses, signature states, totals and archive/delete flags are preserved; ids are not, because invoice ids and estimate ids overlapped and cannot be kept. This only matters to an environment that already holds estimates which clients reference by id.
+
 `billing_documents.recurring_invoice_id` and `recurring_invoices.next_invoice_id` reference each other; the first FK is added in migration 000007.
 
 ## Screenshot column → table.column
