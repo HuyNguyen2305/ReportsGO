@@ -10,8 +10,9 @@ import (
 
 // CustomerRepository is what the service needs from storage. *repository.CustomerRepository satisfies it.
 type CustomerRepository interface {
-	List(ctx context.Context, q model.CustomerQuery) ([]model.CustomerRow, error)
-	Summary(ctx context.Context, f model.CustomerFilter) (model.CustomerSummary, error)
+	// Page returns one page and, when withSummary is set, the count of the whole filtered set, both read from
+	// one snapshot so the summary always describes the rows' set.
+	Page(ctx context.Context, q model.CustomerQuery, withSummary bool) (model.CustomerPage, error)
 	LeadSources(ctx context.Context) ([]model.LeadSource, error)
 }
 
@@ -50,12 +51,14 @@ func (s *CustomerService) List(ctx context.Context, p ListCustomersParams) (*Lis
 	}
 	q := req.query
 
-	rows, err := s.repo.List(ctx, q)
+	// The summary is wanted on the first page only; later pages keep the one the client already has.
+	page, err := s.repo.Page(ctx, q, q.After == nil)
 	if err != nil {
 		return nil, fmt.Errorf("list customers: %w", err)
 	}
+	rows := page.Rows
 
-	res := &ListCustomersResult{Limit: q.Limit, From: req.from, To: req.to}
+	res := &ListCustomersResult{Limit: q.Limit, From: req.from, To: req.to, Summary: page.Summary}
 	// The repository returns one row beyond the page size so we can tell whether another page exists.
 	if len(rows) > q.Limit {
 		rows = rows[:q.Limit]
@@ -66,14 +69,6 @@ func (s *CustomerService) List(ctx context.Context, p ListCustomersParams) (*Lis
 		rows = []model.CustomerRow{}
 	}
 	res.Items = rows
-
-	if q.After == nil {
-		summary, err := s.repo.Summary(ctx, q.Filter)
-		if err != nil {
-			return nil, fmt.Errorf("summarize customers: %w", err)
-		}
-		res.Summary = &summary
-	}
 	return res, nil
 }
 

@@ -109,47 +109,46 @@ func (_c *MockCustomerRepository_LeadSources_Call) RunAndReturn(run func(ctx con
 	return _c
 }
 
-// List provides a mock function for the type MockCustomerRepository
-func (_mock *MockCustomerRepository) List(ctx context.Context, q model.CustomerQuery) ([]model.CustomerRow, error) {
-	ret := _mock.Called(ctx, q)
+// Page provides a mock function for the type MockCustomerRepository
+func (_mock *MockCustomerRepository) Page(ctx context.Context, q model.CustomerQuery, withSummary bool) (model.CustomerPage, error) {
+	ret := _mock.Called(ctx, q, withSummary)
 
 	if len(ret) == 0 {
-		panic("no return value specified for List")
+		panic("no return value specified for Page")
 	}
 
-	var r0 []model.CustomerRow
+	var r0 model.CustomerPage
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.CustomerQuery) ([]model.CustomerRow, error)); ok {
-		return returnFunc(ctx, q)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, model.CustomerQuery, bool) (model.CustomerPage, error)); ok {
+		return returnFunc(ctx, q, withSummary)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.CustomerQuery) []model.CustomerRow); ok {
-		r0 = returnFunc(ctx, q)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, model.CustomerQuery, bool) model.CustomerPage); ok {
+		r0 = returnFunc(ctx, q, withSummary)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]model.CustomerRow)
-		}
+		r0 = ret.Get(0).(model.CustomerPage)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, model.CustomerQuery) error); ok {
-		r1 = returnFunc(ctx, q)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, model.CustomerQuery, bool) error); ok {
+		r1 = returnFunc(ctx, q, withSummary)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
 }
 
-// MockCustomerRepository_List_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'List'
-type MockCustomerRepository_List_Call struct {
+// MockCustomerRepository_Page_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Page'
+type MockCustomerRepository_Page_Call struct {
 	*mock.Call
 }
 
-// List is a helper method to define mock.On call
+// Page is a helper method to define mock.On call
 //   - ctx context.Context
 //   - q model.CustomerQuery
-func (_e *MockCustomerRepository_Expecter) List(ctx any, q any) *MockCustomerRepository_List_Call {
-	return &MockCustomerRepository_List_Call{Call: _e.mock.On("List", ctx, q)}
+//   - withSummary bool
+func (_e *MockCustomerRepository_Expecter) Page(ctx any, q any, withSummary any) *MockCustomerRepository_Page_Call {
+	return &MockCustomerRepository_Page_Call{Call: _e.mock.On("Page", ctx, q, withSummary)}
 }
 
-func (_c *MockCustomerRepository_List_Call) Run(run func(ctx context.Context, q model.CustomerQuery)) *MockCustomerRepository_List_Call {
+func (_c *MockCustomerRepository_Page_Call) Run(run func(ctx context.Context, q model.CustomerQuery, withSummary bool)) *MockCustomerRepository_Page_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -159,86 +158,25 @@ func (_c *MockCustomerRepository_List_Call) Run(run func(ctx context.Context, q 
 		if args[1] != nil {
 			arg1 = args[1].(model.CustomerQuery)
 		}
+		var arg2 bool
+		if args[2] != nil {
+			arg2 = args[2].(bool)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
 }
 
-func (_c *MockCustomerRepository_List_Call) Return(customerRows []model.CustomerRow, err error) *MockCustomerRepository_List_Call {
-	_c.Call.Return(customerRows, err)
+func (_c *MockCustomerRepository_Page_Call) Return(customerPage model.CustomerPage, err error) *MockCustomerRepository_Page_Call {
+	_c.Call.Return(customerPage, err)
 	return _c
 }
 
-func (_c *MockCustomerRepository_List_Call) RunAndReturn(run func(ctx context.Context, q model.CustomerQuery) ([]model.CustomerRow, error)) *MockCustomerRepository_List_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// Summary provides a mock function for the type MockCustomerRepository
-func (_mock *MockCustomerRepository) Summary(ctx context.Context, f model.CustomerFilter) (model.CustomerSummary, error) {
-	ret := _mock.Called(ctx, f)
-
-	if len(ret) == 0 {
-		panic("no return value specified for Summary")
-	}
-
-	var r0 model.CustomerSummary
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.CustomerFilter) (model.CustomerSummary, error)); ok {
-		return returnFunc(ctx, f)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, model.CustomerFilter) model.CustomerSummary); ok {
-		r0 = returnFunc(ctx, f)
-	} else {
-		r0 = ret.Get(0).(model.CustomerSummary)
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, model.CustomerFilter) error); ok {
-		r1 = returnFunc(ctx, f)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockCustomerRepository_Summary_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Summary'
-type MockCustomerRepository_Summary_Call struct {
-	*mock.Call
-}
-
-// Summary is a helper method to define mock.On call
-//   - ctx context.Context
-//   - f model.CustomerFilter
-func (_e *MockCustomerRepository_Expecter) Summary(ctx any, f any) *MockCustomerRepository_Summary_Call {
-	return &MockCustomerRepository_Summary_Call{Call: _e.mock.On("Summary", ctx, f)}
-}
-
-func (_c *MockCustomerRepository_Summary_Call) Run(run func(ctx context.Context, f model.CustomerFilter)) *MockCustomerRepository_Summary_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 model.CustomerFilter
-		if args[1] != nil {
-			arg1 = args[1].(model.CustomerFilter)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockCustomerRepository_Summary_Call) Return(customerSummary model.CustomerSummary, err error) *MockCustomerRepository_Summary_Call {
-	_c.Call.Return(customerSummary, err)
-	return _c
-}
-
-func (_c *MockCustomerRepository_Summary_Call) RunAndReturn(run func(ctx context.Context, f model.CustomerFilter) (model.CustomerSummary, error)) *MockCustomerRepository_Summary_Call {
+func (_c *MockCustomerRepository_Page_Call) RunAndReturn(run func(ctx context.Context, q model.CustomerQuery, withSummary bool) (model.CustomerPage, error)) *MockCustomerRepository_Page_Call {
 	_c.Call.Return(run)
 	return _c
 }

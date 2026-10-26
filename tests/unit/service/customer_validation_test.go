@@ -30,12 +30,15 @@ func runCustomers(t *testing.T, p service.ListCustomersParams, rows []model.Cust
 
 	repo := servicemocks.NewMockCustomerRepository(t)
 	var got model.CustomerQuery
-	repo.EXPECT().List(mock.Anything, mock.Anything).
-		Run(func(_ context.Context, q model.CustomerQuery) { got = q }).
-		Return(rows, nil).Once()
-	if strings.TrimSpace(p.Cursor) == "" {
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.CustomerSummary{}, nil).Once()
+	// the summary is asked for on the first page only
+	withSummary := strings.TrimSpace(p.Cursor) == ""
+	page := model.CustomerPage{Rows: rows}
+	if withSummary {
+		page.Summary = &model.CustomerSummary{}
 	}
+	repo.EXPECT().Page(mock.Anything, mock.Anything, withSummary).
+		Run(func(_ context.Context, q model.CustomerQuery, _ bool) { got = q }).
+		Return(page, nil).Once()
 
 	res, err := service.NewCustomerService(repo, fixedClock(october21)).List(context.Background(), p)
 	require.NoError(t, err)
@@ -93,10 +96,9 @@ func TestCustomerListDateRange(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := servicemocks.NewMockCustomerRepository(t)
 			var got model.CustomerQuery
-			repo.EXPECT().List(mock.Anything, mock.Anything).
-				Run(func(_ context.Context, q model.CustomerQuery) { got = q }).
-				Return(nil, nil).Once()
-			repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.CustomerSummary{}, nil).Once()
+			repo.EXPECT().Page(mock.Anything, mock.Anything, true).
+				Run(func(_ context.Context, q model.CustomerQuery, _ bool) { got = q }).
+				Return(model.CustomerPage{}, nil).Once()
 
 			res, err := service.NewCustomerService(repo, fixedClock(tt.now)).List(context.Background(),
 				service.ListCustomersParams{From: tt.from, To: tt.to})

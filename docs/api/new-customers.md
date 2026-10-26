@@ -70,7 +70,9 @@ Number columns are identifiers, not quantities: `account_number` sorts as text, 
   the first one only.
 - `created_at` is always UTC with exactly six fractional digits, so every value has the same shape, whatever `APP_TIMEZONE` is. Only the `from`/`to` day boundaries follow `APP_TIMEZONE`.
 - `summary` counts the **whole filtered set**, not just this page, and is only present on the **first page**
-  (when no `cursor` is sent). It is `null` on later pages.
+  (when no `cursor` is sent). It is `null` on later pages. The rows and the count are read from one database
+  snapshot, so the count always describes exactly the set the rows were taken from, even while customers are
+  being added.
 - `range` is the date range actually applied, so a client can show the defaulted month. An open end is `null`.
 - `page.next_cursor` is `null` and `has_more` is `false` on the last page. `data` is always an array, never `null`.
 

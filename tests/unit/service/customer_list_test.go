@@ -78,13 +78,10 @@ func TestCustomerListPassesThePageSizeToTheRepository(t *testing.T) {
 func TestCustomerListSummaryOnFirstPageOnly(t *testing.T) {
 	t.Run("first page has it, computed from the same filter", func(t *testing.T) {
 		repo := servicemocks.NewMockCustomerRepository(t)
-		var listFilter, summaryFilter model.CustomerFilter
-		repo.EXPECT().List(mock.Anything, mock.Anything).
-			Run(func(_ context.Context, q model.CustomerQuery) { listFilter = q.Filter }).
-			Return(customerRows(2), nil).Once()
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).
-			Run(func(_ context.Context, f model.CustomerFilter) { summaryFilter = f }).
-			Return(model.CustomerSummary{Count: 14}, nil).Once()
+		var asked model.CustomerQuery
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).
+			Run(func(_ context.Context, q model.CustomerQuery, _ bool) { asked = q }).
+			Return(model.CustomerPage{Rows: customerRows(2), Summary: &model.CustomerSummary{Count: 14}}, nil).Once()
 
 		res, err := service.NewCustomerService(repo, fixedClock(october21)).List(context.Background(),
 			service.ListCustomersParams{Search: "ada", LeadSourceIDs: []string{"2"}})
@@ -92,14 +89,15 @@ func TestCustomerListSummaryOnFirstPageOnly(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, res.Summary)
 		require.EqualValues(t, 14, res.Summary.Count)
-		require.Equal(t, listFilter, summaryFilter, "the count covers exactly what the list filters on")
+		require.Equal(t, []int64{2}, asked.Filter.LeadSourceIDs,
+			"the repository is given the filter once, so the rows and the count cover the same set")
 	})
 
 	t.Run("later pages do not run it", func(t *testing.T) {
 		cursor := service.EncodeCustomerCursor(model.CustomerSort{Key: model.CustomerSortCreatedAt, Desc: true},
 			model.CustomerRow{ID: 3, SortValue: "2026-10-03T08:00:00.000000Z"})
-		repo := servicemocks.NewMockCustomerRepository(t) // Summary has no expectation: calling it fails the test
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(customerRows(1), nil).Once()
+		repo := servicemocks.NewMockCustomerRepository(t) // only Page(..., false) is expected: asking for a summary fails the test
+		repo.EXPECT().Page(mock.Anything, mock.Anything, false).Return(model.CustomerPage{Rows: customerRows(1)}, nil).Once()
 
 		res, err := service.NewCustomerService(repo, fixedClock(october21)).List(context.Background(),
 			service.ListCustomersParams{Cursor: cursor})
@@ -110,9 +108,9 @@ func TestCustomerListSummaryOnFirstPageOnly(t *testing.T) {
 }
 
 func TestCustomerListWrapsRepositoryErrors(t *testing.T) {
-	t.Run("list", func(t *testing.T) {
+	t.Run("page", func(t *testing.T) {
 		repo := servicemocks.NewMockCustomerRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, errBoom).Once()
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).Return(model.CustomerPage{}, errBoom).Once()
 
 		res, err := service.NewCustomerService(repo, fixedClock(october21)).List(context.Background(), service.ListCustomersParams{})
 
@@ -122,21 +120,9 @@ func TestCustomerListWrapsRepositoryErrors(t *testing.T) {
 		require.NotErrorIs(t, err, model.ErrInvalidInput)
 	})
 
-	t.Run("summary", func(t *testing.T) {
-		repo := servicemocks.NewMockCustomerRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(customerRows(1), nil).Once()
-		repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.CustomerSummary{}, errBoom).Once()
-
-		res, err := service.NewCustomerService(repo, fixedClock(october21)).List(context.Background(), service.ListCustomersParams{})
-
-		require.Nil(t, res)
-		require.ErrorIs(t, err, errBoom)
-		require.ErrorContains(t, err, "summarize customers")
-	})
-
 	t.Run("a cancelled context stays recognisable", func(t *testing.T) {
 		repo := servicemocks.NewMockCustomerRepository(t)
-		repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, context.Canceled).Once()
+		repo.EXPECT().Page(mock.Anything, mock.Anything, true).Return(model.CustomerPage{}, context.Canceled).Once()
 
 		_, err := service.NewCustomerService(repo, nil).List(context.Background(), service.ListCustomersParams{})
 		require.True(t, errors.Is(err, context.Canceled))
@@ -149,8 +135,7 @@ func TestCustomerListPassesTheRequestContextToTheRepository(t *testing.T) {
 	hasMarker := mock.MatchedBy(func(c context.Context) bool { return c.Value(key{}) == "marker" })
 
 	repo := servicemocks.NewMockCustomerRepository(t)
-	repo.EXPECT().List(hasMarker, mock.Anything).Return(nil, nil).Once()
-	repo.EXPECT().Summary(hasMarker, mock.Anything).Return(model.CustomerSummary{}, nil).Once()
+	repo.EXPECT().Page(hasMarker, mock.Anything, true).Return(model.CustomerPage{}, nil).Once()
 	repo.EXPECT().LeadSources(hasMarker).Return(nil, nil).Once()
 
 	svc := service.NewCustomerService(repo, fixedClock(october21))
@@ -162,8 +147,7 @@ func TestCustomerListPassesTheRequestContextToTheRepository(t *testing.T) {
 
 func TestNewCustomerServiceDefaultsTheClock(t *testing.T) {
 	repo := servicemocks.NewMockCustomerRepository(t)
-	repo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, nil).Once()
-	repo.EXPECT().Summary(mock.Anything, mock.Anything).Return(model.CustomerSummary{}, nil).Once()
+	repo.EXPECT().Page(mock.Anything, mock.Anything, true).Return(model.CustomerPage{}, nil).Once()
 
 	res, err := service.NewCustomerService(repo, nil).List(context.Background(), service.ListCustomersParams{})
 

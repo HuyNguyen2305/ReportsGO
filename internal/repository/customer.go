@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
+
 	"reportsgo/internal/model"
 	"reportsgo/internal/repository/db"
 )
@@ -21,12 +23,55 @@ func NewCustomerRepository(conn db.DBTX) *CustomerRepository {
 
 // List returns one page of the report: up to q.Limit+1 rows, so the caller can tell whether more follow.
 func (r *CustomerRepository) List(ctx context.Context, q model.CustomerQuery) ([]model.CustomerRow, error) {
+	return listCustomers(ctx, r.conn, q)
+}
+
+// Summary counts the whole filtered set (not just one page).
+func (r *CustomerRepository) Summary(ctx context.Context, f model.CustomerFilter) (model.CustomerSummary, error) {
+	return summarizeCustomers(ctx, r.conn, f)
+}
+
+// Page returns one page of the report and, when withSummary is set, the count of the whole filtered set. The
+// rows and the count come from one snapshot, so the summary always describes the rows' set even while other
+// connections commit. On a pool that is a read-only REPEATABLE READ transaction; a repository already bound to
+// a transaction uses the caller's, which is its snapshot.
+func (r *CustomerRepository) Page(ctx context.Context, q model.CustomerQuery, withSummary bool) (model.CustomerPage, error) {
+	if !withSummary {
+		rows, err := listCustomers(ctx, r.conn, q)
+		if err != nil {
+			return model.CustomerPage{}, err
+		}
+		return model.CustomerPage{Rows: rows}, nil
+	}
+
+	var page model.CustomerPage
+	read := func(ctx context.Context, conn db.DBTX) error {
+		rows, err := listCustomers(ctx, conn, q)
+		if err != nil {
+			return err
+		}
+		summary, err := summarizeCustomers(ctx, conn, q.Filter)
+		if err != nil {
+			return err
+		}
+		page = model.CustomerPage{Rows: rows, Summary: &summary}
+		return nil
+	}
+
+	if pool, ok := r.conn.(TxOptionsBeginner); ok {
+		err := WithReadSnapshot(ctx, pool, func(ctx context.Context, tx pgx.Tx) error { return read(ctx, tx) })
+		return page, err
+	}
+	return page, read(ctx, r.conn)
+}
+
+func listCustomers(ctx context.Context, conn db.DBTX, q model.CustomerQuery) ([]model.CustomerRow, error) {
 	stmt, err := BuildCustomerListQuery(q)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := r.conn.Query(ctx, stmt.SQL, stmt.Args...)
+	rows, err := conn.Query(ctx, stmt.SQL, stmt.Args...)
 	if err != nil {
 		return nil, fmt.Errorf("query new customers report: %w", err)
 	}
@@ -50,15 +95,14 @@ func (r *CustomerRepository) List(ctx context.Context, q model.CustomerQuery) ([
 	return out, nil
 }
 
-// Summary counts the whole filtered set (not just one page).
-func (r *CustomerRepository) Summary(ctx context.Context, f model.CustomerFilter) (model.CustomerSummary, error) {
+func summarizeCustomers(ctx context.Context, conn db.DBTX, f model.CustomerFilter) (model.CustomerSummary, error) {
 	stmt, err := BuildCustomerSummaryQuery(f)
 	if err != nil {
 		return model.CustomerSummary{}, err
 	}
 
 	var s model.CustomerSummary
-	if err := r.conn.QueryRow(ctx, stmt.SQL, stmt.Args...).Scan(&s.Count); err != nil {
+	if err := conn.QueryRow(ctx, stmt.SQL, stmt.Args...).Scan(&s.Count); err != nil {
 		return model.CustomerSummary{}, fmt.Errorf("query new customers summary: %w", err)
 	}
 	return s, nil
