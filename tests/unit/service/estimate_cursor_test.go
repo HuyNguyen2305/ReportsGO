@@ -95,7 +95,7 @@ func TestEstimateCursorRejectsInvalidCursors(t *testing.T) {
 
 		{"text with NUL", encode(`{"k":"customer","d":false,"v":"a\u0000b","id":1}`), customerAsc, "not a valid cursor"},
 		{"phone with NUL", encode(`{"k":"phone","d":false,"v":"1\u00002","id":1}`), phoneAsc, "not a valid cursor"},
-		{"text too long", encode(`{"k":"customer","d":false,"v":"` + strings.Repeat("x", 1001) + `","id":1}`), customerAsc, "not a valid cursor"},
+		{"text too long", encode(`{"k":"customer","d":false,"v":"` + strings.Repeat("x", model.MaxSortTextLength+1) + `","id":1}`), customerAsc, "not a valid cursor"},
 		{"cursor too long", strings.Repeat("A", 4097), customerAsc, "too long"},
 	}
 
@@ -125,9 +125,9 @@ func TestCursorsDoNotCrossBetweenReports(t *testing.T) {
 }
 
 func TestEstimateCursorAcceptsBoundaryValues(t *testing.T) {
-	t.Run("text of exactly 1000 characters", func(t *testing.T) {
+	t.Run("text of exactly the maximum sort length", func(t *testing.T) {
 		sort := model.EstimateSort{Key: model.EstimateSortCreatedBy}
-		long := strings.Repeat("é", 1000)
+		long := strings.Repeat("é", model.MaxSortTextLength)
 		raw := service.EncodeEstimateCursor(sort, model.EstimateRow{ID: 1, SortValue: long})
 		got, err := service.DecodeEstimateCursor(raw, sort)
 		require.NoError(t, err)

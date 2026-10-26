@@ -75,8 +75,8 @@ func TestBuildJobListQueryEverySortKeyAndDirection(t *testing.T) {
 				stmt, err := repository.BuildJobListQuery(q)
 				require.NoError(t, err)
 
-				require.Contains(t, stmt.SQL, "ORDER BY "+want.expr+" "+dir+", j.id "+dir)
-				require.Contains(t, stmt.SQL, "("+want.expr+", j.id) "+cmp+" (($")
+				require.Contains(t, stmt.SQL, "ORDER BY "+sortKeySQL(want.expr, want.cast)+" "+dir+", j.id "+dir)
+				require.Contains(t, stmt.SQL, "("+sortKeySQL(want.expr, want.cast)+", j.id) "+cmp+" (($")
 				require.Contains(t, stmt.SQL, "::text)::"+want.cast+", $")
 				require.Contains(t, stmt.SQL, "AS sort_value")
 				requirePlaceholdersMatchArgs(t, stmt)

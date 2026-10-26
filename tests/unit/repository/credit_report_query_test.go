@@ -71,8 +71,8 @@ func TestBuildCreditListQueryEverySortKeyAndDirection(t *testing.T) {
 				stmt, err := repository.BuildCreditListQuery(q)
 				require.NoError(t, err)
 
-				require.Contains(t, stmt.SQL, "ORDER BY "+want.expr+" "+dir+", cr.id "+dir)
-				require.Contains(t, stmt.SQL, "("+want.expr+", cr.id) "+cmp+" (($")
+				require.Contains(t, stmt.SQL, "ORDER BY "+sortKeySQL(want.expr, want.cast)+" "+dir+", cr.id "+dir)
+				require.Contains(t, stmt.SQL, "("+sortKeySQL(want.expr, want.cast)+", cr.id) "+cmp+" (($")
 				require.Contains(t, stmt.SQL, "::text)::"+want.cast+", $")
 				require.Contains(t, stmt.SQL, "AS sort_value")
 				requirePlaceholdersMatchArgs(t, stmt)

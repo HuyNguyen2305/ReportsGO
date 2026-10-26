@@ -73,8 +73,8 @@ func TestBuildDocumentListQueryEverySortKeyAndDirection(t *testing.T) {
 				stmt, err := repository.BuildDocumentListQuery(q)
 				require.NoError(t, err)
 
-				require.Contains(t, stmt.SQL, "ORDER BY "+want.expr+" "+dir+", d.id "+dir)
-				require.Contains(t, stmt.SQL, "("+want.expr+", d.id) "+cmp+" (($")
+				require.Contains(t, stmt.SQL, "ORDER BY "+sortKeySQL(want.expr, want.cast)+" "+dir+", d.id "+dir)
+				require.Contains(t, stmt.SQL, "("+sortKeySQL(want.expr, want.cast)+", d.id) "+cmp+" (($")
 				require.Contains(t, stmt.SQL, "::text)::"+want.cast+", $")
 				require.Contains(t, stmt.SQL, "AS sort_value")
 				requirePlaceholdersMatchArgs(t, stmt)
@@ -94,7 +94,7 @@ func TestBuildDocumentListQueryRendersCreatedAtAsUTCText(t *testing.T) {
 	stmt, err = repository.BuildDocumentListQuery(q)
 	require.NoError(t, err)
 	require.NotContains(t, stmt.SQL, "to_char(", "other keys use their own expression")
-	require.Contains(t, stmt.SQL, "(d.document_number)::text AS sort_value")
+	require.Contains(t, stmt.SQL, "(left(d.document_number, 200))::text AS sort_value")
 }
 
 func TestBuildDocumentListQueryFiltersAddClausesAndArgsInOrder(t *testing.T) {

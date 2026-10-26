@@ -80,7 +80,7 @@ func TestCustomerCursorRejectsInvalidCursors(t *testing.T) {
 		{"timestamp with injection", cursorWith("created_at", "2026-10-12T08:00:00.000000Z'; DROP TABLE customers;--"), createdAsc, "not a valid cursor"},
 
 		{"text with NUL", encode(`{"k":"customer","d":false,"v":"a\u0000b","id":1}`), customerAsc, "not a valid cursor"},
-		{"text too long", cursorWith("customer", strings.Repeat("x", 1001)), customerAsc, "not a valid cursor"},
+		{"text too long", cursorWith("customer", strings.Repeat("x", model.MaxSortTextLength+1)), customerAsc, "not a valid cursor"},
 		{"cursor too long", strings.Repeat("A", 4097), customerAsc, "too long"},
 	}
 
@@ -107,9 +107,9 @@ func TestCustomerCursorAcceptsBoundaryValues(t *testing.T) {
 		}
 	})
 
-	t.Run("text of exactly 1000 characters", func(t *testing.T) {
+	t.Run("text of exactly the maximum sort length", func(t *testing.T) {
 		sort := model.CustomerSort{Key: model.CustomerSortEmail}
-		long := strings.Repeat("é", 1000)
+		long := strings.Repeat("é", model.MaxSortTextLength)
 		raw := service.EncodeCustomerCursor(sort, model.CustomerRow{ID: 1, SortValue: long})
 		got, err := service.DecodeCustomerCursor(raw, sort)
 		require.NoError(t, err)

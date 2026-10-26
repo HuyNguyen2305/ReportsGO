@@ -72,8 +72,8 @@ func TestBuildCustomerListQueryEverySortKeyAndDirection(t *testing.T) {
 				stmt, err := repository.BuildCustomerListQuery(q)
 				require.NoError(t, err)
 
-				require.Contains(t, stmt.SQL, "ORDER BY "+want.expr+" "+dir+", c.id "+dir)
-				require.Contains(t, stmt.SQL, "("+want.expr+", c.id) "+cmp+" (($")
+				require.Contains(t, stmt.SQL, "ORDER BY "+sortKeySQL(want.expr, want.cast)+" "+dir+", c.id "+dir)
+				require.Contains(t, stmt.SQL, "("+sortKeySQL(want.expr, want.cast)+", c.id) "+cmp+" (($")
 				require.Contains(t, stmt.SQL, "::text)::"+want.cast+", $")
 				require.Contains(t, stmt.SQL, "AS sort_value")
 				requirePlaceholdersMatchArgs(t, stmt)
@@ -93,7 +93,7 @@ func TestBuildCustomerListQueryRendersCreatedAtAsUTCText(t *testing.T) {
 	stmt, err = repository.BuildCustomerListQuery(q)
 	require.NoError(t, err)
 	require.NotContains(t, stmt.SQL, "to_char(", "other keys use their own expression")
-	require.Contains(t, stmt.SQL, "(c.account_number)::text AS sort_value")
+	require.Contains(t, stmt.SQL, "(left(c.account_number, 200))::text AS sort_value")
 }
 
 func TestBuildCustomerListQueryFiltersAddClausesAndArgsInOrder(t *testing.T) {

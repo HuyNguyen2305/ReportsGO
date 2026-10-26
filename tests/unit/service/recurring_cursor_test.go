@@ -83,7 +83,7 @@ func TestRecurringCursorRejectsInvalidCursors(t *testing.T) {
 		{"total empty", cursorWith("total_value", ""), totalAsc, "not a valid cursor"},
 
 		{"text with NUL", encode(`{"k":"customer","d":false,"v":"a\u0000b","id":1}`), customerAsc, "not a valid cursor"},
-		{"text too long", cursorWith("customer", strings.Repeat("x", 1001)), customerAsc, "not a valid cursor"},
+		{"text too long", cursorWith("customer", strings.Repeat("x", model.MaxSortTextLength+1)), customerAsc, "not a valid cursor"},
 		{"cursor too long", strings.Repeat("A", 4097), customerAsc, "too long"},
 	}
 

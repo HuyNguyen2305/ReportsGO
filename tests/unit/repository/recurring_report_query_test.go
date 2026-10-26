@@ -77,8 +77,8 @@ func TestBuildRecurringListQueryEverySortKeyAndDirection(t *testing.T) {
 				stmt, err := repository.BuildRecurringListQuery(q)
 				require.NoError(t, err)
 
-				require.Contains(t, stmt.SQL, "ORDER BY "+want.expr+" "+dir+", r.id "+dir)
-				require.Contains(t, stmt.SQL, "("+want.expr+", r.id) "+cmp+" (($")
+				require.Contains(t, stmt.SQL, "ORDER BY "+sortKeySQL(want.expr, want.cast)+" "+dir+", r.id "+dir)
+				require.Contains(t, stmt.SQL, "("+sortKeySQL(want.expr, want.cast)+", r.id) "+cmp+" (($")
 				require.Contains(t, stmt.SQL, "::text)::"+want.cast+", $")
 				require.Contains(t, stmt.SQL, "AS sort_value")
 				requirePlaceholdersMatchArgs(t, stmt)

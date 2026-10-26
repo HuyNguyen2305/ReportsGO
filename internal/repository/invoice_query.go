@@ -97,7 +97,7 @@ func BuildInvoiceListQuery(q model.InvoiceQuery) (Statement, error) {
     (i.total * 100)::bigint, (i.discount * 100)::bigint,
     ` + tagsSubquery + ` AS tags,
     pt.name, pt.description, i.status::text, i.signature_status::text,
-    (` + spec.expr + `)::text AS sort_value` +
+    (` + spec.sortText() + `)::text AS sort_value` +
 		invoiceFrom + w.where() + orderAndLimit(invoiceAlias, spec, q.Sort.Desc, limit)
 	return Statement{SQL: sql, Args: w.args}, nil
 }

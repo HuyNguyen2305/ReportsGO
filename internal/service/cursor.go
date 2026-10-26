@@ -18,9 +18,7 @@ import (
 const (
 	// maxCursorLength bounds the encoded cursor before any decoding work is done.
 	maxCursorLength = 4096
-	// maxCursorTextValue bounds a text sort value (lower-cased names, job labels, emails) in characters.
-	maxCursorTextValue = 1000
-	dateLayout         = "2006-01-02"
+	dateLayout      = "2006-01-02"
 	// timestampLayout is how the repository renders a created_at sort value (microseconds, always UTC).
 	timestampLayout = "2006-01-02T15:04:05.000000Z"
 )
@@ -117,7 +115,7 @@ func validateSortValue(kind valueKind, v string) error {
 			return fmt.Errorf("validate cursor amount: %w", err)
 		}
 	default:
-		if !utf8.ValidString(v) || strings.ContainsRune(v, 0) || utf8.RuneCountInString(v) > maxCursorTextValue {
+		if !utf8.ValidString(v) || strings.ContainsRune(v, 0) || utf8.RuneCountInString(v) > model.MaxSortTextLength {
 			return invalidCursor("is not a valid cursor")
 		}
 	}

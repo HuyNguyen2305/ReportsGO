@@ -121,7 +121,7 @@ func TestCursorRejectsInvalidCursors(t *testing.T) {
 		{"amount exponent", encode(`{"k":"total","d":false,"v":"1e3","id":1}`), totalAsc, "not a valid cursor"},
 
 		{"text with NUL", encode(`{"k":"customer","d":false,"v":"a\u0000b","id":1}`), customerAsc, "not a valid cursor"},
-		{"text too long", encode(`{"k":"customer","d":false,"v":"` + strings.Repeat("x", 1001) + `","id":1}`), customerAsc, "not a valid cursor"},
+		{"text too long", encode(`{"k":"customer","d":false,"v":"` + strings.Repeat("x", model.MaxSortTextLength+1) + `","id":1}`), customerAsc, "not a valid cursor"},
 		{"cursor too long", strings.Repeat("A", 4097), customerAsc, "too long"},
 	}
 
@@ -140,8 +140,8 @@ func TestCursorRejectsInvalidCursors(t *testing.T) {
 func TestCursorAcceptsBoundaryValues(t *testing.T) {
 	customerAsc := model.InvoiceSort{Key: model.SortCustomer}
 
-	t.Run("text of exactly 1000 characters", func(t *testing.T) {
-		long := strings.Repeat("é", 1000)
+	t.Run("text of exactly the maximum sort length", func(t *testing.T) {
+		long := strings.Repeat("é", model.MaxSortTextLength)
 		raw := service.EncodeInvoiceCursor(customerAsc, model.InvoiceRow{ID: 1, SortValue: long})
 		got, err := service.DecodeInvoiceCursor(raw, customerAsc)
 		require.NoError(t, err)

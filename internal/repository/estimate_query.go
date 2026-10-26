@@ -79,7 +79,7 @@ func BuildEstimateListQuery(q model.EstimateQuery) (Statement, error) {
 	sql := `SELECT e.id, e.document_number, c.account_number, c.id, c.display_name,
     ph.number, e.billing_email, u.full_name, e.document_date,
     (e.total * 100)::bigint, e.status::text, e.signature_status::text,
-    (` + spec.expr + `)::text AS sort_value` +
+    (` + spec.sortText() + `)::text AS sort_value` +
 		estimateFrom + w.where() + orderAndLimit(estimateAlias, spec, q.Sort.Desc, limit)
 	return Statement{SQL: sql, Args: w.args}, nil
 }

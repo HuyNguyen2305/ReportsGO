@@ -20,6 +20,7 @@ type Statement struct {
 
 // sortSpec is the SQL expression behind a sort key and the type its text form is cast back to for keyset
 // comparison. Expressions never yield NULL, so row comparisons in the keyset condition are always defined.
+// Text keys are ordered and compared on their first model.MaxSortTextLength characters only (see key).
 type sortSpec struct {
 	expr string
 	cast string
@@ -28,12 +29,23 @@ type sortSpec struct {
 	text string
 }
 
+// key returns the SQL that orders and keyset-compares rows for this sort key. Text keys are cut to
+// model.MaxSortTextLength characters: stored text has no length limit, but the cursor that carries the value
+// must stay small and always be accepted again. Ties inside the prefix fall to the row id, so the order stays
+// total and paging stays exact.
+func (s sortSpec) key() string {
+	if s.cast == "text" {
+		return fmt.Sprintf("left(%s, %d)", s.expr, model.MaxSortTextLength)
+	}
+	return s.expr
+}
+
 // sortText returns the SQL for this key's cursor value.
 func (s sortSpec) sortText() string {
 	if s.text != "" {
 		return s.text
 	}
-	return s.expr
+	return s.key()
 }
 
 // Values of billing_documents.parent_type. They are constants, so they are safe to embed in SQL text.
@@ -132,14 +144,14 @@ func applySearchOn(w *whereBuilder, search string, columns ...string) {
 func applyKeyset(w *whereBuilder, alias string, spec sortSpec, desc bool, sortValue string, id int64) {
 	_, cmp := direction(desc)
 	w.add(fmt.Sprintf("(%s, %s.id) %s ((%s::text)::%s, %s::bigint)",
-		spec.expr, alias, cmp, w.arg(sortValue), spec.cast, w.arg(id)))
+		spec.key(), alias, cmp, w.arg(sortValue), spec.cast, w.arg(id)))
 }
 
 // orderAndLimit returns the ORDER BY and LIMIT clauses; ties are broken by id in the same direction.
 // limit is an already registered placeholder.
 func orderAndLimit(alias string, spec sortSpec, desc bool, limit string) string {
 	dir, _ := direction(desc)
-	return "\nORDER BY " + spec.expr + " " + dir + ", " + alias + ".id " + dir + "\nLIMIT " + limit
+	return "\nORDER BY " + spec.key() + " " + dir + ", " + alias + ".id " + dir + "\nLIMIT " + limit
 }
 
 // direction returns the SQL sort direction and the keyset comparison operator that follows it.

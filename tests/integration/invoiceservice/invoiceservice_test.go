@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/require"
 
@@ -119,6 +120,49 @@ func TestPagingThroughTheServicesOwnCursorsReturnsEveryRowExactlyOnce(t *testing
 				require.Equal(t, 5, pages, "24 rows at 5 per page")
 			})
 		}
+	}
+}
+
+// Stored names have no length limit. Customers whose names agree on far more than the sort prefix must still
+// page cleanly one row at a time: every cursor the service issues has to be accepted when it comes back.
+func TestPagingSurvivesVeryLongTextSortValues(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.SeededPool(t)
+	_, err := pool.Exec(ctx, `
+		UPDATE customers SET display_name = repeat('É', 1100) || ' ' || account_number
+		WHERE account_number IN ('63706', '63714', '5001')`)
+	require.NoError(t, err)
+	svc := service.NewInvoiceService(repository.NewInvoiceRepository(pool), func() time.Time { return october21 })
+
+	for _, order := range []string{"asc", "desc"} {
+		t.Run(order, func(t *testing.T) {
+			all, err := svc.List(ctx, service.ListInvoicesParams{Sort: "customer", Order: order, Limit: "200"})
+			require.NoError(t, err)
+			require.Len(t, all.Items, 21)
+
+			longSortValues := 0
+			for _, r := range all.Items {
+				require.LessOrEqual(t, utf8.RuneCountInString(r.SortValue), model.MaxSortTextLength)
+				if utf8.RuneCountInString(r.SortValue) == model.MaxSortTextLength {
+					longSortValues++
+				}
+			}
+			require.Positive(t, longSortValues, "the test data must actually contain over-long names")
+
+			var got []int64
+			cursor := ""
+			for pages := 0; ; pages++ {
+				require.Less(t, pages, 50, "paging must terminate")
+				page, err := svc.List(ctx, service.ListInvoicesParams{Sort: "customer", Order: order, Limit: "1", Cursor: cursor})
+				require.NoError(t, err, "every cursor the service issued must be accepted")
+				got = append(got, ids(page.Items)...)
+				if !page.HasMore {
+					break
+				}
+				cursor = page.NextCursor
+			}
+			require.Equal(t, ids(all.Items), got, "one-row pages must reproduce the full ordered list")
+		})
 	}
 }
 

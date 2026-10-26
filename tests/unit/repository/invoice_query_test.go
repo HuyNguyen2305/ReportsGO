@@ -1,6 +1,7 @@
 package repository_test
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -39,6 +40,33 @@ func defaultQuery() model.InvoiceQuery {
 		Filter: model.InvoiceFilter{Lifecycle: model.LifecycleActive},
 		Sort:   model.InvoiceSort{Key: model.SortDate, Desc: true},
 		Limit:  50,
+	}
+}
+
+// Stored text has no length limit, so text keys must order, compare and report only a bounded prefix; otherwise a
+// very long customer name or address would produce a cursor the API then refuses.
+func TestBuildInvoiceListQueryBoundsTextSortValues(t *testing.T) {
+	textKeys := map[model.InvoiceSortKey]bool{
+		model.SortAccountNumber: true, model.SortInvoiceNumber: true, model.SortCustomer: true, model.SortJob: true,
+		model.SortBillingEmail: true, model.SortStatus: true, model.SortSignatureStatus: true, model.SortPaymentTerms: true,
+	}
+	limit := fmt.Sprintf(", %d)", model.MaxSortTextLength)
+
+	for _, key := range model.InvoiceSortKeys {
+		t.Run(string(key), func(t *testing.T) {
+			q := defaultQuery()
+			q.Sort = model.InvoiceSort{Key: key}
+			q.After = &model.InvoiceCursor{SortValue: "x", ID: 1}
+
+			stmt, err := repository.BuildInvoiceListQuery(q)
+			require.NoError(t, err)
+
+			if textKeys[key] {
+				require.Equal(t, 3, strings.Count(stmt.SQL, limit), "sort_value, keyset condition and ORDER BY are all cut")
+				return
+			}
+			require.NotContains(t, stmt.SQL, "left(", "only text keys are cut")
+		})
 	}
 }
 
@@ -98,7 +126,7 @@ func TestBuildInvoiceListQueryEverySortKeyAndDirection(t *testing.T) {
 				// First page: no cursor.
 				first, err := repository.BuildInvoiceListQuery(q)
 				require.NoError(t, err)
-				require.Contains(t, first.SQL, "ORDER BY "+want.expr)
+				require.Contains(t, first.SQL, "ORDER BY "+sortKeyPrefix(want.expr, want.cast))
 				require.Contains(t, first.SQL, " "+dir+", i.id "+dir+"\nLIMIT")
 				require.NotContains(t, first.SQL, "i.id) "+cmp, "no keyset condition without a cursor")
 				requirePlaceholdersMatchArgs(t, first)
@@ -107,7 +135,7 @@ func TestBuildInvoiceListQueryEverySortKeyAndDirection(t *testing.T) {
 				q.After = &model.InvoiceCursor{SortValue: "cursor-value", ID: 77}
 				next, err := repository.BuildInvoiceListQuery(q)
 				require.NoError(t, err)
-				require.Contains(t, next.SQL, "("+want.expr)
+				require.Contains(t, next.SQL, "("+sortKeyPrefix(want.expr, want.cast))
 				require.Contains(t, next.SQL, ", i.id) "+cmp+" (($1::text)::"+want.cast+", $2::bigint)")
 				require.Equal(t, []any{"cursor-value", int64(77), 51}, next.Args)
 				requirePlaceholdersMatchArgs(t, next)
