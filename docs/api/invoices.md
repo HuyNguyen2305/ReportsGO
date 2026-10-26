@@ -65,6 +65,8 @@ case-insensitive; blanks and duplicates are ignored.
 - `job`, `billing_email` and `payment_terms` are `null` when the invoice has none; `tags` is always an array.
 - `summary` totals the **whole filtered set**, not just this page, and is only present on the **first page**
   (when no `cursor` is sent). It is `null` on later pages.
+  `total` and `discount` include every invoice in the filtered set, void and draft invoices too; add
+  `status=sent,paid` (or another `status` filter) to leave them out.
   `outstanding` is the unpaid balance (`total` minus paid payments, never below zero) of the filtered invoices
   whose status is `sent`.
 - `range` is the date range actually applied, so a client can show the defaulted month. An open end is `null`.

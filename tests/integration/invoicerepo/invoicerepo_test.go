@@ -443,6 +443,27 @@ func TestSummary(t *testing.T) {
 		}
 	})
 
+	t.Run("totals include void and draft invoices unless a status filter leaves them out", func(t *testing.T) {
+		all, err := e.repo.Summary(ctx, octoberActive())
+		require.NoError(t, err)
+
+		f := octoberActive()
+		f.Statuses = []model.InvoiceStatus{model.InvoiceVoid}
+		void, err := e.repo.Summary(ctx, f)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, void.Count)
+		require.Equal(t, model.Money(6500), void.Total, "invoice 85007 is void")
+
+		f.Statuses = []model.InvoiceStatus{model.InvoiceDraft, model.InvoiceSent, model.InvoicePaid}
+		live, err := e.repo.Summary(ctx, f)
+		require.NoError(t, err)
+
+		require.Equal(t, all.Count, live.Count+void.Count)
+		require.Equal(t, all.Total, live.Total+void.Total, "the default total counts the void invoice")
+		require.Equal(t, all.Discount, live.Discount+void.Discount)
+		require.Equal(t, all.Outstanding, live.Outstanding, "void invoices are never outstanding")
+	})
+
 	t.Run("only live, paid payments reduce the outstanding balance", func(t *testing.T) {
 		exec := func(sql string) {
 			_, err := e.pool.Exec(ctx, sql)
