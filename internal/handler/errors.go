@@ -7,14 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"reflect"
-	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -61,6 +58,19 @@ func RespondError(c *gin.Context, logger *slog.Logger, err error) {
 	c.AbortWithStatusJSON(status, dto.ErrorResponse{Error: body})
 }
 
+// BindError marks an error that came from reading the client's request (decoding a body, parsing a query
+// string). Only errors carrying this mark are reported as 400; the same parse error raised deeper in the
+// stack is a server fault, not bad input.
+type BindError struct{ Err error }
+
+func (e *BindError) Error() string { return "bind request: " + e.Err.Error() }
+func (e *BindError) Unwrap() error { return e.Err }
+
+// RespondBindError reports a failed ShouldBind* call: a 400 built from the binding error.
+func RespondBindError(c *gin.Context, logger *slog.Logger, err error) {
+	RespondError(c, logger, &BindError{Err: err})
+}
+
 // WriteError aborts with a fixed status and code, for responses that do not come from an error value.
 func WriteError(c *gin.Context, status int, code, message string) {
 	c.AbortWithStatusJSON(status, dto.ErrorResponse{Error: dto.ErrorBody{
@@ -74,10 +84,8 @@ func mapError(err error) (int, dto.ErrorBody) {
 	var (
 		validationErrs validator.ValidationErrors
 		invalidInput   *model.InvalidInputError
-		syntaxErr      *json.SyntaxError
 		typeErr        *json.UnmarshalTypeError
-		numErr         *strconv.NumError
-		timeErr        *time.ParseError
+		bindErr        *BindError
 		pgErr          *pgconn.PgError
 	)
 
@@ -97,8 +105,7 @@ func mapError(err error) (int, dto.ErrorBody) {
 			Details: []dto.ErrorDetail{{Field: typeErr.Field, Message: "must be of type " + typeErr.Type.String()}},
 		}
 
-	case errors.As(err, &syntaxErr), errors.As(err, &numErr), errors.As(err, &timeErr),
-		errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
+	case errors.As(err, &bindErr):
 		return http.StatusBadRequest, dto.ErrorBody{Code: "invalid_request", Message: "request is malformed"}
 
 	case errors.As(err, &invalidInput):

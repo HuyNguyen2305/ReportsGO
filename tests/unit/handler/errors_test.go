@@ -58,15 +58,21 @@ func TestRespondErrorMapsErrorsToStatusAndCode(t *testing.T) {
 			http.StatusInternalServerError, "internal_error", nil,
 		},
 		{"canceled", fmt.Errorf("query: %w", context.Canceled), 499, "client_closed_request", nil},
-		{"json syntax error", syntaxErr, http.StatusBadRequest, "invalid_request", nil},
+		{"json syntax error from binding", &handler.BindError{Err: syntaxErr}, http.StatusBadRequest, "invalid_request", nil},
 		{
 			"json type error", typeErr, http.StatusBadRequest, "invalid_request",
 			[]dto.ErrorDetail{{Field: "N", Message: "must be of type int"}},
 		},
-		{"empty body", io.EOF, http.StatusBadRequest, "invalid_request", nil},
-		{"truncated body", io.ErrUnexpectedEOF, http.StatusBadRequest, "invalid_request", nil},
-		{"number parse error", numErr, http.StatusBadRequest, "invalid_request", nil},
-		{"time parse error", timeErr, http.StatusBadRequest, "invalid_request", nil},
+		{"empty body from binding", &handler.BindError{Err: io.EOF}, http.StatusBadRequest, "invalid_request", nil},
+		{"truncated body from binding", &handler.BindError{Err: io.ErrUnexpectedEOF}, http.StatusBadRequest, "invalid_request", nil},
+		{"number parse error from binding", &handler.BindError{Err: numErr}, http.StatusBadRequest, "invalid_request", nil},
+		{"time parse error from binding", &handler.BindError{Err: timeErr}, http.StatusBadRequest, "invalid_request", nil},
+		{"wrapped bind error", fmt.Errorf("list: %w", &handler.BindError{Err: numErr}), http.StatusBadRequest, "invalid_request", nil},
+		{"json syntax error outside binding", syntaxErr, http.StatusInternalServerError, "internal_error", nil},
+		{"empty read outside binding", io.EOF, http.StatusInternalServerError, "internal_error", nil},
+		{"truncated read outside binding", io.ErrUnexpectedEOF, http.StatusInternalServerError, "internal_error", nil},
+		{"number parse error outside binding", numErr, http.StatusInternalServerError, "internal_error", nil},
+		{"time parse error outside binding", timeErr, http.StatusInternalServerError, "internal_error", nil},
 		{"unknown error", errors.New("pq: connection refused"), http.StatusInternalServerError, "internal_error", nil},
 	}
 
@@ -181,7 +187,7 @@ func bindingRouter() *gin.Engine {
 			rg.POST("/create", func(c *gin.Context) {
 				var req createRequest
 				if err := c.ShouldBindJSON(&req); err != nil {
-					handler.RespondError(c, logger, err)
+					handler.RespondBindError(c, logger, err)
 					return
 				}
 				c.Status(http.StatusNoContent)
@@ -189,7 +195,7 @@ func bindingRouter() *gin.Engine {
 			rg.GET("/list", func(c *gin.Context) {
 				var q listQuery
 				if err := c.ShouldBindQuery(&q); err != nil {
-					handler.RespondError(c, logger, err)
+					handler.RespondBindError(c, logger, err)
 					return
 				}
 				c.Status(http.StatusNoContent)
