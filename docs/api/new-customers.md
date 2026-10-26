@@ -7,6 +7,7 @@ digits (`"2026-10-22T08:15:30.123456Z"`); dates are `YYYY-MM-DD`.
 It works like the [New Jobs](new-jobs.md) report: the date is a creation timestamp (shown in UTC, filtered by day in `APP_TIMEZONE`) and the filter choices
 come from the database. Customers have no status and no Active / Deleted tab, so there are no `status` or
 `lifecycle` parameters. The summary is a count only, because customers have no monetary value to total.
+The screenshot's Top Note, Service Address, Job Created Date and Completed Jobs columns are not part of this report.
 
 | Endpoint | Purpose |
 |---|---|

@@ -64,3 +64,4 @@ document_types ┘              ├─< documents
 - Enum values not visible in the screenshots (e.g. estimate statuses `accepted`/`declined`, `document_status`, `recurring_status.paused`).
 - `billing_documents.frequency_label` is stored text, separate from `recurring_invoices`.
 - Credits are inferred from "Credit" rows on the Payments report (no Credits screenshot).
+- New Customers: Top Note, Service Address, Job Created Date and Completed Jobs are in the screenshot and mapped above, but the report does not return them. It covers the customer name, account number, email, phone, source and created date. Adding them would be a feature: a customer can have several service locations and several jobs, so each column needs a rule (first, latest or count).
