@@ -67,6 +67,36 @@ func TestLoadParsesEveryVariable(t *testing.T) {
 	require.Equal(t, slog.LevelDebug, cfg.SlogLevel())
 }
 
+func TestLoadDefaultMinConnsNeverExceedsMaxConns(t *testing.T) {
+	tests := []struct {
+		name         string
+		env          map[string]string
+		wantMax      int32
+		wantMin      int32
+		wantErrorMsg string
+	}{
+		{"max below the default min", map[string]string{"DB_MAX_CONNS": "1"}, 1, 1, ""},
+		{"max equal to the default min", map[string]string{"DB_MAX_CONNS": "2"}, 2, 2, ""},
+		{"max above the default min", map[string]string{"DB_MAX_CONNS": "5"}, 5, 2, ""},
+		{"explicit min is kept", map[string]string{"DB_MAX_CONNS": "5", "DB_MIN_CONNS": "0"}, 5, 0, ""},
+		{"explicit min above max still fails", map[string]string{"DB_MAX_CONNS": "2", "DB_MIN_CONNS": "3"}, 0, 0, "DB_MIN_CONNS: must not exceed DB_MAX_CONNS"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.env["DATABASE_URL"] = validURL
+			cfg, err := config.Load(lookupFrom(tt.env))
+			if tt.wantErrorMsg != "" {
+				require.ErrorContains(t, err, tt.wantErrorMsg)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.wantMax, cfg.DBMaxConns)
+			require.Equal(t, tt.wantMin, cfg.DBMinConns)
+		})
+	}
+}
+
 func TestLoadRejectsInvalidValues(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -137,4 +167,31 @@ func TestLogValueRedactsPassword(t *testing.T) {
 	require.NotContains(t, out, "s3cret")
 	require.Contains(t, out, "xxxxx")
 	require.Contains(t, out, "localhost:5432/Reports")
+}
+
+func TestLogValueRedactsEverySecretForm(t *testing.T) {
+	tests := []struct {
+		name         string
+		url          string
+		wantContains []string
+	}{
+		{"userinfo password", "postgres://user:s3cret@localhost:5432/db", []string{"user:xxxxx@localhost:5432/db"}},
+		{"password query parameter", "postgres://user@localhost:5432/db?password=s3cret&sslmode=disable", []string{"localhost:5432/db", "sslmode=disable", "password=xxxxx"}},
+		{"both forms", "postgres://user:s3cret@localhost/db?password=s3cret", []string{"user:xxxxx@localhost/db"}},
+		{"keyword connection string", "host=localhost user=app password=s3cret dbname=db", []string{"<redacted>"}},
+		{"unparseable", "postgres://us er:s3cret@host:bad", []string{"<invalid>"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			slog.New(slog.NewTextHandler(&buf, nil)).Info("config", "config", config.Config{DatabaseURL: tt.url})
+
+			out := buf.String()
+			require.NotContains(t, out, "s3cret")
+			for _, want := range tt.wantContains {
+				require.Contains(t, out, want)
+			}
+		})
+	}
 }

@@ -19,6 +19,9 @@ const (
 	EnvProd = "prod"
 )
 
+// defaultMinConns is the pool's minimum size when DB_MIN_CONNS is not set and DB_MAX_CONNS allows it.
+const defaultMinConns = 2
+
 // Config holds every setting the API reads from the environment.
 type Config struct {
 	Env                string
@@ -48,12 +51,16 @@ type Lookup func(key string) (string, bool)
 func Load(lookup Lookup) (Config, error) {
 	l := loader{lookup: lookup}
 
+	// The minimum pool size defaults to defaultMinConns, but never above the maximum, so setting only
+	// DB_MAX_CONNS to a small value is not rejected over a minimum the operator never chose.
+	maxConns := l.positiveInt32("DB_MAX_CONNS", 10)
+
 	cfg := Config{
 		Env:                l.oneOf("APP_ENV", EnvDev, EnvDev, EnvProd),
 		HTTPAddr:           l.str("HTTP_ADDR", ":8080"),
 		DatabaseURL:        l.required("DATABASE_URL"),
-		DBMaxConns:         l.positiveInt32("DB_MAX_CONNS", 10),
-		DBMinConns:         l.nonNegativeInt32("DB_MIN_CONNS", 2),
+		DBMaxConns:         maxConns,
+		DBMinConns:         l.nonNegativeInt32("DB_MIN_CONNS", min(defaultMinConns, maxConns)),
 		DBStatementTimeout: l.duration("DB_STATEMENT_TIMEOUT", 5*time.Second),
 		ShutdownTimeout:    l.duration("SHUTDOWN_TIMEOUT", 15*time.Second),
 		CORSAllowedOrigins: l.list("CORS_ALLOWED_ORIGINS"),
@@ -176,10 +183,23 @@ func checkOrigin(origin string) string {
 	return ""
 }
 
+// redactedValue replaces secrets in logged output; it matches what url.URL.Redacted uses for a password.
+const redactedValue = "xxxxx"
+
+// redactURL hides every secret in a database URL: the userinfo password and a password query parameter
+// (both of which pgx accepts). A value that is not a URL, such as a "host=... password=..." connection
+// string, cannot be redacted piecemeal, so none of it is logged.
 func redactURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return "<invalid>"
+	}
+	if u.Scheme == "" {
+		return "<redacted>"
+	}
+	if q := u.Query(); q.Has("password") {
+		q.Set("password", redactedValue)
+		u.RawQuery = q.Encode()
 	}
 	return u.Redacted()
 }
