@@ -32,3 +32,8 @@ ORDER BY full_name, id;
 SELECT id, name, rate::text AS rate, active
 FROM tax_rates
 ORDER BY name, id;
+
+-- name: ListJobTags :many
+SELECT id, name
+FROM job_tags
+ORDER BY name, id;

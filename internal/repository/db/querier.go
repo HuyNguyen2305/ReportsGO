@@ -11,6 +11,7 @@ import (
 type Querier interface {
 	ListDocumentTypes(ctx context.Context) ([]DocumentType, error)
 	ListInvoiceTags(ctx context.Context) ([]InvoiceTag, error)
+	ListJobTags(ctx context.Context) ([]JobTag, error)
 	ListLeadSources(ctx context.Context) ([]LeadSource, error)
 	ListPaymentTerms(ctx context.Context) ([]PaymentTerm, error)
 	ListServiceTypes(ctx context.Context) ([]ServiceType, error)

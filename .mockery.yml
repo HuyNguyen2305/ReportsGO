@@ -24,6 +24,7 @@ packages:
       SalesTaxRepository:
       AccountsAgingRepository:
       NoActiveJobsRepository:
+      ServiceLookupRepository:
   reportsgo/internal/handler:
     interfaces:
       Pinger:
@@ -40,6 +41,7 @@ packages:
       SalesTaxService:
       AccountsAgingService:
       NoActiveJobsService:
+      ServiceLookupService:
   github.com/jackc/pgx/v5:
     interfaces:
       Tx:
