@@ -57,6 +57,50 @@ func (ns NullBillingStatus) Value() (driver.Value, error) {
 	return string(ns.BillingStatus), nil
 }
 
+type CustomerStatus string
+
+const (
+	CustomerStatusActive   CustomerStatus = "active"
+	CustomerStatusInactive CustomerStatus = "inactive"
+	CustomerStatusLead     CustomerStatus = "lead"
+	CustomerStatusArchived CustomerStatus = "archived"
+)
+
+func (e *CustomerStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = CustomerStatus(s)
+	case string:
+		*e = CustomerStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for CustomerStatus: %T", src)
+	}
+	return nil
+}
+
+type NullCustomerStatus struct {
+	CustomerStatus CustomerStatus
+	Valid          bool // Valid is true if CustomerStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullCustomerStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.CustomerStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.CustomerStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullCustomerStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.CustomerStatus), nil
+}
+
 type DocumentParentType string
 
 const (
@@ -480,6 +524,16 @@ type Credit struct {
 	CreatedAt    pgtype.Timestamptz
 }
 
+type CreditApplication struct {
+	ID                int64
+	CreditID          int64
+	InvoiceID         int64
+	InvoiceParentType DocumentParentType
+	Amount            pgtype.Numeric
+	AppliedOn         pgtype.Date
+	CreatedAt         pgtype.Timestamptz
+}
+
 type Customer struct {
 	ID            int64
 	AccountNumber string
@@ -491,6 +545,18 @@ type Customer struct {
 	LeadSourceID  pgtype.Int8
 	TopNote       string
 	CreatedAt     pgtype.Timestamptz
+	Status        CustomerStatus
+}
+
+type CustomerPaymentMethod struct {
+	ID         int64
+	CustomerID int64
+	Processor  string
+	Brand      string
+	Last4      string
+	ExpMonth   int16
+	ExpYear    int16
+	IsDefault  bool
 }
 
 type CustomerPhone struct {
@@ -516,6 +582,18 @@ type DocumentType struct {
 	Name string
 }
 
+type InvoiceItem struct {
+	ID                int64
+	InvoiceID         int64
+	InvoiceParentType DocumentParentType
+	ItemID            int64
+	Description       string
+	Quantity          pgtype.Numeric
+	UnitPrice         pgtype.Numeric
+	LineTotal         pgtype.Numeric
+	Taxable           bool
+}
+
 type InvoiceTag struct {
 	ID   int64
 	Name string
@@ -525,6 +603,22 @@ type InvoiceTagLink struct {
 	InvoiceID         int64
 	TagID             int64
 	InvoiceParentType DocumentParentType
+}
+
+type InvoiceTaxLine struct {
+	InvoiceID         int64
+	InvoiceParentType DocumentParentType
+	TaxRateID         int64
+	TaxableAmount     pgtype.Numeric
+	TaxAmount         pgtype.Numeric
+	SurchargeAmount   pgtype.Numeric
+}
+
+type Item struct {
+	ID        int64
+	Name      string
+	UnitPrice pgtype.Numeric
+	Active    bool
 }
 
 type Job struct {
@@ -537,6 +631,20 @@ type Job struct {
 	ScheduledAt   pgtype.Timestamptz
 	InvoiceValue  pgtype.Numeric
 	CreatedAt     pgtype.Timestamptz
+	AssignedTo    pgtype.Int8
+	DeletedAt     pgtype.Timestamptz
+	InWorkPool    bool
+	TaxAmount     pgtype.Numeric
+}
+
+type JobTag struct {
+	ID   int64
+	Name string
+}
+
+type JobTagLink struct {
+	JobID int64
+	TagID int64
 }
 
 type LeadSource struct {
@@ -558,6 +666,7 @@ type Payment struct {
 	CreatedAt         pgtype.Timestamptz
 	DeletedAt         pgtype.Timestamptz
 	InvoiceParentType NullDocumentParentType
+	ReceivedBy        pgtype.Int8
 }
 
 type PaymentTerm struct {
@@ -594,11 +703,19 @@ type ServiceLocation struct {
 	State        string
 	PostalCode   string
 	CreatedAt    pgtype.Timestamptz
+	County       string
 }
 
 type ServiceType struct {
 	ID   int64
 	Name string
+}
+
+type TaxRate struct {
+	ID     int64
+	Name   string
+	Rate   pgtype.Numeric
+	Active bool
 }
 
 type User struct {

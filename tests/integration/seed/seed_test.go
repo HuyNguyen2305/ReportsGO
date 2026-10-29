@@ -46,6 +46,89 @@ func TestSeedIsIdempotentAndPopulatesEveryTable(t *testing.T) {
 	require.Equal(t, 19, first["documents"], "15 original + sent + 2 signed + 1 deleted")
 	require.Equal(t, 17, first["payments"], "12 original + 5 in other states")
 	require.Equal(t, 8, first["credits"], "2 original + 6 for the Credits report")
+	require.Equal(t, 10, first["tax_rates"], "the ten taxes of the Sales Tax Summary screenshot")
+	require.Equal(t, 13, first["invoice_tax_lines"])
+	require.Equal(t, 7, first["items"], "5 service types + 2 extra items")
+	require.Equal(t, 28, first["invoice_items"], "24 invoices + 4 extra lines")
+	require.Equal(t, 8, first["customer_payment_methods"])
+	require.Equal(t, 2, first["credit_applications"])
+	require.Equal(t, 4, first["job_tags"])
+}
+
+func TestSeededTaxAndCreditDataIsConsistent(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.MigratedPool(t)
+	require.NoError(t, seed.Run(ctx, pool, loadScript(t)))
+
+	t.Run("an invoice's tax never exceeds its total", func(t *testing.T) {
+		var bad int
+		require.NoError(t, pool.QueryRow(ctx,
+			`SELECT count(*) FROM (
+			   SELECT i.id FROM billing_documents i JOIN invoice_tax_lines l ON l.invoice_id = i.id
+			   GROUP BY i.id, i.total HAVING sum(l.tax_amount) > i.total) x`).Scan(&bad))
+		require.Zero(t, bad)
+	})
+
+	t.Run("tax amount follows the rate", func(t *testing.T) {
+		var bad int
+		require.NoError(t, pool.QueryRow(ctx,
+			`SELECT count(*) FROM invoice_tax_lines l JOIN tax_rates r ON r.id = l.tax_rate_id
+			  WHERE l.tax_amount <> round(l.taxable_amount * r.rate / 100, 2)`).Scan(&bad))
+		require.Zero(t, bad)
+	})
+
+	t.Run("applied credit never exceeds the credit", func(t *testing.T) {
+		var bad int
+		require.NoError(t, pool.QueryRow(ctx,
+			`SELECT count(*) FROM (
+			   SELECT c.id FROM credits c JOIN credit_applications a ON a.credit_id = c.id
+			   GROUP BY c.id, c.amount HAVING sum(a.amount) > c.amount) x`).Scan(&bad))
+		require.Zero(t, bad)
+	})
+
+	t.Run("available credit of the first seeded customer", func(t *testing.T) {
+		var available []string
+		rows, err := pool.Query(ctx,
+			`SELECT (c.amount - coalesce(sum(a.amount), 0))::text FROM credits c
+			   LEFT JOIN credit_applications a ON a.credit_id = c.id
+			   JOIN customers cu ON cu.id = c.customer_id AND cu.account_number = '63706'
+			  GROUP BY c.id, c.amount ORDER BY c.amount`)
+		require.NoError(t, err)
+		defer rows.Close()
+		for rows.Next() {
+			var s string
+			require.NoError(t, rows.Scan(&s))
+			available = append(available, s)
+		}
+		require.NoError(t, rows.Err())
+		require.Equal(t, []string{"70.00", "180.00"}, available)
+	})
+
+	t.Run("customers have every status the reports filter on", func(t *testing.T) {
+		var n int
+		require.NoError(t, pool.QueryRow(ctx, `SELECT count(DISTINCT status) FROM customers`).Scan(&n))
+		require.Equal(t, 4, n)
+	})
+
+	t.Run("each job tab has jobs", func(t *testing.T) {
+		var active, pool_, deleted int
+		require.NoError(t, pool.QueryRow(ctx,
+			`SELECT count(*) FILTER (WHERE deleted_at IS NULL AND NOT in_work_pool),
+			        count(*) FILTER (WHERE in_work_pool),
+			        count(*) FILTER (WHERE deleted_at IS NOT NULL) FROM jobs`).Scan(&active, &pool_, &deleted))
+		require.Positive(t, active)
+		require.Positive(t, pool_)
+		require.Positive(t, deleted)
+	})
+
+	t.Run("only cash, check and other payments have a staff member", func(t *testing.T) {
+		var bad int
+		require.NoError(t, pool.QueryRow(ctx,
+			`SELECT count(*) FROM payments
+			  WHERE (method_type = 'card' AND received_by IS NOT NULL)
+			     OR (invoice_id IS NOT NULL AND method_type <> 'card' AND received_by IS NULL)`).Scan(&bad))
+		require.Zero(t, bad)
+	})
 }
 
 func TestSeedRollsBackOnError(t *testing.T) {

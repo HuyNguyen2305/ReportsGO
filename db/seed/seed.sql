@@ -3,8 +3,9 @@
 -- Rows reference each other by natural keys (account/invoice/estimate numbers),
 -- so the script does not depend on identity values.
 
-TRUNCATE payments, credits, documents, invoice_tag_links, recurring_invoices,
-         billing_documents, jobs, service_locations, customer_phones, customers,
+TRUNCATE payments, credit_applications, credits, documents, invoice_tag_links, invoice_tax_lines, invoice_items,
+         recurring_invoices, billing_documents, job_tag_links, jobs, service_locations, customer_payment_methods,
+         customer_phones, customers, tax_rates, items, job_tags,
          document_types, invoice_tags, payment_terms, service_types, lead_sources, users
     RESTART IDENTITY CASCADE;
 
@@ -424,3 +425,129 @@ FROM (VALUES
 ) AS v(n, acct, number)
 JOIN customers c ON c.account_number = v.acct
 ORDER BY v.n;
+
+-- Tax, items, staff, statuses, cards and credit use ---------------------------------------------------------
+-- Everything below only fills the columns and tables added by migrations 000013 - 000016, so no row count of the
+-- data above changes and the earlier reports are unaffected. The figures are plausible for October 2026, not an
+-- exact copy of the screenshots.
+
+INSERT INTO tax_rates (name, rate) VALUES
+    ('VAT', 10), ('VN', 30), ('d12', 12), ('VAT2', 15), ('d11', 15),
+    ('tAAA', 23), ('Tax 32', 0), ('test 2', 2), ('Test', 23), ('US', 30);
+
+-- One tax line per tax per invoice; tax_amount = taxable_amount * rate / 100. The surcharge sits on one invoice.
+INSERT INTO invoice_tax_lines (invoice_id, tax_rate_id, taxable_amount, tax_amount, surcharge_amount)
+SELECT i.id, tr.id, v.taxable, round(v.taxable * tr.rate / 100, 2), v.surcharge
+FROM (VALUES
+    ('85009', 'VAT', 100.00, 2.92),
+    ('85009', 'd12',  40.00, 0.00),
+    ('85004', 'VN',  100.00, 0.00),
+    ('85010', 'd12',  17.50, 0.00),
+    ('85011', 'VAT',  60.00, 0.00),
+    ('85005', 'VN',  120.00, 0.00),
+    ('85000', 'VAT',  65.00, 0.00),
+    ('84985', 'VAT',  65.00, 0.00),
+    ('84979', 'VAT',  65.00, 0.00),
+    ('84975', 'VAT',  65.00, 0.00),
+    ('85031', 'VAT',  95.00, 0.00),
+    ('85032', 'd12',  80.00, 0.00),
+    ('85033', 'VN',   99.00, 0.00)
+) AS v(num, tax, taxable, surcharge)
+JOIN billing_documents i ON i.parent_type = 'invoice' AND i.document_number = v.num
+JOIN tax_rates tr        ON tr.name = v.tax;
+
+-- One catalog item per service type, priced at the highest job value of that service.
+INSERT INTO items (name, unit_price)
+SELECT st.name, coalesce(max(j.invoice_value), 0)
+FROM service_types st
+LEFT JOIN jobs j ON j.service_type_id = st.id
+GROUP BY st.name;
+INSERT INTO items (name, unit_price) VALUES ('Chemical Treatment', 25.00), ('Travel Fee', 10.00);
+
+-- Every invoice gets one line for the service of its job (Bi-Monthly Service when it has no job), and the two
+-- extra items are added to a few paid invoices, so By Item has more than one row per invoice.
+INSERT INTO invoice_items (invoice_id, item_id, description, quantity, unit_price, line_total, taxable)
+SELECT i.id, it.id, it.name, 1, i.total, i.total, true
+FROM billing_documents i
+LEFT JOIN jobs j          ON j.id = i.job_id
+LEFT JOIN service_types st ON st.id = j.service_type_id
+JOIN items it             ON it.name = coalesce(st.name, 'Bi-Monthly Service')
+WHERE i.parent_type = 'invoice';
+
+INSERT INTO invoice_items (invoice_id, item_id, description, quantity, unit_price, line_total, taxable)
+SELECT i.id, it.id, it.name, v.qty, it.unit_price, round(v.qty * it.unit_price, 2), v.taxable
+FROM (VALUES
+    ('85009', 'Chemical Treatment', 2, true),
+    ('85004', 'Chemical Treatment', 1, true),
+    ('85005', 'Travel Fee',         1, false),
+    ('85000', 'Travel Fee',         2, false)
+) AS v(num, item, qty, taxable)
+JOIN billing_documents i ON i.parent_type = 'invoice' AND i.document_number = v.num
+JOIN items it            ON it.name = v.item;
+
+-- Customer statuses (all others stay 'active').
+UPDATE customers SET status = 'inactive' WHERE account_number IN ('63716', '63717');
+UPDATE customers SET status = 'lead'     WHERE account_number = '63730';
+UPDATE customers SET status = 'archived' WHERE account_number = '63702';
+
+-- Saved cards for the Accounts Aging report; the same last four may appear twice with different expiries.
+INSERT INTO customer_payment_methods (customer_id, processor, brand, last4, exp_month, exp_year, is_default)
+SELECT c.id, v.processor, v.brand, v.last4, v.exp_month, v.exp_year, v.is_default
+FROM (VALUES
+    ('63706', 'stripe', 'Visa',       '3222', 12, 2032, true),
+    ('63706', 'stripe', 'Visa',       '4242', 12, 2032, false),
+    ('63706', 'stripe', 'Visa',       '3222',  2, 2034, false),
+    ('5002',  'stripe', 'Visa',       '4242',  4, 2043, true),
+    ('5002',  'stripe', 'Mastercard', '0005', 12, 2032, false),
+    ('5002',  'stripe', 'Visa',       '5556',  2, 2034, false),
+    ('63714', 'stripe', 'Visa',       '4242', 12, 2033, true),
+    ('63733', 'square', 'Visa',       '0009', 12, 2032, true)
+) AS v(acct, processor, brand, last4, exp_month, exp_year, is_default)
+JOIN customers c ON c.account_number = v.acct;
+
+-- Credits used against invoices: 63706's 100.00 and 200.00 credits pay 30.00 and 20.00 of invoice 85032, so their
+-- available credit is 70.00 and 180.00.
+INSERT INTO credit_applications (credit_id, invoice_id, amount, applied_on)
+SELECT cr.id, i.id, v.amount, v.applied_on::date
+FROM (VALUES
+    ('63706', 100.00, '85032', 30.00, '2026-10-22'),
+    ('63706', 200.00, '85032', 20.00, '2026-10-25')
+) AS v(acct, credit_amount, num, amount, applied_on)
+JOIN customers c         ON c.account_number = v.acct
+JOIN credits cr          ON cr.customer_id = c.id AND cr.amount = v.credit_amount
+JOIN billing_documents i ON i.parent_type = 'invoice' AND i.document_number = v.num;
+
+-- Staff who took the payment: cash and check payments only; card payments are online and have none.
+UPDATE payments p
+SET received_by = (SELECT u.id FROM users u ORDER BY u.id OFFSET (p.id % 2) LIMIT 1)
+WHERE p.invoice_id IS NOT NULL AND p.method_type IN ('cash', 'check', 'other');
+
+-- Counties.
+UPDATE service_locations SET county = 'Bexar County'  WHERE city = 'San Antonio';
+UPDATE service_locations SET county = 'Travis County' WHERE city = 'Austin';
+UPDATE service_locations SET county = 'Miami-Dade County' WHERE city = 'Miami';
+
+-- Jobs: most are assigned to one of the two staff, a few have tax, two sit in the work pool and one is deleted.
+UPDATE jobs j
+SET assigned_to = (SELECT u.id FROM users u ORDER BY u.id OFFSET (j.id % 2) LIMIT 1)
+WHERE j.id % 5 <> 0;
+
+UPDATE jobs j SET tax_amount = 14.30
+FROM service_types st WHERE st.id = j.service_type_id AND st.name = 'Full service';
+UPDATE jobs j SET tax_amount = 0.03
+FROM service_types st WHERE st.id = j.service_type_id AND st.name = 'Call Back Service';
+
+UPDATE jobs j SET in_work_pool = true
+FROM customers c
+WHERE c.id = j.customer_id AND c.account_number = '63689' AND j.status = 'unconfirmed';
+
+UPDATE jobs SET deleted_at = '2026-10-14 09:00:00+00'
+WHERE id = (SELECT j.id FROM jobs j WHERE j.status = 'cancelled' ORDER BY j.id LIMIT 1);
+
+INSERT INTO job_tags (name) VALUES ('VIP'), ('Commercial'), ('Residential'), ('Follow Up');
+
+-- Tags are spread over the jobs deterministically; a job may have several.
+INSERT INTO job_tag_links (job_id, tag_id)
+SELECT j.id, t.id
+FROM jobs j
+JOIN job_tags t ON (j.id + t.id) % 4 = 0;
