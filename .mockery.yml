@@ -22,6 +22,7 @@ packages:
       TotalSalesRepository:
       PaymentsCollectedRepository:
       SalesTaxRepository:
+      AccountsAgingRepository:
   reportsgo/internal/handler:
     interfaces:
       Pinger:
@@ -36,6 +37,7 @@ packages:
       TotalSalesService:
       PaymentsCollectedService:
       SalesTaxService:
+      AccountsAgingService:
   github.com/jackc/pgx/v5:
     interfaces:
       Tx:
