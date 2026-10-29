@@ -22,3 +22,8 @@ ORDER BY name, id;
 SELECT id, name
 FROM lead_sources
 ORDER BY name, id;
+
+-- name: ListStaff :many
+SELECT id, full_name
+FROM users
+ORDER BY full_name, id;

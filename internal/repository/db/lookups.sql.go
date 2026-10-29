@@ -138,3 +138,34 @@ func (q *Queries) ListServiceTypes(ctx context.Context) ([]ServiceType, error) {
 	}
 	return items, nil
 }
+
+const listStaff = `-- name: ListStaff :many
+SELECT id, full_name
+FROM users
+ORDER BY full_name, id
+`
+
+type ListStaffRow struct {
+	ID       int64
+	FullName string
+}
+
+func (q *Queries) ListStaff(ctx context.Context) ([]ListStaffRow, error) {
+	rows, err := q.db.Query(ctx, listStaff)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListStaffRow{}
+	for rows.Next() {
+		var i ListStaffRow
+		if err := rows.Scan(&i.ID, &i.FullName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

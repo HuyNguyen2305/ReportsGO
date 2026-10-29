@@ -31,19 +31,24 @@ func toPaymentListResponse(res *service.ListPaymentsResult) dto.PaymentListRespo
 	return out
 }
 
-func toPaymentResponse(r model.PaymentRow) dto.PaymentResponse {
-	paymentFor := dto.PaymentForResponse{Type: "credit", Label: creditLabel}
-	if r.InvoiceID != nil {
-		paymentFor = dto.PaymentForResponse{Type: "invoice", InvoiceID: r.InvoiceID}
-		if r.InvoiceNumber != nil {
-			paymentFor.Label = *r.InvoiceNumber
-		}
+// toPaymentForResponse is the "Payment For" cell: an invoice (labelled with its number) or a credit.
+func toPaymentForResponse(invoiceID *int64, invoiceNumber *string) dto.PaymentForResponse {
+	if invoiceID == nil {
+		return dto.PaymentForResponse{Type: "credit", Label: creditLabel}
 	}
+	out := dto.PaymentForResponse{Type: "invoice", InvoiceID: invoiceID}
+	if invoiceNumber != nil {
+		out.Label = *invoiceNumber
+	}
+	return out
+}
+
+func toPaymentResponse(r model.PaymentRow) dto.PaymentResponse {
 	return dto.PaymentResponse{
 		ID:            r.ID,
 		Customer:      dto.CustomerRef{ID: r.CustomerID, Name: r.CustomerName},
 		AccountNumber: r.AccountNumber,
-		PaymentFor:    paymentFor,
+		PaymentFor:    toPaymentForResponse(r.InvoiceID, r.InvoiceNumber),
 		Method:        dto.PaymentMethodResponse{Type: string(r.Method), CardBrand: r.CardBrand, CardLast4: r.CardLast4},
 		Amount:        r.Amount.String(),
 		PaymentDate:   r.Date.Format(dateLayout),
