@@ -169,3 +169,41 @@ func (q *Queries) ListStaff(ctx context.Context) ([]ListStaffRow, error) {
 	}
 	return items, nil
 }
+
+const listTaxRates = `-- name: ListTaxRates :many
+SELECT id, name, rate::text AS rate, active
+FROM tax_rates
+ORDER BY name, id
+`
+
+type ListTaxRatesRow struct {
+	ID     int64
+	Name   string
+	Rate   string
+	Active bool
+}
+
+func (q *Queries) ListTaxRates(ctx context.Context) ([]ListTaxRatesRow, error) {
+	rows, err := q.db.Query(ctx, listTaxRates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTaxRatesRow{}
+	for rows.Next() {
+		var i ListTaxRatesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Rate,
+			&i.Active,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

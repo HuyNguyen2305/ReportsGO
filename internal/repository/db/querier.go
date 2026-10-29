@@ -15,6 +15,7 @@ type Querier interface {
 	ListPaymentTerms(ctx context.Context) ([]PaymentTerm, error)
 	ListServiceTypes(ctx context.Context) ([]ServiceType, error)
 	ListStaff(ctx context.Context) ([]ListStaffRow, error)
+	ListTaxRates(ctx context.Context) ([]ListTaxRatesRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

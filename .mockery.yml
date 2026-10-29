@@ -21,6 +21,7 @@ packages:
       CustomerRepository:
       TotalSalesRepository:
       PaymentsCollectedRepository:
+      SalesTaxRepository:
   reportsgo/internal/handler:
     interfaces:
       Pinger:
@@ -34,6 +35,7 @@ packages:
       CustomerService:
       TotalSalesService:
       PaymentsCollectedService:
+      SalesTaxService:
   github.com/jackc/pgx/v5:
     interfaces:
       Tx:

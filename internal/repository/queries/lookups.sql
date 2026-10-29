@@ -27,3 +27,8 @@ ORDER BY name, id;
 SELECT id, full_name
 FROM users
 ORDER BY full_name, id;
+
+-- name: ListTaxRates :many
+SELECT id, name, rate::text AS rate, active
+FROM tax_rates
+ORDER BY name, id;
