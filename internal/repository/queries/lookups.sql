@@ -37,3 +37,8 @@ ORDER BY name, id;
 SELECT id, name
 FROM job_tags
 ORDER BY name, id;
+
+-- name: ListItems :many
+SELECT id, name
+FROM items
+ORDER BY name, id;

@@ -25,6 +25,7 @@ packages:
       AccountsAgingRepository:
       NoActiveJobsRepository:
       ServiceLookupRepository:
+      SalesBreakdownRepository:
   reportsgo/internal/handler:
     interfaces:
       Pinger:
@@ -42,6 +43,7 @@ packages:
       AccountsAgingService:
       NoActiveJobsService:
       ServiceLookupService:
+      SalesBreakdownService:
   github.com/jackc/pgx/v5:
     interfaces:
       Tx:

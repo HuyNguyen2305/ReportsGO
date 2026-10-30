@@ -33,6 +33,13 @@ var paymentCollectedSorts = map[model.PaymentCollectedSortKey]sortSpec{
 	model.PaymentCollectedSortWithoutTax:   {expr: paymentCollectedWithoutTax, cast: "numeric"},
 }
 
+// paymentInvoiceTax joins the total tax of the payment's invoice as tx.tax, which paymentCollectedWithoutTax uses.
+// The payment must be aliased "p".
+const paymentInvoiceTax = `
+LEFT JOIN LATERAL (
+    SELECT COALESCE(SUM(l.tax_amount), 0) AS tax
+    FROM invoice_tax_lines l WHERE l.invoice_id = p.invoice_id) tx ON true`
+
 // paymentCollectedFrom joins everything the select list, filters and sort expressions can refer to. The list and
 // the summary share it so they always agree about which payments are in scope.
 const paymentCollectedFrom = `
@@ -41,10 +48,7 @@ JOIN customers c ON c.id = p.customer_id
 LEFT JOIN billing_documents i ON i.id = p.invoice_id
 LEFT JOIN jobs j ON j.id = i.job_id
 LEFT JOIN service_locations sl ON sl.id = j.location_id
-LEFT JOIN users u ON u.id = p.received_by
-LEFT JOIN LATERAL (
-    SELECT COALESCE(SUM(l.tax_amount), 0) AS tax
-    FROM invoice_tax_lines l WHERE l.invoice_id = p.invoice_id) tx ON true`
+LEFT JOIN users u ON u.id = p.received_by` + paymentInvoiceTax
 
 // applyPaymentCollectedFilter adds the filter's conditions. List and Summary share it. Only payments that were
 // paid and not deleted are collected; pending, failed, refunded and deleted payments never appear.

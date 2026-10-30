@@ -71,12 +71,14 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger, opts Optio
 		service.NewNoActiveJobsService(repository.NewNoActiveJobsRepository(pool), clock), logger)
 	serviceLookup := handler.NewServiceLookupHandler(
 		service.NewServiceLookupService(repository.NewServiceLookupRepository(pool), clock), logger)
+	salesBreakdown := handler.NewSalesBreakdownHandler(
+		service.NewSalesBreakdownService(repository.NewSalesBreakdownRepository(pool), clock), logger)
 
 	engine := handler.NewRouter(handler.Deps{
 		Logger:     logger,
 		Pinger:     pool,
 		Middleware: middleware.Default(logger, cfg.CORSAllowedOrigins),
-		Reports:    append([]handler.RouteRegistrar{invoices, estimates, documents, payments, credits, recurring, jobs, customers, totalSales, paymentsCollected, salesTax, accountsAging, noActiveJobs, serviceLookup}, opts.Reports...),
+		Reports:    append([]handler.RouteRegistrar{invoices, estimates, documents, payments, credits, recurring, jobs, customers, totalSales, paymentsCollected, salesTax, accountsAging, noActiveJobs, serviceLookup, salesBreakdown}, opts.Reports...),
 	})
 	// An empty list means "trust no proxy header", so clients cannot forge client_ip via X-Forwarded-For.
 	if err := engine.SetTrustedProxies(cfg.TrustedProxies); err != nil {

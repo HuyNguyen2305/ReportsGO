@@ -61,6 +61,37 @@ func (q *Queries) ListInvoiceTags(ctx context.Context) ([]InvoiceTag, error) {
 	return items, nil
 }
 
+const listItems = `-- name: ListItems :many
+SELECT id, name
+FROM items
+ORDER BY name, id
+`
+
+type ListItemsRow struct {
+	ID   int64
+	Name string
+}
+
+func (q *Queries) ListItems(ctx context.Context) ([]ListItemsRow, error) {
+	rows, err := q.db.Query(ctx, listItems)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListItemsRow{}
+	for rows.Next() {
+		var i ListItemsRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listJobTags = `-- name: ListJobTags :many
 SELECT id, name
 FROM job_tags

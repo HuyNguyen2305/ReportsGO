@@ -52,8 +52,9 @@ generated `invoice_parent_type` column and a composite foreign key, so only invo
   only counts applications with `applied_on` up to the chosen date.
 - **Service state** of a payment: the state of the service location of the invoice's job.
 - Service Lookup tabs: *Active* = `deleted_at IS NULL AND NOT in_work_pool`; *Work Pool* = `in_work_pool`; *Deleted* = `deleted_at IS NOT NULL`.
-- Sales Forecast comes from future-dated jobs and `recurring_invoices` (next invoice date, total value); Revenue from
-  invoices and payments. Neither needs a table of its own.
+- Sales Forecast and Revenue are one report (`type=forecast|revenue`, see `docs/api/sales-breakdown.md`). The forecast
+  adds up scheduled jobs (`invoice_value`, by scheduled month) and invoices without a job (by invoice month); revenue adds
+  up paid invoice payments (by payment month). Recurring invoices are not projected. Neither needs a table of its own.
 
 
 ## Screenshot column → table.column
