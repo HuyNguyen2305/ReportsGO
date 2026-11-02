@@ -69,8 +69,9 @@ Number columns are identifiers, not quantities: `account_number` and `invoice_nu
   (when no `cursor` is sent). It is `null` on later pages.
   `total` and `discount` include every invoice in the filtered set, void and draft invoices too; add
   `status=sent,paid` (or another `status` filter) to leave them out.
-  `outstanding` is the unpaid balance (`total` minus paid payments, never below zero) of the filtered invoices
-  whose status is `sent`.
+  `outstanding` is the unpaid balance (`total` minus paid payments and minus the credit applied to the invoice,
+  never below zero) of the filtered invoices whose status is `sent`. Credit counts only when it was paid for (it has
+  a paid, not deleted payment), as in [Total Sales](total-sales.md) and [Accounts Aging](accounts-aging.md).
 - `range` is the date range actually applied, so a client can show the defaulted month. An open end is `null`.
 - `page.next_cursor` is `null` and `has_more` is `false` on the last page.
 

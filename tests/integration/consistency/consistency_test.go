@@ -161,3 +161,22 @@ func TestServiceLookupAndTheForecastAgreeOnTheValueOfTheScheduledJobs(t *testing
 
 	require.Equal(t, forecast-model.Money(joblessInvoices), jobs, "the forecast of the jobs is the Service Lookup value of the live jobs")
 }
+
+func TestInvoicesOutstandingIsWhatAccountsAgingSays(t *testing.T) {
+	pool := testdb.SeededPool(t)
+	ctx := context.Background()
+
+	invoices, err := repository.NewInvoiceRepository(pool).Summary(ctx, model.InvoiceFilter{
+		DateFrom: day(2000, 1, 1), DateTo: day(2100, 1, 1), Lifecycle: model.LifecycleActive,
+		Statuses: []model.InvoiceStatus{model.InvoiceSent},
+	})
+	require.NoError(t, err)
+	aging, err := repository.NewAccountsAgingRepository(pool).Page(ctx, model.AgingQuery{
+		Filter: model.AgingFilter{AsOf: today, Today: today},
+		Sort:   model.AgingSort{Key: model.AgingSortCustomer}, Limit: 1,
+	}, true)
+	require.NoError(t, err)
+
+	require.NotZero(t, invoices.Outstanding)
+	require.Equal(t, aging.Summary.Total, invoices.Outstanding, "the sent invoices still owe what Accounts Aging reports")
+}

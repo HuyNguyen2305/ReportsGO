@@ -392,7 +392,7 @@ func TestSummary(t *testing.T) {
 	e := newEnv(t, false)
 	ctx := context.Background()
 
-	t.Run("totals the whole filtered set, with outstanding of $264.00", func(t *testing.T) {
+	t.Run("totals the whole filtered set, with outstanding of $214.00", func(t *testing.T) {
 		rows := e.listAll(t, octoberActive(), model.SortDate, true)
 		var wantTotal, wantDiscount model.Money
 		for _, r := range rows {
@@ -407,8 +407,8 @@ func TestSummary(t *testing.T) {
 		require.Equal(t, wantTotal, s.Total, "must equal the sum of the listed rows")
 		require.Equal(t, wantDiscount, s.Discount)
 		require.Equal(t, model.Money(123), s.Discount)
-		require.Equal(t, model.Money(26400), s.Outstanding, "95.00 + (100.00 - 30.00) + 99.00")
-		require.Equal(t, "264.00", s.Outstanding.String())
+		require.Equal(t, model.Money(21400), s.Outstanding, "95.00 + (100.00 - 30.00 - 50.00 credit) + 99.00")
+		require.Equal(t, "214.00", s.Outstanding.String())
 	})
 
 	t.Run("follows the filters", func(t *testing.T) {
@@ -419,9 +419,9 @@ func TestSummary(t *testing.T) {
 			wantTotal   model.Money
 			wantOutstan model.Money
 		}{
-			{"sent only", func(f *model.InvoiceFilter) { f.Statuses = []model.InvoiceStatus{model.InvoiceSent} }, 3, 29400, 26400},
+			{"sent only", func(f *model.InvoiceFilter) { f.Statuses = []model.InvoiceStatus{model.InvoiceSent} }, 3, 29400, 21400},
 			{"paid has nothing outstanding", func(f *model.InvoiceFilter) { f.Statuses = []model.InvoiceStatus{model.InvoicePaid} }, 9, 0, 0},
-			{"one sent invoice", func(f *model.InvoiceFilter) { f.Search = "85032" }, 1, 10000, 7000},
+			{"one sent invoice", func(f *model.InvoiceFilter) { f.Search = "85032" }, 1, 10000, 2000},
 			{"draft invoices are not outstanding", func(f *model.InvoiceFilter) { f.Statuses = []model.InvoiceStatus{model.InvoiceDraft} }, 8, 0, 0},
 			{"empty result", func(f *model.InvoiceFilter) { f.Search = "zzz-nothing" }, 0, 0, 0},
 			{"archived tab", func(f *model.InvoiceFilter) { f.Lifecycle = model.LifecycleArchived }, 1, 4000, 0},
@@ -478,13 +478,35 @@ func TestSummary(t *testing.T) {
 			SELECT customer_id, id, 'cash', %s FROM billing_documents WHERE parent_type = 'invoice' AND document_number = '85033'`
 
 		exec(fmt.Sprintf(base, `50, '2026-10-19', 'paid', now()`)) // deleted payment: ignored
-		require.Equal(t, model.Money(26400), outstanding())
+		require.Equal(t, model.Money(21400), outstanding())
 
 		exec(fmt.Sprintf(base, `20, '2026-10-19', 'pending', NULL`)) // not settled: ignored
-		require.Equal(t, model.Money(26400), outstanding())
+		require.Equal(t, model.Money(21400), outstanding())
 
 		exec(fmt.Sprintf(base, `200, '2026-10-19', 'paid', NULL`)) // overpayment: balance floors at zero
-		require.Equal(t, model.Money(16500), outstanding(), "95.00 + 70.00 + 0.00, never negative")
+		require.Equal(t, model.Money(11500), outstanding(), "95.00 + 20.00 + 0.00, never negative")
+	})
+
+	t.Run("only credit that was paid for reduces the outstanding balance", func(t *testing.T) {
+		before, err := e.repo.Summary(ctx, octoberActive())
+		require.NoError(t, err)
+
+		// a 40.00 credit whose only payment was refunded, applied to invoice 85031
+		_, err = e.pool.Exec(ctx, `WITH cr AS (
+				INSERT INTO credits (customer_id, amount, method_type, method_detail, credit_date)
+				SELECT customer_id, 40, 'cash', '', '2026-10-20' FROM billing_documents
+				WHERE parent_type = 'invoice' AND document_number = '85031' RETURNING id, customer_id),
+			pay AS (
+				INSERT INTO payments (customer_id, credit_id, method_type, amount, payment_date, status)
+				SELECT customer_id, id, 'cash', 40, '2026-10-20', 'refunded' FROM cr)
+			INSERT INTO credit_applications (credit_id, invoice_id, amount, applied_on)
+			SELECT cr.id, i.id, 40, '2026-10-21' FROM cr, billing_documents i
+			WHERE i.parent_type = 'invoice' AND i.document_number = '85031'`)
+		require.NoError(t, err)
+
+		after, err := e.repo.Summary(ctx, octoberActive())
+		require.NoError(t, err)
+		require.Equal(t, before.Outstanding, after.Outstanding, "a refunded credit pays nothing")
 	})
 }
 
