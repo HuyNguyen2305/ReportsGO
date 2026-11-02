@@ -125,9 +125,9 @@ func TestPageEveryTypeAndGroupingAgreesWithTheFacts(t *testing.T) {
 
 				switch by {
 				case model.SalesBreakdownByItem:
-					// rounded line shares: the summary is their sum, within cents of the facts
+					// the biggest line takes the rounding remainder, so the shares add up to the facts exactly
 					require.Equal(t, rowsPlusUnassigned(page), page.Summary.SalesBreakdownAmounts)
-					require.InDelta(t, int64(facts[ty]), int64(page.Summary.Total), 5)
+					require.Equal(t, facts[ty], page.Summary.Total)
 				case model.SalesBreakdownByTag:
 					require.Equal(t, facts[ty], page.Summary.Total, "each fact counted once")
 				default:
@@ -676,4 +676,34 @@ func TestPageInvoiceTagsOfTheSameNameAreOneRow(t *testing.T) {
 	filtered := e.page(t, f)
 	require.Len(t, filtered.Rows, 1)
 	require.Equal(t, model.Money(2500), filtered.Summary.Total)
+}
+
+func TestPageItemSharesOfAnUnevenSplitAddUpToTheAmount(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	// 10.00 paid on an invoice of three equal lines: thirds do not round to the cent, the first line takes the cent over
+	invoice := e.addTaggedInvoice(t, "R-1", 30, "live")
+	for _, name := range []string{"Item A", "Item B", "Item C"} {
+		_, err := e.pool.Exec(ctx, `INSERT INTO items (name) VALUES ($1)`, name)
+		require.NoError(t, err)
+		_, err = e.pool.Exec(ctx, `INSERT INTO invoice_items (invoice_id, item_id, quantity, unit_price, line_total)
+			SELECT $1, id, 1, 10, 10 FROM items WHERE name = $2`, invoice, name)
+		require.NoError(t, err)
+	}
+	_, err := e.pool.Exec(ctx, `INSERT INTO payments (customer_id, invoice_id, method_type, amount, payment_date, status)
+		SELECT customer_id, id, 'cash', 10, '2026-12-05', 'paid' FROM billing_documents WHERE id = $1`, invoice)
+	require.NoError(t, err)
+
+	page := e.page(t, filter(model.SalesBreakdownRevenue, model.SalesBreakdownByItem, time.UTC))
+	dec := map[string]model.Money{}
+	for _, r := range page.Rows {
+		dec[r.Name] = r.Months[11]
+	}
+
+	require.Equal(t, model.Money(334), dec["Item A"], "the lowest id among equal lines takes the remainder")
+	require.Equal(t, model.Money(333), dec["Item B"])
+	require.Equal(t, model.Money(333), dec["Item C"])
+	require.Equal(t, model.Money(1000), dec["Item A"]+dec["Item B"]+dec["Item C"])
+	byClient := e.page(t, filter(model.SalesBreakdownRevenue, model.SalesBreakdownByClient, time.UTC))
+	require.Equal(t, byClient.Summary.Total, page.Summary.Total, "the item grouping totals the same as clients")
 }
