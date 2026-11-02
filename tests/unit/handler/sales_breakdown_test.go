@@ -149,6 +149,7 @@ func TestSalesBreakdownListQueryParsing(t *testing.T) {
 		{"repeated and comma separated", "?group=1,2&group=3&method=cash,card",
 			service.ListSalesBreakdownParams{Group: []string{"1", "2", "3"}, Method: []string{"cash", "card"}}},
 		{"blanks are dropped", "?group=,&method=", service.ListSalesBreakdownParams{}},
+		{"a negative id is passed on for the service to judge", "?by=tag&group=-3,2", service.ListSalesBreakdownParams{By: "tag", Group: []string{"-3", "2"}}},
 		{"sql text is just text", "?q=%27%3B+DROP+TABLE+payments%3B--", service.ListSalesBreakdownParams{Search: "'; DROP TABLE payments;--"}},
 	}
 
@@ -274,7 +275,7 @@ func TestSalesBreakdownFiltersResponseJSONContract(t *testing.T) {
 		Items:        []model.ItemOption{{ID: 7, Name: "Travel Fee"}},
 		Staff:        []model.StaffOption{{ID: 2, Name: "thon nguyen"}},
 		Sources:      []model.LeadSource{{ID: 3, Name: "Facebook"}},
-		Tags:         []model.JobTag{{ID: 1, Name: "VIP"}},
+		Tags:         []model.JobTag{{ID: -1, Name: "a"}, {ID: 1, Name: "VIP"}},
 	}, nil).Once()
 
 	rec := do(salesBreakdownEngine(svc), http.MethodGet, salesBreakdownPath+"/filters", "")
@@ -290,7 +291,7 @@ func TestSalesBreakdownFiltersResponseJSONContract(t *testing.T) {
 			"item": [{"id": 7, "name": "Travel Fee"}],
 			"staff": [{"id": 2, "name": "thon nguyen"}],
 			"source": [{"id": 3, "name": "Facebook"}],
-			"tag": [{"id": 1, "name": "VIP"}]
+			"tag": [{"id": -1, "name": "a"}, {"id": 1, "name": "VIP"}]
 		},
 		"sort_keys": ["name", "account_number", "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec", "total"],
 		"default_sort": {"key": "name", "order": "asc"},
@@ -329,4 +330,31 @@ func TestSalesBreakdownOnlyGetIsAllowed(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestSalesBreakdownTagRowsOfAnInvoiceOnlyTagHaveANegativeID(t *testing.T) {
+	svc := handlermocks.NewMockSalesBreakdownService(t)
+	svc.EXPECT().List(mock.Anything, mock.Anything).Return(&service.ListSalesBreakdownResult{
+		Items: []model.SalesBreakdownRow{
+			{ID: -2, Name: "Rush", SalesBreakdownAmounts: amounts(4000, 4000)},
+			{ID: 1, Name: "VIP"},
+		},
+		Limit: 50, Type: model.SalesBreakdownForecast, By: model.SalesBreakdownByTag, Year: 2026,
+	}, nil).Once()
+
+	rec := do(salesBreakdownEngine(svc), http.MethodGet, salesBreakdownPath+"?type=forecast&by=tag&cursor=x", "")
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.JSONEq(t, `{
+		"data": [
+			{"id": -2, "name": "Rush", "account_number": null,
+			 "months": ["0.00","0.00","0.00","0.00","0.00","0.00","0.00","0.00","0.00","40.00","0.00","0.00"], "total": "40.00"},
+			{"id": 1, "name": "VIP", "account_number": null,
+			 "months": ["0.00","0.00","0.00","0.00","0.00","0.00","0.00","0.00","0.00","0.00","0.00","0.00"], "total": "0.00"}
+		],
+		"unassigned": null,
+		"page": {"limit": 50, "has_more": false, "next_cursor": null},
+		"summary": null,
+		"year": 2026, "type": "forecast", "by": "tag"
+	}`, rec.Body.String())
 }

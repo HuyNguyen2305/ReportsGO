@@ -71,7 +71,7 @@ func TestNoActiveJobsCustomersResponseJSONContract(t *testing.T) {
 			{
 				ID: 12, CustomerID: 12, Status: model.CustomerStatusActive, AccountNumber: "5001", CustomerName: "William Saliba",
 				Phone:       strPtr("555-0100"),
-				LastService: &model.LastService{ServiceType: "Bi-Monthly Service", JobStatus: "completed", At: at},
+				LastService: &model.LastService{ServiceType: "Bi-Monthly Service", JobStatus: "cancelled", At: at},
 			},
 			{ID: 13, CustomerID: 13, Status: model.CustomerStatusLead, AccountNumber: "63730", CustomerName: "QA customer"},
 		},
@@ -84,7 +84,7 @@ func TestNoActiveJobsCustomersResponseJSONContract(t *testing.T) {
 	require.JSONEq(t, `{
 		"data": [
 			{"id": 12, "status": "active", "account_number": "5001", "customer": "William Saliba", "phone": "555-0100",
-			 "last_service": {"service_type": "Bi-Monthly Service", "job_status": "completed", "date": "2026-10-15"}},
+			 "last_service": {"service_type": "Bi-Monthly Service", "job_status": "cancelled", "date": "2026-10-15"}},
 			{"id": 13, "status": "lead", "account_number": "63730", "customer": "QA customer", "phone": null,
 			 "last_service": null}
 		],
