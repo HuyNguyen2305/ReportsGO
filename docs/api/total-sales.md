@@ -42,16 +42,17 @@ duplicates are ignored.
 
 ### Status
 
-The status is derived from the invoice and its payments, so it has a value (`partial`) that invoices do not:
+The status is derived from the invoice, its payments and the credit applied to it, so it has a value (`partial`) that invoices do not:
 
 | Status | When |
 |---|---|
-| `paid` | The invoice is paid, or its payments add up to at least its total. |
-| `partial` | Some payments were made, but they do not cover the total. |
-| `sent` | No payments were made. |
+| `paid` | The invoice is paid, or its payments and applied credit add up to at least its total. |
+| `partial` | Some payments or credit were applied, but they do not cover the total. |
+| `sent` | Nothing was paid or applied. |
 
-Only payments that are **paid** and not deleted count; pending, failed and refunded payments do not. Credits applied
-to an invoice are not counted yet.
+Only payments that are **paid** and not deleted count; pending, failed and refunded payments do not. Credit applied to
+the invoice counts like a payment, but only if the credit itself was paid for (it has a paid, not deleted payment), as
+in [Accounts Aging](accounts-aging.md). An invoice whose status is `paid` is always `paid` here.
 
 ### Response
 

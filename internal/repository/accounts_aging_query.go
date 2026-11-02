@@ -86,7 +86,7 @@ func agingCTEs(w *whereBuilder, f model.AgingFilter) (string, error) {
         WHERE p.invoice_id = i.id AND p.status = 'paid' AND p.deleted_at IS NULL AND p.payment_date <= ` + asOf + `) pay ON true
     LEFT JOIN LATERAL (
         SELECT SUM(ca.amount) AS applied FROM credit_applications ca JOIN credits cr ON cr.id = ca.credit_id
-        WHERE ca.invoice_id = i.id AND ca.applied_on <= ` + asOf + ` AND ` + creditIsPaid("cr") + `) app ON true
+        WHERE ca.invoice_id = i.id AND ca.applied_on <= ` + asOf + ` AND ` + creditIsPaid + `) app ON true
     WHERE ` + invWhere + `
 ), a AS (
     SELECT inv.customer_id, inv.location_id,
@@ -117,9 +117,9 @@ func agingCTEs(w *whereBuilder, f model.AgingFilter) (string, error) {
     CROSS JOIN LATERAL (
         SELECT GREATEST(
             COALESCE((SELECT SUM(cr.amount) FROM credits cr
-                WHERE cr.customer_id = a.customer_id AND cr.credit_date <= ` + asOf + ` AND ` + creditIsPaid("cr") + `), 0)
+                WHERE cr.customer_id = a.customer_id AND cr.credit_date <= ` + asOf + ` AND ` + creditIsPaid + `), 0)
             - COALESCE((SELECT SUM(ca.amount) FROM credit_applications ca JOIN credits cr ON cr.id = ca.credit_id
-                WHERE cr.customer_id = a.customer_id AND ca.applied_on <= ` + asOf + ` AND ` + creditIsPaid("cr") + `), 0),
+                WHERE cr.customer_id = a.customer_id AND ca.applied_on <= ` + asOf + ` AND ` + creditIsPaid + `), 0),
             0)::numeric(14,2) AS amount) ac` + rWhere + `
 )
 `, nil

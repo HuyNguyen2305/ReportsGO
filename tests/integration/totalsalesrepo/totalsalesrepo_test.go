@@ -222,6 +222,10 @@ func TestPageFilters(t *testing.T) {
 func TestPagePaymentsDecideTheStatus(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
+	// The seed also pays 50.00 of 85032 with credits; this test is about the payments alone.
+	_, err := e.pool.Exec(ctx, `DELETE FROM credit_applications
+		WHERE invoice_id = (SELECT id FROM billing_documents WHERE parent_type = 'invoice' AND document_number = '85032')`)
+	require.NoError(t, err)
 	status := func() model.TotalSaleStatus {
 		rows := e.listAll(t, model.TotalSaleFilter{Search: "85032", DateFrom: day(2026, 10, 1), DateTo: day(2026, 10, 31)}, model.TotalSaleSortDate, true)
 		require.Len(t, rows, 1)
@@ -247,6 +251,36 @@ func TestPagePaymentsDecideTheStatus(t *testing.T) {
 	require.Equal(t, model.TotalSalePartial, status(), "99.99 of 100.00 is still partial")
 	insert("0.01", "paid", "")
 	require.Equal(t, model.TotalSalePaid, status(), "the payments now cover the total")
+}
+
+func TestPageCreditApplicationsCountTowardsTheStatus(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	status := func() model.TotalSaleStatus {
+		rows := e.listAll(t, model.TotalSaleFilter{Search: "85032", DateFrom: day(2026, 10, 1), DateTo: day(2026, 10, 31)}, model.TotalSaleSortDate, true)
+		require.Len(t, rows, 1)
+		return rows[0].Status
+	}
+	// newCredit adds a 20.00 credit for 85032's customer whose only payment has the given status, and applies it.
+	newCredit := func(paymentStatus string) {
+		var creditID int64
+		require.NoError(t, e.pool.QueryRow(ctx, `INSERT INTO credits (customer_id, amount, method_type, credit_date)
+			SELECT customer_id, 20, 'cash', '2026-10-26' FROM billing_documents
+			WHERE parent_type = 'invoice' AND document_number = '85032' RETURNING id`).Scan(&creditID))
+		_, err := e.pool.Exec(ctx, `INSERT INTO payments (customer_id, credit_id, method_type, amount, payment_date, status)
+			SELECT customer_id, $1, 'cash', 20, '2026-10-26', $2::payment_status FROM credits WHERE id = $1`, creditID, paymentStatus)
+		require.NoError(t, err)
+		_, err = e.pool.Exec(ctx, `INSERT INTO credit_applications (credit_id, invoice_id, amount, applied_on)
+			SELECT $1, id, 20, '2026-10-26' FROM billing_documents WHERE parent_type = 'invoice' AND document_number = '85032'`, creditID)
+		require.NoError(t, err)
+	}
+
+	require.Equal(t, model.TotalSalePartial, status(), "30.00 paid and 50.00 of credit applied, of 100.00")
+
+	newCredit("refunded")
+	require.Equal(t, model.TotalSalePartial, status(), "credit whose payment was refunded does not count")
+	newCredit("paid")
+	require.Equal(t, model.TotalSalePaid, status(), "payments and valid credit now cover the total")
 }
 
 func nullable(s string) any {

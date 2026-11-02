@@ -9,13 +9,13 @@ import (
 // totalSaleAlias is the billing_documents alias in the Total Sales report's queries.
 const totalSaleAlias = "i"
 
-// totalSaleStatus is the report's derived status: a paid invoice is paid, a sent invoice whose payments cover its
-// total is paid too, one with some payments is partial, and the rest are sent. Only payments count (not credit
-// applications), like the Invoices report's outstanding figure.
+// totalSaleStatus is the report's derived status: a paid invoice is paid, a sent invoice whose payments and credit
+// applications cover its total is paid too, one with some of either is partial, and the rest are sent. The credit
+// applications are those of credits with a paid payment (see creditIsPaid), as in Accounts Aging.
 const totalSaleStatus = `CASE
     WHEN i.status = 'paid' THEN 'paid'
-    WHEN pay.paid > 0 AND pay.paid >= i.total THEN 'paid'
-    WHEN pay.paid > 0 THEN 'partial'
+    WHEN pay.paid + app.applied > 0 AND pay.paid + app.applied >= i.total THEN 'paid'
+    WHEN pay.paid + app.applied > 0 THEN 'partial'
     ELSE 'sent' END`
 
 // totalSaleWithoutTax is the invoice total less the tax on its tax lines.
@@ -34,7 +34,7 @@ var totalSaleSorts = map[model.TotalSaleSortKey]sortSpec{
 
 // totalSaleFrom joins everything the select list, filters and sort expressions can refer to. The list and the
 // summary share it so they always agree about which invoices are in scope. The two lateral subqueries add up the
-// invoice's tax and its paid payments from the indexed foreign keys.
+// invoice's tax, its paid payments and its credit applications from the indexed foreign keys.
 const totalSaleFrom = `
 FROM billing_documents i
 JOIN customers c ON c.id = i.customer_id
@@ -44,7 +44,11 @@ LEFT JOIN LATERAL (
 LEFT JOIN LATERAL (
     SELECT COALESCE(SUM(p.amount), 0) AS paid
     FROM payments p
-    WHERE p.invoice_id = i.id AND p.deleted_at IS NULL AND p.status = 'paid') pay ON true`
+    WHERE p.invoice_id = i.id AND p.deleted_at IS NULL AND p.status = 'paid') pay ON true
+LEFT JOIN LATERAL (
+    SELECT COALESCE(SUM(ca.amount), 0) AS applied
+    FROM credit_applications ca JOIN credits cr ON cr.id = ca.credit_id
+    WHERE ca.invoice_id = i.id AND ` + creditIsPaid + `) app ON true`
 
 // applyTotalSaleFilter adds the filter's conditions. List and Summary share it. Only active invoices that were
 // sent or paid are sales; drafts, voids, archived and deleted invoices never appear.

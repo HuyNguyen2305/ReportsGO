@@ -8,7 +8,8 @@ It is the money-in view of the [Payments](payments.md) report: the same payments
 collected, with the service state, the staff member and the amount without tax.
 
 **What counts as collected.** Payments with status **paid** that are not deleted. Pending, failed and refunded
-payments and deleted ones are never listed, so there is no `status` or `lifecycle` parameter.
+payments and deleted ones are never listed, so there is no `status` or `lifecycle` parameter. This is the cash view:
+credit applied to an invoice is not a payment and is not listed (the [Revenue](sales-breakdown.md) report counts it).
 
 | Endpoint | Purpose |
 |---|---|

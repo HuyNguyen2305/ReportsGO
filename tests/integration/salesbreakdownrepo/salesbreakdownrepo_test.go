@@ -70,9 +70,19 @@ const (
 	  + COALESCE((SELECT SUM(total) FROM billing_documents
 		WHERE parent_type = 'invoice' AND job_id IS NULL AND status IN ('sent', 'paid')
 		  AND deleted_at IS NULL AND archived_at IS NULL AND document_date BETWEEN '2026-01-01' AND '2026-12-31'), 0) * 100)::bigint`
-	revenueFactsCents = `SELECT (COALESCE(SUM(amount), 0) * 100)::bigint FROM payments
+	revenueFactsCents = `SELECT (((SELECT COALESCE(SUM(amount), 0) FROM payments
 		WHERE invoice_id IS NOT NULL AND status = 'paid' AND deleted_at IS NULL
-		  AND payment_date BETWEEN '2026-01-01' AND '2026-12-31'`
+		  AND payment_date BETWEEN '2026-01-01' AND '2026-12-31')
+	  + (SELECT COALESCE(SUM(ca.amount), 0) FROM credit_applications ca
+		WHERE ca.applied_on BETWEEN '2026-01-01' AND '2026-12-31'
+		  AND EXISTS (SELECT 1 FROM payments cp WHERE cp.credit_id = ca.credit_id AND cp.status = 'paid' AND cp.deleted_at IS NULL))) * 100)::bigint`
+	// revenueCardFactsCents is the same for the card method: card payments and credits bought by card.
+	revenueCardFactsCents = `SELECT (((SELECT COALESCE(SUM(amount), 0) FROM payments
+		WHERE invoice_id IS NOT NULL AND status = 'paid' AND deleted_at IS NULL AND method_type = 'card'
+		  AND payment_date BETWEEN '2026-01-01' AND '2026-12-31')
+	  + (SELECT COALESCE(SUM(ca.amount), 0) FROM credit_applications ca JOIN credits cr ON cr.id = ca.credit_id
+		WHERE cr.method_type = 'card' AND ca.applied_on BETWEEN '2026-01-01' AND '2026-12-31'
+		  AND EXISTS (SELECT 1 FROM payments cp WHERE cp.credit_id = ca.credit_id AND cp.status = 'paid' AND cp.deleted_at IS NULL))) * 100)::bigint`
 )
 
 func rowsPlusUnassigned(p model.SalesBreakdownPage) model.SalesBreakdownAmounts {
@@ -99,7 +109,7 @@ func TestPageEveryTypeAndGroupingAgreesWithTheFacts(t *testing.T) {
 		model.SalesBreakdownRevenue:  model.Money(scalar[int64](t, e, revenueFactsCents)),
 	}
 	require.Equal(t, model.Money(183126), facts[model.SalesBreakdownForecast])
-	require.Equal(t, model.Money(82106), facts[model.SalesBreakdownRevenue])
+	require.Equal(t, model.Money(87106), facts[model.SalesBreakdownRevenue])
 
 	for _, ty := range model.SalesBreakdownTypes {
 		for _, by := range model.SalesBreakdownBys {
@@ -154,7 +164,7 @@ func TestPageSeedFigures(t *testing.T) {
 		require.Equal(t, "Facebook", page.Rows[0].Name)
 		require.Equal(t, model.Money(15226), page.Rows[0].Total)
 		require.NotNil(t, page.Unassigned)
-		require.Equal(t, model.Money(66880), page.Unassigned.Total)
+		require.Equal(t, model.Money(71880), page.Unassigned.Total, "including the 50.00 of credit used on 85032")
 		require.Nil(t, page.Rows[0].AccountNumber)
 	})
 
@@ -163,19 +173,26 @@ func TestPageSeedFigures(t *testing.T) {
 		f.Measure = model.SalesBreakdownCollectedWithoutTax
 		page := e.page(t, f)
 
-		want := scalar[int64](t, e, `SELECT (COALESCE(SUM(CASE WHEN i.total = 0 THEN p.amount
-				ELSE round(p.amount * (i.total - COALESCE((SELECT SUM(tax_amount) FROM invoice_tax_lines l WHERE l.invoice_id = i.id), 0)) / i.total, 2) END), 0) * 100)::bigint
-			FROM payments p JOIN billing_documents i ON i.id = p.invoice_id
-			WHERE p.status = 'paid' AND p.deleted_at IS NULL AND p.payment_date BETWEEN '2026-01-01' AND '2026-12-31'`)
+		share := func(amount string) string {
+			return `CASE WHEN i.total = 0 THEN ` + amount + `
+				ELSE round(` + amount + ` * (i.total - COALESCE((SELECT SUM(tax_amount) FROM invoice_tax_lines l WHERE l.invoice_id = i.id), 0)) / i.total, 2) END`
+		}
+		want := scalar[int64](t, e, `SELECT (((SELECT COALESCE(SUM(`+share("p.amount")+`), 0)
+				FROM payments p JOIN billing_documents i ON i.id = p.invoice_id
+				WHERE p.status = 'paid' AND p.deleted_at IS NULL AND p.payment_date BETWEEN '2026-01-01' AND '2026-12-31')
+			+ (SELECT COALESCE(SUM(`+share("ca.amount")+`), 0)
+				FROM credit_applications ca JOIN billing_documents i ON i.id = ca.invoice_id
+				WHERE ca.applied_on BETWEEN '2026-01-01' AND '2026-12-31'
+				  AND EXISTS (SELECT 1 FROM payments cp WHERE cp.credit_id = ca.credit_id AND cp.status = 'paid' AND cp.deleted_at IS NULL))) * 100)::bigint`)
 		require.Equal(t, model.Money(want), page.Summary.Total)
-		require.Less(t, int64(page.Summary.Total), int64(82106))
+		require.Less(t, int64(page.Summary.Total), int64(87106))
 	})
 
 	t.Run("revenue by payment method", func(t *testing.T) {
 		f := filter(model.SalesBreakdownRevenue, model.SalesBreakdownByClient, time.UTC)
 		f.Methods = []model.PaymentMethod{model.MethodCard}
 		page := e.page(t, f)
-		require.Equal(t, model.Money(scalar[int64](t, e, revenueFactsCents+` AND method_type = 'card'`)), page.Summary.Total)
+		require.Equal(t, model.Money(scalar[int64](t, e, revenueCardFactsCents)), page.Summary.Total)
 	})
 }
 
@@ -379,4 +396,43 @@ func TestGroupOptions(t *testing.T) {
 	require.Len(t, opts.Staff, 2)
 	require.NotEmpty(t, opts.Sources)
 	require.Len(t, opts.Tags, 4)
+}
+
+func TestPageRevenueCountsCreditUsedNotCreditBought(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	total := func() model.Money {
+		return e.page(t, filter(model.SalesBreakdownRevenue, model.SalesBreakdownByClient, time.UTC)).Summary.Total
+	}
+	before := total()
+
+	// A new credit, paid for in September, is not revenue until it is used. One whose payment was refunded never is.
+	for _, status := range []string{"paid", "refunded"} {
+		var creditID int64
+		require.NoError(t, e.pool.QueryRow(ctx, `INSERT INTO credits (customer_id, amount, method_type, credit_date)
+			SELECT customer_id, 40, 'check', '2026-09-01' FROM billing_documents WHERE document_number = '85031' RETURNING id`).Scan(&creditID))
+		_, err := e.pool.Exec(ctx, `INSERT INTO payments (customer_id, credit_id, method_type, amount, payment_date, status)
+			SELECT customer_id, id, 'check', 40, '2026-09-01', $2::payment_status FROM credits WHERE id = $1`, creditID, status)
+		require.NoError(t, err)
+		_, err = e.pool.Exec(ctx, `INSERT INTO credit_applications (credit_id, invoice_id, amount, applied_on)
+			SELECT $1, id, 40, '2026-11-03' FROM billing_documents WHERE parent_type = 'invoice' AND document_number = '85031'`, creditID)
+		require.NoError(t, err)
+
+		if status == "paid" {
+			require.Equal(t, before+4000, total(), "the 40.00 is revenue when the credit is used")
+			page := e.page(t, filter(model.SalesBreakdownRevenue, model.SalesBreakdownByClient, time.UTC))
+			require.Equal(t, model.Money(4000), page.Summary.Months[10], "in November, the month it is applied")
+		} else {
+			require.Equal(t, before+4000, total(), "a credit without a paid payment is not revenue")
+		}
+	}
+
+	f := filter(model.SalesBreakdownRevenue, model.SalesBreakdownByClient, time.UTC)
+	f.Methods = []model.PaymentMethod{model.MethodCheck}
+	require.Equal(t, model.Money(scalar[int64](t, e, `SELECT (COALESCE(SUM(amount), 0) * 100)::bigint FROM (
+			SELECT amount FROM payments WHERE invoice_id IS NOT NULL AND status = 'paid' AND deleted_at IS NULL AND method_type = 'check'
+			UNION ALL
+			SELECT ca.amount FROM credit_applications ca JOIN credits cr ON cr.id = ca.credit_id
+			WHERE cr.method_type = 'check' AND EXISTS (SELECT 1 FROM payments cp WHERE cp.credit_id = cr.id AND cp.status = 'paid' AND cp.deleted_at IS NULL)) x`)),
+		e.page(t, f).Summary.Total, "a credit application follows the method of its credit")
 }

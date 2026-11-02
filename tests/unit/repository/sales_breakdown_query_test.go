@@ -61,6 +61,11 @@ func TestBuildSalesBreakdownListQueryRevenueFacts(t *testing.T) {
 	require.Contains(t, stmt.SQL, "p.method_type::text = ANY($3::text[])")
 	require.Contains(t, stmt.SQL, "extract(month FROM p.payment_date)::int AS month, p.amount AS amount")
 	require.NotContains(t, stmt.SQL, "width_bucket", "payment dates are plain dates")
+	require.Contains(t, stmt.SQL, "FROM credit_applications ca\n    JOIN credits cr ON cr.id = ca.credit_id", "a used credit is revenue")
+	require.Contains(t, stmt.SQL, "extract(month FROM ca.applied_on)::int, ca.amount", "in the month it is applied")
+	require.Contains(t, stmt.SQL, "cp.credit_id = cr.id AND cp.status = 'paid' AND cp.deleted_at IS NULL", "only a paid credit")
+	require.Contains(t, stmt.SQL, "ca.applied_on >= $1::date AND ca.applied_on <= $2::date")
+	require.Contains(t, stmt.SQL, "cr.method_type::text = ANY($3::text[])", "by the method the credit was bought with")
 	requirePlaceholdersMatchArgs(t, stmt)
 
 	t.Run("without tax", func(t *testing.T) {
@@ -69,6 +74,8 @@ func TestBuildSalesBreakdownListQueryRevenueFacts(t *testing.T) {
 		require.NoError(t, err)
 		require.Contains(t, stmt.SQL, "round(p.amount * (i.total - tx.tax) / i.total, 2)")
 		require.Contains(t, stmt.SQL, "FROM invoice_tax_lines l WHERE l.invoice_id = p.invoice_id) tx ON true")
+		require.Contains(t, stmt.SQL, "round(ca.amount * (i.total - tx.tax) / i.total, 2)", "a credit application loses its tax share too")
+		require.Contains(t, stmt.SQL, "FROM invoice_tax_lines l WHERE l.invoice_id = ca.invoice_id) tx ON true")
 	})
 }
 

@@ -99,10 +99,10 @@ func TestRevenueBySourceWithItsUnassignedLine(t *testing.T) {
 	require.Nil(t, out.Data[0].AccountNumber)
 	require.Equal(t, &dto.SalesBreakdownUnassignedResponse{
 		Label:  "Revenue w/o a source",
-		Months: []string{"0.00", "0.00", "0.00", "0.00", "0.00", "0.00", "0.00", "0.00", "10.00", "658.80", "0.00", "0.00"},
-		Total:  "668.80",
+		Months: []string{"0.00", "0.00", "0.00", "0.00", "0.00", "0.00", "0.00", "0.00", "10.00", "708.80", "0.00", "0.00"},
+		Total:  "718.80",
 	}, out.Unassigned)
-	require.Equal(t, "821.06", out.Summary.Total)
+	require.Equal(t, "871.06", out.Summary.Total)
 
 	t.Run("a group filter drops it", func(t *testing.T) {
 		filtered := list(t, srv, "?type=revenue&by=source&q=face")

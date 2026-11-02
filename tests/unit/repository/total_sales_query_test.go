@@ -56,13 +56,13 @@ func TestBuildTotalSalesListQuerySelectsAmountAndAmountWithoutTax(t *testing.T) 
 	require.Contains(t, stmt.SQL, "(i.total * 100)::bigint")
 	require.Contains(t, stmt.SQL, "((i.total - tx.tax) * 100)::bigint")
 	require.Contains(t, stmt.SQL, derivedStatus)
-	require.Contains(t, stmt.SQL, "WHEN pay.paid > 0 AND pay.paid >= i.total THEN 'paid'")
-	require.Contains(t, stmt.SQL, "WHEN pay.paid > 0 THEN 'partial'")
+	require.Contains(t, stmt.SQL, "WHEN pay.paid + app.applied > 0 AND pay.paid + app.applied >= i.total THEN 'paid'")
+	require.Contains(t, stmt.SQL, "WHEN pay.paid + app.applied > 0 THEN 'partial'")
 	require.Contains(t, stmt.SQL, "ELSE 'sent' END")
 }
 
 func TestBuildTotalSalesListQueryEverySortKeyAndDirection(t *testing.T) {
-	statusExpr := "(CASE\n    WHEN i.status = 'paid' THEN 'paid'\n    WHEN pay.paid > 0 AND pay.paid >= i.total THEN 'paid'\n    WHEN pay.paid > 0 THEN 'partial'\n    ELSE 'sent' END)"
+	statusExpr := "(CASE\n    WHEN i.status = 'paid' THEN 'paid'\n    WHEN pay.paid + app.applied > 0 AND pay.paid + app.applied >= i.total THEN 'paid'\n    WHEN pay.paid + app.applied > 0 THEN 'partial'\n    ELSE 'sent' END)"
 	wantExpr := map[model.TotalSaleSortKey]struct{ expr, cast string }{
 		model.TotalSaleSortInvoiceNumber: {"i.document_number", "text"},
 		model.TotalSaleSortCustomer:      {"lower(c.display_name)", "text"},

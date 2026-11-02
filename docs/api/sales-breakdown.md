@@ -42,8 +42,11 @@ Anything not listed here is rejected (see [Strictness](#strictness)).
 |---|---|---|
 | `forecast` | every job that is **not deleted, not cancelled and scheduled**, at its invoice value; plus every **invoice without a job** that is sent or paid and not archived or deleted, at its total | the job's scheduled time (business time zone); the invoice date |
 | `revenue` | every **payment** for an invoice that is paid and not deleted: its amount, or with `measure=collected_without_tax` its amount less its share of the invoice's tax (as in [Payments Collected](payments-collected.md)) | the payment date |
+| | every **credit application** to an invoice, i.e. credit that was paid for and is now used: its amount (or less its share of the invoice's tax, as above) | the day it is applied |
 
-Credit payments are not revenue. Pending, failed and refunded payments do not count. Recurring invoices are not
+Credit payments (buying a credit) are not revenue; the credit is revenue when it is applied to an invoice, and only a
+credit with a paid, not deleted payment counts. A credit application follows the payment method of its credit (the
+`method` filter). Pending, failed and refunded payments do not count. Recurring invoices are not
 projected into the forecast. Unscheduled jobs are not forecast.
 
 ### Groupings
@@ -75,14 +78,14 @@ grouping the rounded shares can differ from the other groupings' totals by a few
   ],
   "unassigned": {
     "label": "Revenue w/o a source",
-    "months": ["0.00","0.00","0.00","0.00","0.00","0.00","0.00","0.00","10.00","658.80","0.00","0.00"],
-    "total": "668.80"
+    "months": ["0.00","0.00","0.00","0.00","0.00","0.00","0.00","0.00","10.00","708.80","0.00","0.00"],
+    "total": "718.80"
   },
   "page": { "limit": 50, "has_more": false, "next_cursor": null },
   "summary": {
     "count": 1,
-    "months": ["0.00","0.00","0.00","0.00","0.00","0.00","0.00","0.00","10.00","811.06","0.00","0.00"],
-    "total": "821.06"
+    "months": ["0.00","0.00","0.00","0.00","0.00","0.00","0.00","0.00","10.00","861.06","0.00","0.00"],
+    "total": "871.06"
   },
   "year": 2026,
   "type": "revenue",

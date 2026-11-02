@@ -7,6 +7,14 @@ import (
 	"reportsgo/internal/model"
 )
 
+// creditApplicationWithoutTax and creditApplicationInvoiceTax are paymentCollectedWithoutTax and paymentInvoiceTax
+// for a credit application "ca" in place of a payment "p", so a credit-paid amount loses the invoice's tax share
+// the same way a payment does.
+var (
+	creditApplicationWithoutTax = strings.ReplaceAll(paymentCollectedWithoutTax, "p.amount", "ca.amount")
+	creditApplicationInvoiceTax = strings.ReplaceAll(paymentInvoiceTax, "p.invoice_id", "ca.invoice_id")
+)
+
 // salesBreakdownAlias is the alias of the finished rows (CTE r) that the list orders and keyset-pages.
 const salesBreakdownAlias = "r"
 
@@ -127,27 +135,39 @@ func salesBreakdownFacts(w *whereBuilder, f model.SalesBreakdownFilter) (string,
       AND i.document_date >= ` + from + ` AND i.document_date <= ` + to, nil
 
 	case model.SalesBreakdownRevenue:
-		amount := "p.amount"
+		amount, creditAmount := "p.amount", "ca.amount"
 		switch f.Measure {
 		case model.SalesBreakdownCollected, "":
 		case model.SalesBreakdownCollectedWithoutTax:
 			amount = paymentCollectedWithoutTax
+			creditAmount = creditApplicationWithoutTax
 		default:
 			return "", fmt.Errorf("%w: unknown measure %q", ErrInvalidQuery, f.Measure)
 		}
 		from, to := w.arg(f.YearFrom)+"::date", w.arg(f.YearTo)+"::date"
-		method := ""
+		method, creditMethod := "", ""
 		if len(f.Methods) > 0 {
-			method = "\n      AND p.method_type::text = ANY(" + w.arg(toStrings(f.Methods)) + "::text[])"
+			methods := w.arg(toStrings(f.Methods)) + "::text[]"
+			method = "\n      AND p.method_type::text = ANY(" + methods + ")"
+			creditMethod = "\n      AND cr.method_type::text = ANY(" + methods + ")"
 		}
-		// A paid, not deleted payment for an invoice counts in its payment month. Credit payments are not revenue.
+		// A paid, not deleted payment for an invoice counts in its payment month. Credit payments are not revenue:
+		// the credit is, when it is used, so a credit application counts at its amount in the month it is applied,
+		// by the method the credit was bought with, provided the credit itself was paid for (see creditIsPaid).
 		return `
     SELECT 3 AS kind, p.id, p.customer_id, i.job_id, i.id AS invoice_id,
         extract(month FROM p.payment_date)::int AS month, ` + amount + ` AS amount
     FROM payments p
     JOIN billing_documents i ON i.id = p.invoice_id` + paymentInvoiceTax + `
     WHERE p.status = 'paid' AND p.deleted_at IS NULL
-      AND p.payment_date >= ` + from + ` AND p.payment_date <= ` + to + method, nil
+      AND p.payment_date >= ` + from + ` AND p.payment_date <= ` + to + method + `
+    UNION ALL
+    SELECT 4, ca.id, i.customer_id, i.job_id, i.id, extract(month FROM ca.applied_on)::int, ` + creditAmount + `
+    FROM credit_applications ca
+    JOIN credits cr ON cr.id = ca.credit_id
+    JOIN billing_documents i ON i.id = ca.invoice_id` + creditApplicationInvoiceTax + `
+    WHERE ` + creditIsPaid + `
+      AND ca.applied_on >= ` + from + ` AND ca.applied_on <= ` + to + creditMethod, nil
 
 	default:
 		return "", fmt.Errorf("%w: unknown type %q", ErrInvalidQuery, f.Type)
