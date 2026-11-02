@@ -181,3 +181,11 @@ func TestBuildAccountsAgingQueryNeverPutsCallerTextInSQL(t *testing.T) {
 	require.Contains(t, flat, "drop table customers", "hostile text must travel as a bind argument")
 	requirePlaceholdersMatchArgs(t, stmt)
 }
+
+func TestBuildAccountsAgingListQueryOnlyPaidCreditsCount(t *testing.T) {
+	stmt, err := repository.BuildAccountsAgingListQuery(agingQuery(model.AgingFilter{AsOf: agingAsOf}, model.AgingSortCustomer, false))
+	require.NoError(t, err)
+
+	paid := "EXISTS (SELECT 1 FROM payments cp WHERE cp.credit_id = cr.id AND cp.status = 'paid' AND cp.deleted_at IS NULL)"
+	require.Equal(t, 3, strings.Count(stmt.SQL, paid), "the credits sum, the applications sum and the applications on an invoice")
+}

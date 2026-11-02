@@ -390,3 +390,79 @@ func TestServiceTypes(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, types)
 }
+
+// addCredit inserts a credit of amount for the customer, dated oct21, with one payment of that amount in the given
+// state (deleted when deleted is set). An empty paymentStatus adds no payment at all. It returns the credit id.
+func (e env) addCredit(t *testing.T, account string, amount float64, paymentStatus string, deleted bool) int64 {
+	t.Helper()
+	ctx := context.Background()
+	var id int64
+	require.NoError(t, e.pool.QueryRow(ctx, `INSERT INTO credits (customer_id, amount, method_type, credit_date)
+		SELECT c.id, $2, 'cash', $3::date FROM customers c WHERE c.account_number = $1 RETURNING id`,
+		account, amount, oct21).Scan(&id))
+	if paymentStatus != "" {
+		_, err := e.pool.Exec(ctx, `INSERT INTO payments (customer_id, credit_id, method_type, amount, payment_date, status, deleted_at)
+			SELECT c.id, $2, 'cash', $3, $4::date, $5::payment_status, CASE WHEN $6 THEN now() END
+			FROM customers c WHERE c.account_number = $1`, account, id, amount, oct21, paymentStatus, deleted)
+		require.NoError(t, err)
+	}
+	return id
+}
+
+// applyCredit uses amount of the credit against the invoice number, on oct21.
+func (e env) applyCredit(t *testing.T, creditID int64, number string, amount float64) {
+	t.Helper()
+	_, err := e.pool.Exec(context.Background(), `INSERT INTO credit_applications (credit_id, invoice_id, amount, applied_on)
+		SELECT $1, i.id, $3, $4::date FROM billing_documents i
+		WHERE i.parent_type = 'invoice' AND i.document_number = $2`, creditID, number, amount, oct21)
+	require.NoError(t, err)
+}
+
+func TestPageOnlyCreditsWithAPaidPaymentAreAvailableAndPayInvoices(t *testing.T) {
+	tests := []struct {
+		name          string
+		paymentStatus string
+		deleted       bool
+		wantBalance   model.Money
+		wantCredit    model.Money
+	}{
+		{"a paid payment", "paid", false, 6000, 0},
+		{"a pending payment", "pending", false, 10000, 0},
+		{"a failed payment", "failed", false, 10000, 0},
+		{"a refunded payment", "refunded", false, 10000, 0},
+		{"a deleted payment", "paid", true, 10000, 0},
+		{"no payment at all", "", false, 10000, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := newEnv(t)
+			e.addInvoice(t, "9100", "5001", oct21, 100, "sent", false, false)
+			credit := e.addCredit(t, "5001", 40, tt.paymentStatus, tt.deleted)
+			e.applyCredit(t, credit, "9100", 40)
+
+			page := e.page(t, model.AgingFilter{AsOf: oct21, Search: "William Saliba"})
+
+			var got *model.AgingRow
+			for i := range page.Rows {
+				if page.Rows[i].CustomerID == e.customerID(t, "5001") {
+					got = &page.Rows[i]
+				}
+			}
+			require.NotNil(t, got)
+			require.Equal(t, tt.wantBalance, got.Total)
+			require.Equal(t, tt.wantCredit, got.AvailableCredit, "the 40.00 credit is fully applied when valid, and unusable otherwise")
+		})
+	}
+
+	t.Run("an unused paid credit is available", func(t *testing.T) {
+		e := newEnv(t)
+		e.addInvoice(t, "9101", "5001", oct21, 100, "sent", false, false)
+		e.addCredit(t, "5001", 40, "paid", false)
+		e.addCredit(t, "5001", 25, "refunded", false)
+
+		page := e.page(t, model.AgingFilter{AsOf: oct21, Search: "William Saliba"})
+
+		require.Len(t, page.Rows, 1)
+		require.Equal(t, model.Money(4000), page.Rows[0].AvailableCredit, "the refunded 25.00 credit does not count")
+	})
+}

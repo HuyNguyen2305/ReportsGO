@@ -39,7 +39,8 @@ func takeConds(w *whereBuilder) string {
 // scope. It registers the filter's bind arguments on w and leaves w without conditions.
 //
 //	inv: one row per invoice with an open balance at the as-of date: the total less the paid payments and the credit
-//	     applications dated up to it.
+//	     applications dated up to it. Only credits with a paid, not deleted payment count (see creditIsPaid), here and
+//	     in the available credit.
 //	a:   inv grouped per customer and service location, split into age buckets.
 //	r:   a with the customer, address, phone, default card and available credit.
 func agingCTEs(w *whereBuilder, f model.AgingFilter) (string, error) {
@@ -84,8 +85,8 @@ func agingCTEs(w *whereBuilder, f model.AgingFilter) (string, error) {
         SELECT SUM(p.amount) AS paid FROM payments p
         WHERE p.invoice_id = i.id AND p.status = 'paid' AND p.deleted_at IS NULL AND p.payment_date <= ` + asOf + `) pay ON true
     LEFT JOIN LATERAL (
-        SELECT SUM(ca.amount) AS applied FROM credit_applications ca
-        WHERE ca.invoice_id = i.id AND ca.applied_on <= ` + asOf + `) app ON true
+        SELECT SUM(ca.amount) AS applied FROM credit_applications ca JOIN credits cr ON cr.id = ca.credit_id
+        WHERE ca.invoice_id = i.id AND ca.applied_on <= ` + asOf + ` AND ` + creditIsPaid("cr") + `) app ON true
     WHERE ` + invWhere + `
 ), a AS (
     SELECT inv.customer_id, inv.location_id,
@@ -116,9 +117,9 @@ func agingCTEs(w *whereBuilder, f model.AgingFilter) (string, error) {
     CROSS JOIN LATERAL (
         SELECT GREATEST(
             COALESCE((SELECT SUM(cr.amount) FROM credits cr
-                WHERE cr.customer_id = a.customer_id AND cr.credit_date <= ` + asOf + `), 0)
+                WHERE cr.customer_id = a.customer_id AND cr.credit_date <= ` + asOf + ` AND ` + creditIsPaid("cr") + `), 0)
             - COALESCE((SELECT SUM(ca.amount) FROM credit_applications ca JOIN credits cr ON cr.id = ca.credit_id
-                WHERE cr.customer_id = a.customer_id AND ca.applied_on <= ` + asOf + `), 0),
+                WHERE cr.customer_id = a.customer_id AND ca.applied_on <= ` + asOf + ` AND ` + creditIsPaid("cr") + `), 0),
             0)::numeric(14,2) AS amount) ac` + rWhere + `
 )
 `, nil

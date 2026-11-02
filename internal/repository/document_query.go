@@ -54,6 +54,13 @@ const (
 	parentEstimate = "estimate"
 )
 
+// creditIsPaid is the condition that a credit (aliased alias) counts: it has at least one paid, not deleted payment.
+// A credit whose payments are all pending, failed, refunded or deleted, or that has none, is not available and cannot
+// pay an invoice. It is a constant fragment built from a constant alias, so it is safe to embed in SQL text.
+func creditIsPaid(alias string) string {
+	return `EXISTS (SELECT 1 FROM payments cp WHERE cp.credit_id = ` + alias + `.id AND cp.status = 'paid' AND cp.deleted_at IS NULL)`
+}
+
 // whereBuilder collects WHERE conditions and their bind arguments. Conditions are built only from constant
 // fragments and "$n" placeholders; every caller-supplied value goes into args.
 type whereBuilder struct {
