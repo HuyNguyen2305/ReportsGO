@@ -127,7 +127,7 @@ func TestPageSeedTabsAgreeWithIndependentSQL(t *testing.T) {
 	}
 
 	page := e.page(t, tab(model.ServiceLookupActive))
-	require.Equal(t, model.ServiceLookupTabCounts{Active: 33, WorkPool: 3, Deleted: 1}, page.Summary.Tabs)
+	require.Equal(t, model.ServiceLookupTabCounts{Active: 34, WorkPool: 3, Deleted: 1}, page.Summary.Tabs)
 	require.Equal(t, model.Money(154626), page.Summary.InvoiceValue, "less the cancelled jobs")
 	require.Equal(t, model.Money(151760), page.Summary.WithoutTax)
 }
@@ -172,8 +172,7 @@ func TestPageSeedRowContents(t *testing.T) {
 
 func TestPageScheduledRangeAndUnscheduledJobs(t *testing.T) {
 	e := newEnv(t)
-	e.addJob(t, job{status: "confirmed", value: 10}) // unscheduled
-	f := tab(model.ServiceLookupActive)
+	f := tab(model.ServiceLookupActive) // the seed has one unscheduled job
 	all := e.page(t, f)
 
 	explicitRange(&f, day(2026, 10, 1), day(2026, 11, 1))
@@ -223,7 +222,7 @@ func TestPageTabsAreExclusive(t *testing.T) {
 	require.NotContains(t, ids(active.Rows), pooledAndDeleted)
 	require.NotContains(t, ids(pool.Rows), pooledAndDeleted, "a deleted job leaves the work pool")
 	require.Contains(t, ids(deleted.Rows), pooledAndDeleted)
-	require.Equal(t, model.ServiceLookupTabCounts{Active: 33, WorkPool: 3, Deleted: 2}, active.Summary.Tabs)
+	require.Equal(t, model.ServiceLookupTabCounts{Active: 34, WorkPool: 3, Deleted: 2}, active.Summary.Tabs)
 }
 
 func TestPageTabCountsShareTheOtherFilters(t *testing.T) {
@@ -372,7 +371,7 @@ func TestPageSearch(t *testing.T) {
 
 func TestPageUnscheduledAndUnassignedJobsSortFirstAscending(t *testing.T) {
 	e := newEnv(t)
-	unscheduled := e.addJob(t, job{status: "confirmed", value: 1})
+	unscheduled := scalar[int64](t, e, `SELECT id FROM jobs WHERE scheduled_at IS NULL AND NOT in_work_pool AND deleted_at IS NULL`) // the seed's
 
 	bySchedule, err := e.repo.Page(context.Background(), query(tab(model.ServiceLookupActive), model.ServiceLookupSortScheduledAt, false, 5), false)
 	require.NoError(t, err)

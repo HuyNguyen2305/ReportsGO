@@ -551,3 +551,13 @@ INSERT INTO job_tag_links (job_id, tag_id)
 SELECT j.id, t.id
 FROM jobs j
 JOIN job_tags t ON (j.id + t.id) % 4 = 0;
+
+-- A job nobody has scheduled yet (scheduled_at is NULL), outside the work pool, untagged and unassigned, worth nothing:
+-- the Service Lookup default view lists it next to the month's jobs. It is created long before October so no date range
+-- of the New Jobs report catches it, and it is added last so the other jobs keep their ids.
+INSERT INTO jobs (customer_id, location_id, service_type_id, status, scheduled_at, invoice_value, created_at)
+SELECT c.id, l.id, st.id, 'unconfirmed', NULL, 0.00, '2025-12-01 09:00:00+00'
+FROM customers c
+JOIN service_locations l ON l.customer_id = c.id
+JOIN service_types st    ON st.name = 'Initial Service'
+WHERE c.account_number = '63689';

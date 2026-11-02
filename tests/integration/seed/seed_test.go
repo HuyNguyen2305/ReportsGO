@@ -37,7 +37,7 @@ func TestSeedIsIdempotentAndPopulatesEveryTable(t *testing.T) {
 	for _, table := range seed.Tables {
 		require.Positive(t, first[table], "table %s should have rows", table)
 	}
-	require.Equal(t, 37, first["jobs"], "29 original + 8 for the New Jobs report")
+	require.Equal(t, 38, first["jobs"], "29 original + 8 for the New Jobs report + 1 unscheduled")
 	require.Equal(t, 3, first["lead_sources"], "Facebook + Google + Referral")
 	require.Equal(t, 19, first["customers"], "11 original + 8 for the New Customers report")
 	require.Equal(t, 9, first["customer_phones"], "4 original + 5 for the New Customers report")

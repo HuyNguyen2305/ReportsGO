@@ -139,7 +139,7 @@ func TestFiltersAgreeWithTheCount(t *testing.T) {
 		{"status and source together", service.ListJobsParams{Status: []string{"cancelled"}, LeadSourceIDs: []string{sourceID["Google"]}}, 1},
 		{"september 30 only", service.ListJobsParams{From: "2026-09-30", To: "2026-09-30"}, 1},
 		{"november 1 only", service.ListJobsParams{From: "2026-11-01", To: "2026-11-01"}, 1},
-		{"everything", service.ListJobsParams{From: "2000-01-01", To: "2100-01-01"}, 37},
+		{"everything", service.ListJobsParams{From: "2000-01-01", To: "2100-01-01"}, 38},
 		{"search by service type", service.ListJobsParams{Search: "initial serv"}, 4},
 		{"search with wildcards matches nothing", service.ListJobsParams{Search: "%_"}, 0},
 		{"search with injection text matches nothing", service.ListJobsParams{Search: `'; DROP TABLE jobs; --`}, 0},

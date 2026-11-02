@@ -31,10 +31,11 @@ func TestListDefaultsToTheActiveTabThisMonthEarliestFirst(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), res.From)
 	require.Equal(t, time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC), res.To)
-	require.Len(t, res.Items, 31, "33 active jobs, two of them outside October")
-	require.Equal(t, int64(31), res.Summary.Count)
-	// the tab counts use the same October range: the three pooled jobs are scheduled in October, and so is the deleted job
-	require.Equal(t, model.ServiceLookupTabCounts{Active: 31, WorkPool: 3, Deleted: 1}, res.Summary.Tabs)
+	require.Len(t, res.Items, 32, "34 active jobs: two outside October, and the unscheduled one is listed too")
+	require.Equal(t, int64(32), res.Summary.Count)
+	require.Nil(t, res.Items[0].ScheduledAt, "the unscheduled job comes first")
+	// Active and Deleted use the October range, the work pool badge counts the whole pool
+	require.Equal(t, model.ServiceLookupTabCounts{Active: 32, WorkPool: 3, Deleted: 1}, res.Summary.Tabs)
 }
 
 func TestListWorkPoolHasAnOpenRangeByDefault(t *testing.T) {
@@ -72,7 +73,7 @@ func TestListPagesWithCursorsAndSummaryOnlyOnTheFirstPage(t *testing.T) {
 
 	second, err := svc.List(ctx, service.ListServiceLookupParams{Limit: "20", Sort: "invoice_value", Order: "desc", Cursor: first.NextCursor})
 	require.NoError(t, err)
-	require.Len(t, second.Items, 11)
+	require.Len(t, second.Items, 12)
 	require.False(t, second.HasMore)
 	require.Nil(t, second.Summary)
 	require.GreaterOrEqual(t, first.Items[19].InvoiceValue, second.Items[0].InvoiceValue)

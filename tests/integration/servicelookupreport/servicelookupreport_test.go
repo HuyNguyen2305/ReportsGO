@@ -77,14 +77,15 @@ func TestListReturnsTheActiveTabWithItsSummary(t *testing.T) {
 	require.NotEmpty(t, resp.Header.Get("X-Request-ID"))
 	var out dto.ServiceLookupListResponse
 	require.NoError(t, json.Unmarshal(body, &out))
-	require.Len(t, out.Data, 31)
+	require.Len(t, out.Data, 32, "31 in October and the unscheduled job")
+	require.Nil(t, out.Data[0].ScheduledAt)
 	require.Equal(t, dto.DateRangeResponse{From: ptr("2026-10-01"), To: ptr("2026-10-31")}, out.Range)
-	require.Equal(t, int64(31), out.Summary.Count)
-	require.Equal(t, dto.ServiceLookupTabCountsResponse{Active: 31, WorkPool: 3, Deleted: 1}, out.Summary.Tabs)
+	require.Equal(t, int64(32), out.Summary.Count)
+	require.Equal(t, dto.ServiceLookupTabCountsResponse{Active: 32, WorkPool: 3, Deleted: 1}, out.Summary.Tabs)
 
-	row := out.Data[0]
+	row := out.Data[1]
 	require.NotNil(t, row.ScheduledAt)
-	require.Equal(t, "2026-10-01T04:30:00.000000Z", *row.ScheduledAt, "the earliest October job comes first")
+	require.Equal(t, "2026-10-01T04:30:00.000000Z", *row.ScheduledAt, "the earliest October job comes right after the unscheduled one")
 	require.Equal(t, "AAA1 ccc1", row.Customer.Name)
 	require.Equal(t, "Blank Service 123", row.ServiceType.Name)
 	require.Equal(t, "confirmed", row.Status)

@@ -38,7 +38,7 @@ func october() model.JobFilter {
 	return model.JobFilter{CreatedFrom: utc(2026, 10, 1, 0, 0, 0, 0), CreatedBefore: utc(2026, 11, 1, 0, 0, 0, 0)}
 }
 
-// octoberJobs is how many of the 37 seeded jobs were created in October (UTC); one is from 09-30 and one from 11-01.
+// octoberJobs is how many of the 38 seeded jobs were created in October (UTC); one is from 09-30, one from 11-01 and one from 2025-12-01.
 const octoberJobs = 35
 
 func query(f model.JobFilter, key model.JobSortKey, desc bool, limit int) model.JobQuery {
@@ -296,12 +296,12 @@ func TestListFilters(t *testing.T) {
 		{"two jobs at the same instant", func(f *model.JobFilter) {
 			f.CreatedFrom, f.CreatedBefore = utc(2026, 10, 12, 6, 0, 0, 0), utc(2026, 10, 12, 6, 0, 1, 0)
 		}, 2, 0},
-		{"open start", func(f *model.JobFilter) { f.CreatedFrom, f.CreatedBefore = time.Time{}, utc(2026, 10, 6, 0, 0, 0, 0) }, 12, 47130},
+		{"open start", func(f *model.JobFilter) { f.CreatedFrom, f.CreatedBefore = time.Time{}, utc(2026, 10, 6, 0, 0, 0, 0) }, 13, 47130},
 		{"open end", func(f *model.JobFilter) { f.CreatedFrom, f.CreatedBefore = utc(2026, 10, 13, 0, 0, 0, 0), time.Time{} }, 6, 42000},
 		{"september", func(f *model.JobFilter) {
 			f.CreatedFrom, f.CreatedBefore = utc(2026, 9, 1, 0, 0, 0, 0), utc(2026, 10, 1, 0, 0, 0, 0)
 		}, 1, 6500},
-		{"no date limits at all", func(f *model.JobFilter) { f.CreatedFrom, f.CreatedBefore = time.Time{}, time.Time{} }, 37, 199126},
+		{"no date limits at all", func(f *model.JobFilter) { f.CreatedFrom, f.CreatedBefore = time.Time{}, time.Time{} }, 38, 199126},
 		{"empty range", func(f *model.JobFilter) {
 			f.CreatedFrom, f.CreatedBefore = utc(2027, 1, 1, 0, 0, 0, 0), utc(2027, 2, 1, 0, 0, 0, 0)
 		}, 0, 0},
