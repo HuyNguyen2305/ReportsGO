@@ -231,13 +231,15 @@ func TestPageLastServiceRules(t *testing.T) {
 		require.Equal(t, time.Date(2026, 10, 15, 8, 0, 0, 0, time.UTC), r.LastService.At.UTC())
 	})
 
-	t.Run("a cancelled job counts, and an unscheduled one is dated by its creation", func(t *testing.T) {
+	t.Run("a cancelled job counts, and an unscheduled one is not a service", func(t *testing.T) {
 		e.addJob(t, "5002", "", "cancelled", "", "2026-08-01 10:00+00", false)
+		require.Nil(t, e.row(t, model.NoActiveJobsCustomers, "5002").LastService, "never scheduled")
 
+		e.addJob(t, "5002", "", "cancelled", "2026-07-01 09:00+00", "", false)
 		r := e.row(t, model.NoActiveJobsCustomers, "5002")
 		require.NotNil(t, r.LastService)
 		require.Equal(t, "cancelled", r.LastService.JobStatus)
-		require.Equal(t, time.Date(2026, 8, 1, 10, 0, 0, 0, time.UTC), r.LastService.At.UTC())
+		require.Equal(t, time.Date(2026, 7, 1, 9, 0, 0, 0, time.UTC), r.LastService.At.UTC())
 	})
 
 	t.Run("the location report looks at the location's own jobs only", func(t *testing.T) {

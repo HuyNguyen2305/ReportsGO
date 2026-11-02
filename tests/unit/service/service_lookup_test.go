@@ -59,9 +59,10 @@ func TestServiceLookupListDefaults(t *testing.T) {
 
 	require.Equal(t, model.ServiceLookupQuery{
 		Filter: model.ServiceLookupFilter{
-			Tab:             model.ServiceLookupActive,
-			ScheduledFrom:   date(2026, 10, 1),
-			ScheduledBefore: date(2026, 11, 1),
+			Tab:                model.ServiceLookupActive,
+			ScheduledFrom:      date(2026, 10, 1),
+			ScheduledBefore:    date(2026, 11, 1),
+			IncludeUnscheduled: true,
 		},
 		Sort:  model.ServiceLookupSort{Key: model.ServiceLookupSortScheduledAt},
 		Limit: service.DefaultPageSize,
@@ -113,6 +114,31 @@ func TestServiceLookupListTabAndDateRange(t *testing.T) {
 		require.True(t, time.Date(2026, 10, 5, 0, 0, 0, 0, zone).Equal(got.Filter.ScheduledFrom))
 		require.True(t, time.Date(2026, 10, 6, 0, 0, 0, 0, zone).Equal(got.Filter.ScheduledBefore))
 	})
+}
+
+func TestServiceLookupListPoolRangeAndUnscheduledJobs(t *testing.T) {
+	tests := []struct {
+		name                         string
+		tab, from, to                string
+		wantUnscheduled              bool
+		wantPoolFrom, wantPoolBefore time.Time
+	}{
+		{"active, no dates: the month and unscheduled jobs, the pool open", "active", "", "", true, time.Time{}, time.Time{}},
+		{"deleted, no dates: the same", "deleted", "", "", true, time.Time{}, time.Time{}},
+		{"work pool, no dates: nothing is defaulted", "work_pool", "", "", false, time.Time{}, time.Time{}},
+		{"active with dates: no unscheduled jobs, the pool takes the range", "active", "2026-09-01", "2026-09-30", false, date(2026, 9, 1), date(2026, 10, 1)},
+		{"only from: the pool takes the open end", "active", "2026-10-05", "", false, date(2026, 10, 5), time.Time{}},
+		{"work pool with dates", "work_pool", "2026-09-01", "2026-09-30", false, date(2026, 9, 1), date(2026, 10, 1)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q, _ := runServiceLookup(t, service.ListServiceLookupParams{Tab: tt.tab, From: tt.from, To: tt.to}, nil)
+
+			require.Equal(t, tt.wantUnscheduled, q.Filter.IncludeUnscheduled)
+			require.Equal(t, tt.wantPoolFrom, q.Filter.PoolScheduledFrom)
+			require.Equal(t, tt.wantPoolBefore, q.Filter.PoolScheduledBefore)
+		})
+	}
 }
 
 func TestServiceLookupListNormalizesFilters(t *testing.T) {

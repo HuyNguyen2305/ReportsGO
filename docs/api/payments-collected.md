@@ -10,6 +10,8 @@ collected, with the service state, the staff member and the amount without tax.
 **What counts as collected.** Payments with status **paid** that are not deleted. Pending, failed and refunded
 payments and deleted ones are never listed, so there is no `status` or `lifecycle` parameter. This is the cash view:
 credit applied to an invoice is not a payment and is not listed (the [Revenue](sales-breakdown.md) report counts it).
+A payment counts whatever became of its invoice: money collected on an invoice that was later voided, archived or
+deleted is still listed, unless the payment itself was refunded, failed or deleted.
 
 | Endpoint | Purpose |
 |---|---|

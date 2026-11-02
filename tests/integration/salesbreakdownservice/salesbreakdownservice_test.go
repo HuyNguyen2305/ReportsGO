@@ -93,6 +93,6 @@ func TestFilterOptions(t *testing.T) {
 	opts, err := svc.FilterOptions(context.Background())
 
 	require.NoError(t, err)
-	require.Len(t, opts.Tags, 4)
+	require.Len(t, opts.Tags, 7, "4 job tags and the 3 invoice tags that no job tag shares a name with")
 	require.Len(t, opts.Staff, 2)
 }

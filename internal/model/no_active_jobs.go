@@ -97,11 +97,11 @@ type NoActiveJobsQuery struct {
 	After  *NoActiveJobsCursor
 }
 
-// LastService is the latest non-deleted job of a customer or location, cancelled jobs included.
+// LastService is the latest non-deleted job of a customer or location that was scheduled, cancelled jobs included.
 type LastService struct {
 	ServiceType string
 	JobStatus   string
-	// At is the job's scheduled time, or its creation time when it was never scheduled.
+	// At is the job's scheduled time.
 	At time.Time
 }
 

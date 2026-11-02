@@ -55,8 +55,9 @@ func parseServiceLookupParams(p ListServiceLookupParams, now time.Time) (service
 
 	filter.Tab = v.serviceLookupTab(p.Tab)
 
-	// With no dates the Active and Deleted tabs show the current month; the Work Pool is open, because pooled jobs
-	// are mostly not scheduled yet.
+	// With no dates the Active and Deleted tabs show the current month and the jobs that are not scheduled yet; the
+	// Work Pool is open, because pooled jobs are mostly not scheduled yet.
+	explicit := strings.TrimSpace(p.From) != "" || strings.TrimSpace(p.To) != ""
 	var from, to time.Time
 	if filter.Tab == model.ServiceLookupWorkPool {
 		from, to = v.openDateRange(p.From, p.To)
@@ -65,6 +66,11 @@ func parseServiceLookupParams(p ListServiceLookupParams, now time.Time) (service
 	}
 	// The dates are inclusive calendar days in the clock's time zone; the filter works on instants.
 	filter.ScheduledFrom, filter.ScheduledBefore = createdRange(from, to, now.Location())
+	filter.IncludeUnscheduled = !explicit && filter.Tab != model.ServiceLookupWorkPool
+	// The Work Pool count of the summary never takes the defaulted month.
+	if explicit || filter.Tab == model.ServiceLookupWorkPool {
+		filter.PoolScheduledFrom, filter.PoolScheduledBefore = filter.ScheduledFrom, filter.ScheduledBefore
+	}
 
 	filter.Statuses = parseEnums(&v, "status", p.Status, model.JobStatuses)
 	filter.ServiceTypeIDs = v.ids("service_type", p.ServiceType)

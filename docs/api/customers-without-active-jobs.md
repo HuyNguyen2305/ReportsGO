@@ -20,8 +20,8 @@ Two lists share one rule and the same parameters: customers, and service locatio
 - The locations list has every service location with **no active job of its own**. A customer with an open job at one
   location is not on the customers list, but its other locations are still on the locations list.
 - Customers and locations that never had a job are listed, with no last service.
-- **Last service** is the latest non-deleted job, whatever its status (cancelled included), by its scheduled time, or its
-  creation time when it was never scheduled. Equal times go to the higher job id. The customers list looks at all of the
+- **Last service** is the latest non-deleted job that was scheduled, whatever its status (cancelled included), by its
+  scheduled time. A job that was never scheduled is not a service and is ignored. Equal times go to the higher job id. The customers list looks at all of the
   customer's jobs, the locations list only at the location's own. With no job, `last_service` is `null`.
 
 ## Query parameters
@@ -30,7 +30,7 @@ The same for both lists. Anything not listed here is rejected (see [Strictness](
 
 | Parameter | Type | Meaning | Default |
 |---|---|---|---|
-| `status` | multi | The customer's status: `active`, `inactive`, `lead`, `archived`. On the locations list it is the status of the location's customer. | all |
+| `status` | multi | The customer's status: `active`, `inactive`, `lead`, `archived`. On the locations list it is the status of the location's customer. With no `status` every customer is listed, archived and inactive ones too (the screen's "All Statuses"). | all |
 | `q` | text | Case-insensitive substring of the customer name, account number and phone. The locations list also searches the address, city and zip. LIKE wildcards are matched literally. | none |
 | `sort` | key | Customers: `status`, `account_number`, `customer`, `last_service_type`, `job_status`, `last_service_date`. Locations add `address`, `city` and `zip`. | `customer` |
 | `order` | `asc` \| `desc` | Sort direction. With neither `sort` nor `order`: customer name A to Z. With `sort` but no `order`: ascending. Rows with no job sort first when ascending. Ties break by row id in the same direction. | see left |

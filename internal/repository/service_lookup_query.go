@@ -2,6 +2,8 @@ package repository
 
 import (
 	"fmt"
+	"strings"
+	"time"
 
 	"reportsgo/internal/model"
 )
@@ -20,6 +22,10 @@ const serviceLookupAtText = `CASE WHEN j.scheduled_at IS NULL THEN '` + serviceL
 
 // serviceLookupWithoutTax is the job's value less its tax.
 const serviceLookupWithoutTax = `(j.invoice_value - j.tax_amount)`
+
+// serviceLookupNotCancelled keeps a cancelled job out of the money totals of the summary. The job still counts as a
+// row and in the counts, since the list shows it.
+const serviceLookupNotCancelled = `j.status <> 'cancelled'`
 
 // serviceLookupSorts is the complete list of things the report can be sorted by. SQL text for ORDER BY and the
 // keyset condition comes only from this table, never from the caller. An unscheduled job and an unassigned one sort
@@ -68,15 +74,39 @@ LEFT JOIN LATERAL (
     FROM job_tag_links l JOIN job_tags t ON t.id = l.tag_id WHERE l.job_id = j.id
 ) tg ON true`
 
-// applyServiceLookupFilter adds the filter's conditions except the tab, which the list adds as a plain condition and
-// the summary only as the selector of its aggregates. List and Summary share it.
+// serviceLookupRange returns the condition on the scheduled time for the half-open range from to before, or "" when
+// the range is open on both sides. A job that was never scheduled matches a bounded range only when unscheduled is set.
+// Its bind arguments are registered once, so the condition may be used in several places of one statement.
+func serviceLookupRange(w *whereBuilder, from, before time.Time, unscheduled bool) string {
+	var parts []string
+	if !from.IsZero() {
+		parts = append(parts, "j.scheduled_at >= "+w.arg(from.UTC())+"::timestamptz")
+	}
+	if !before.IsZero() {
+		parts = append(parts, "j.scheduled_at < "+w.arg(before.UTC())+"::timestamptz")
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	cond := strings.Join(parts, " AND ")
+	if unscheduled {
+		return "((" + cond + ") OR j.scheduled_at IS NULL)"
+	}
+	return "(" + cond + ")"
+}
+
+// andRange adds the range condition to a tab condition.
+func andRange(tab, rng string) string {
+	if rng == "" {
+		return tab
+	}
+	return tab + " AND " + rng
+}
+
+// applyServiceLookupFilter adds the filter's conditions except the tab and the date range, which belong to the tab:
+// the list adds them as plain conditions and the summary only as the selector of its aggregates. List and Summary
+// share it.
 func applyServiceLookupFilter(w *whereBuilder, f model.ServiceLookupFilter) {
-	if !f.ScheduledFrom.IsZero() {
-		w.add("j.scheduled_at >= " + w.arg(f.ScheduledFrom.UTC()) + "::timestamptz")
-	}
-	if !f.ScheduledBefore.IsZero() {
-		w.add("j.scheduled_at < " + w.arg(f.ScheduledBefore.UTC()) + "::timestamptz")
-	}
 	if len(f.Statuses) > 0 {
 		w.add("j.status::text = ANY(" + w.arg(toStrings(f.Statuses)) + "::text[])")
 	}
@@ -120,7 +150,7 @@ func BuildServiceLookupListQuery(q model.ServiceLookupQuery) (Statement, error) 
 	}
 
 	var w whereBuilder
-	w.add(tab)
+	w.add(andRange(tab, serviceLookupRange(&w, q.Filter.ScheduledFrom, q.Filter.ScheduledBefore, q.Filter.IncludeUnscheduled)))
 	applyServiceLookupFilter(&w, q.Filter)
 	if q.After != nil {
 		applyKeyset(&w, serviceLookupAlias, spec, q.Sort.Desc, q.After.SortValue, q.After.ID)
@@ -136,9 +166,11 @@ func BuildServiceLookupListQuery(q model.ServiceLookupQuery) (Statement, error) 
 	return Statement{SQL: sql, Args: w.args}, nil
 }
 
-// BuildServiceLookupSummaryQuery builds the statement that totals the selected tab's filtered set and counts every
-// tab under the same filters. The tab is not a condition here: each aggregate picks its own tab with FILTER, so all
-// four numbers come from the same rows.
+// BuildServiceLookupSummaryQuery builds the statement that totals the selected tab's filtered set (cancelled jobs are
+// counted but add no money) and counts every tab under the same filters. The tab is not a condition here: each
+// aggregate picks its own tab with FILTER, so all numbers come from the same rows. The date range belongs to the tab:
+// the Active and Deleted counts take the selected range (the defaulted month), the Work Pool count takes the range the
+// caller sent, or none.
 func BuildServiceLookupSummaryQuery(f model.ServiceLookupFilter) (Statement, error) {
 	selected, err := serviceLookupTabCond(f.Tab)
 	if err != nil {
@@ -147,13 +179,26 @@ func BuildServiceLookupSummaryQuery(f model.ServiceLookupFilter) (Statement, err
 
 	var w whereBuilder
 	applyServiceLookupFilter(&w, f)
+	inRange := serviceLookupRange(&w, f.ScheduledFrom, f.ScheduledBefore, f.IncludeUnscheduled)
+	inPoolRange := inRange
+	if f.IncludeUnscheduled || !f.PoolScheduledFrom.Equal(f.ScheduledFrom) || !f.PoolScheduledBefore.Equal(f.ScheduledBefore) {
+		inPoolRange = serviceLookupRange(&w, f.PoolScheduledFrom, f.PoolScheduledBefore, false)
+	}
 
-	sql := `SELECT count(*) FILTER (WHERE ` + selected + `),
-    COALESCE(SUM(j.invoice_value * 100) FILTER (WHERE ` + selected + `), 0)::bigint,
-    COALESCE(SUM(` + serviceLookupWithoutTax + ` * 100) FILTER (WHERE ` + selected + `), 0)::bigint,
-    count(*) FILTER (WHERE ` + serviceLookupTabConds[model.ServiceLookupActive] + `),
-    count(*) FILTER (WHERE ` + serviceLookupTabConds[model.ServiceLookupWorkPool] + `),
-    count(*) FILTER (WHERE ` + serviceLookupTabConds[model.ServiceLookupDeleted] + `)` +
+	active := andRange(serviceLookupTabConds[model.ServiceLookupActive], inRange)
+	pool := andRange(serviceLookupTabConds[model.ServiceLookupWorkPool], inPoolRange)
+	deleted := andRange(serviceLookupTabConds[model.ServiceLookupDeleted], inRange)
+	selectedCond := andRange(selected, inRange)
+	if f.Tab == model.ServiceLookupWorkPool {
+		selectedCond = pool
+	}
+
+	sql := `SELECT count(*) FILTER (WHERE ` + selectedCond + `),
+    COALESCE(SUM(j.invoice_value * 100) FILTER (WHERE ` + selectedCond + ` AND ` + serviceLookupNotCancelled + `), 0)::bigint,
+    COALESCE(SUM(` + serviceLookupWithoutTax + ` * 100) FILTER (WHERE ` + selectedCond + ` AND ` + serviceLookupNotCancelled + `), 0)::bigint,
+    count(*) FILTER (WHERE ` + active + `),
+    count(*) FILTER (WHERE ` + pool + `),
+    count(*) FILTER (WHERE ` + deleted + `)` +
 		serviceLookupBaseFrom + w.where()
 	return Statement{SQL: sql, Args: w.args}, nil
 }

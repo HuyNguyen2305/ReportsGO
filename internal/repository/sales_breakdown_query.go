@@ -33,6 +33,14 @@ var salesBreakdownSorts = func() map[model.SalesBreakdownSortKey]sortSpec {
 	return m
 }()
 
+// salesBreakdownTags is the table of tags a tag row is one of: every job tag, and every invoice tag that has no job tag
+// of the same name (case-insensitive) under the negated id, so the two tables' ids cannot clash. It is the dimension of
+// the tag grouping and the source of its filter options.
+const salesBreakdownTags = `(SELECT jt.id, jt.name FROM job_tags jt
+        UNION ALL
+        SELECT -it.id, it.name FROM invoice_tags it
+        WHERE NOT EXISTS (SELECT 1 FROM job_tags jt WHERE lower(jt.name) = lower(it.name)))`
+
 // salesBreakdownDim is the table a grouping's rows come from: its name column and, for clients, the account number.
 type salesBreakdownDim struct {
 	table, name, account string
@@ -46,7 +54,7 @@ var salesBreakdownDims = map[model.SalesBreakdownBy]salesBreakdownDim{
 	model.SalesBreakdownByItem:    {table: "items", name: "x.name", account: "NULL::text", search: []string{"x.name"}},
 	model.SalesBreakdownByStaff:   {table: "users", name: "x.full_name", account: "NULL::text", search: []string{"x.full_name"}},
 	model.SalesBreakdownBySource:  {table: "lead_sources", name: "x.name", account: "NULL::text", search: []string{"x.name"}},
-	model.SalesBreakdownByTag:     {table: "job_tags", name: "x.name", account: "NULL::text", search: []string{"x.name"}},
+	model.SalesBreakdownByTag:     {table: salesBreakdownTags, name: "x.name", account: "NULL::text", search: []string{"x.name"}},
 }
 
 // salesBreakdownPieces turns the facts f into the pieces d that the rows add up: one piece per fact and group (a fact
@@ -60,14 +68,27 @@ var salesBreakdownPieces = map[model.SalesBreakdownBy]string{
     SELECT f.kind, f.id, 0::bigint AS line_id, j.service_type_id AS group_id, f.month, f.amount
     FROM f LEFT JOIN jobs j ON j.id = f.job_id`,
 	model.SalesBreakdownByStaff: `
-    SELECT f.kind, f.id, 0::bigint AS line_id, j.assigned_to AS group_id, f.month, f.amount
-    FROM f LEFT JOIN jobs j ON j.id = f.job_id`,
+    SELECT f.kind, f.id, 0::bigint AS line_id, f.staff_id AS group_id, f.month, f.amount FROM f`,
 	model.SalesBreakdownBySource: `
     SELECT f.kind, f.id, 0::bigint AS line_id, c.lead_source_id AS group_id, f.month, f.amount
     FROM f JOIN customers c ON c.id = f.customer_id`,
+	// A fact is a piece under each distinct tag of its job and of its invoice (for a forecast job, of its invoices that
+	// are not void or deleted). The two kinds of tag are told apart by name: a tag is the job tag of that name when
+	// there is one, else the negated id of the invoice tag (see salesBreakdownTags).
 	model.SalesBreakdownByTag: `
-    SELECT f.kind, f.id, 0::bigint AS line_id, l.tag_id AS group_id, f.month, f.amount
-    FROM f LEFT JOIN job_tag_links l ON l.job_id = f.job_id`,
+    SELECT f.kind, f.id, 0::bigint AS line_id, tg.group_id, f.month, f.amount
+    FROM f
+    LEFT JOIN LATERAL (
+        SELECT l.tag_id AS group_id FROM job_tag_links l WHERE l.job_id = f.job_id
+        UNION
+        SELECT COALESCE(jt.id, -it.id)
+        FROM invoice_tag_links il
+        JOIN invoice_tags it ON it.id = il.tag_id
+        LEFT JOIN job_tags jt ON lower(jt.name) = lower(it.name)
+        JOIN billing_documents b ON b.id = il.invoice_id
+        WHERE CASE WHEN f.invoice_id IS NOT NULL THEN b.id = f.invoice_id
+                   ELSE b.job_id = f.job_id AND b.deleted_at IS NULL AND b.status <> 'void' END
+    ) tg ON true`,
 	// A payment or a job-less invoice is split over its invoice's lines; a forecast job over the lines of its
 	// non-void, non-deleted invoices. Each line takes its share of the amount, rounded to the cent; a fact whose
 	// lines add up to nothing stays whole and unassigned.
@@ -104,7 +125,8 @@ func salesBreakdownMonthSums(amount, month string, names bool) string {
 }
 
 // salesBreakdownFacts builds the facts f of the report type: one row per job or job-less invoice (forecast) or per
-// payment (revenue), with its customer, job, invoice, month (1 to 12) and amount. It registers its arguments on w.
+// payment (revenue), with its customer, job, invoice, staff member (the job's assignee for the forecast, the one who
+// took the payment for revenue), month (1 to 12) and amount. It registers its arguments on w.
 func salesBreakdownFacts(w *whereBuilder, f model.SalesBreakdownFilter) (string, error) {
 	if f.YearFrom.IsZero() || f.YearTo.IsZero() {
 		return "", fmt.Errorf("%w: the year is required", ErrInvalidQuery)
@@ -122,13 +144,13 @@ func salesBreakdownFacts(w *whereBuilder, f model.SalesBreakdownFilter) (string,
 		// A scheduled job counts at its value in the month it is scheduled, read in the business time zone through
 		// the month starts; an invoice without a job counts at its total in its invoice month.
 		return `
-    SELECT 1 AS kind, j.id, j.customer_id, j.id AS job_id, NULL::bigint AS invoice_id,
+    SELECT 1 AS kind, j.id, j.customer_id, j.id AS job_id, NULL::bigint AS invoice_id, j.assigned_to AS staff_id,
         width_bucket(j.scheduled_at, ` + bounds + `) AS month, j.invoice_value AS amount
     FROM jobs j
     WHERE j.deleted_at IS NULL AND j.status <> 'cancelled'
       AND j.scheduled_at >= (` + bounds + `)[1] AND j.scheduled_at < (` + bounds + `)[13]
     UNION ALL
-    SELECT 2, i.id, i.customer_id, NULL::bigint, i.id, extract(month FROM i.document_date)::int, i.total
+    SELECT 2, i.id, i.customer_id, NULL::bigint, i.id, NULL::bigint, extract(month FROM i.document_date)::int, i.total
     FROM billing_documents i
     WHERE i.parent_type = 'invoice' AND i.job_id IS NULL AND i.status IN ('sent', 'paid')
       AND i.deleted_at IS NULL AND i.archived_at IS NULL
@@ -155,14 +177,14 @@ func salesBreakdownFacts(w *whereBuilder, f model.SalesBreakdownFilter) (string,
 		// the credit is, when it is used, so a credit application counts at its amount in the month it is applied,
 		// by the method the credit was bought with, provided the credit itself was paid for (see creditIsPaid).
 		return `
-    SELECT 3 AS kind, p.id, p.customer_id, i.job_id, i.id AS invoice_id,
+    SELECT 3 AS kind, p.id, p.customer_id, i.job_id, i.id AS invoice_id, p.received_by AS staff_id,
         extract(month FROM p.payment_date)::int AS month, ` + amount + ` AS amount
     FROM payments p
     JOIN billing_documents i ON i.id = p.invoice_id` + paymentInvoiceTax + `
     WHERE p.status = 'paid' AND p.deleted_at IS NULL
       AND p.payment_date >= ` + from + ` AND p.payment_date <= ` + to + method + `
     UNION ALL
-    SELECT 4, ca.id, i.customer_id, i.job_id, i.id, extract(month FROM ca.applied_on)::int, ` + creditAmount + `
+    SELECT 4, ca.id, i.customer_id, i.job_id, i.id, NULL::bigint, extract(month FROM ca.applied_on)::int, ` + creditAmount + `
     FROM credit_applications ca
     JOIN credits cr ON cr.id = ca.credit_id
     JOIN billing_documents i ON i.id = ca.invoice_id` + creditApplicationInvoiceTax + `

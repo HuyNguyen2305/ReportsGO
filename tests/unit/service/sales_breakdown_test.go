@@ -228,7 +228,7 @@ func TestSalesBreakdownListRejectsInvalidInput(t *testing.T) {
 		{"method on the forecast", service.ListSalesBreakdownParams{Type: "forecast", By: "client", Method: []string{"card"}}, "method", "can only be used with type revenue"},
 		{"unknown measure", service.ListSalesBreakdownParams{Type: "revenue", By: "client", Measure: "invoiced"}, "measure", "must be one of: collected, collected_without_tax"},
 		{"unknown method", service.ListSalesBreakdownParams{Type: "revenue", By: "client", Method: []string{"wire"}}, "method", "must be one of: cash, check, card, other"},
-		{"group not a number", service.ListSalesBreakdownParams{Type: "revenue", By: "tag", Group: []string{"x"}}, "group", "must be positive whole numbers"},
+		{"group not a number", service.ListSalesBreakdownParams{Type: "revenue", By: "tag", Group: []string{"x"}}, "group", "must be whole numbers other than zero"},
 		{"search too long", service.ListSalesBreakdownParams{Type: "revenue", By: "client", Search: strings.Repeat("a", 101)}, "q", "must be at most 100 characters long"},
 		{"account number outside clients", service.ListSalesBreakdownParams{Type: "revenue", By: "item", Sort: "account_number"}, "sort",
 			"must be one of: name, jan, feb, mar, apr, may, jun, jul, aug, sep, oct, nov, dec, total"},
@@ -340,4 +340,21 @@ func TestSalesBreakdownCursorRejectsInvalidCursors(t *testing.T) {
 			require.ErrorAs(t, err, &ce)
 		})
 	}
+}
+
+func TestSalesBreakdownListGroupIDsOfTheTagGrouping(t *testing.T) {
+	t.Run("a tag that exists only on invoices has a negative id", func(t *testing.T) {
+		q, _ := runSalesBreakdown(t, service.ListSalesBreakdownParams{Type: "revenue", By: "tag", Group: []string{"3", "-2"}}, nil)
+		require.Equal(t, []int64{3, -2}, q.Filter.GroupIDs)
+	})
+
+	t.Run("zero is never an id", func(t *testing.T) {
+		got := rejectsSalesBreakdown(t, service.ListSalesBreakdownParams{Type: "revenue", By: "tag", Group: []string{"0"}})
+		require.Equal(t, "must be whole numbers other than zero", got["group"])
+	})
+
+	t.Run("the other groupings take positive ids only", func(t *testing.T) {
+		got := rejectsSalesBreakdown(t, service.ListSalesBreakdownParams{Type: "revenue", By: "staff", Group: []string{"-2"}})
+		require.Equal(t, "must be positive whole numbers", got["group"])
+	})
 }

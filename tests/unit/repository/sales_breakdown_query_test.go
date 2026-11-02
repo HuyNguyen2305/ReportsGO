@@ -87,9 +87,9 @@ func TestBuildSalesBreakdownListQueryPiecesPerGrouping(t *testing.T) {
 	}{
 		{model.SalesBreakdownByClient, "f.customer_id AS group_id", "JOIN customers x ON x.id = g.id"},
 		{model.SalesBreakdownByService, "j.service_type_id AS group_id", "JOIN service_types x ON x.id = g.id"},
-		{model.SalesBreakdownByStaff, "j.assigned_to AS group_id", "JOIN users x ON x.id = g.id"},
+		{model.SalesBreakdownByStaff, "f.staff_id AS group_id", "JOIN users x ON x.id = g.id"},
 		{model.SalesBreakdownBySource, "c.lead_source_id AS group_id", "JOIN lead_sources x ON x.id = g.id"},
-		{model.SalesBreakdownByTag, "l.tag_id AS group_id", "JOIN job_tags x ON x.id = g.id"},
+		{model.SalesBreakdownByTag, "SELECT l.tag_id AS group_id FROM job_tag_links l WHERE l.job_id = f.job_id\n        UNION\n        SELECT COALESCE(jt.id, -it.id)", "SELECT -it.id, it.name FROM invoice_tags it"},
 		{model.SalesBreakdownByItem, "round(f.amount * li.line_total / li.lsum, 2)", "JOIN items x ON x.id = g.id"},
 	}
 	for _, tt := range tests {
@@ -247,4 +247,15 @@ func TestBuildSalesBreakdownQueryNeverPutsCallerTextInSQL(t *testing.T) {
 	}
 	require.Contains(t, flat, "drop table payments", "hostile text must travel as a bind argument")
 	requirePlaceholdersMatchArgs(t, stmt)
+}
+
+func TestBuildSalesBreakdownListQueryFactsCarryTheStaffMember(t *testing.T) {
+	forecast, err := repository.BuildSalesBreakdownListQuery(breakdownQuery(breakdownFilter(model.SalesBreakdownForecast, model.SalesBreakdownByStaff), model.SalesBreakdownSortName, false))
+	require.NoError(t, err)
+	require.Contains(t, forecast.SQL, "NULL::bigint AS invoice_id, j.assigned_to AS staff_id", "the forecast: the job's assignee")
+
+	revenue, err := repository.BuildSalesBreakdownListQuery(breakdownQuery(breakdownFilter(model.SalesBreakdownRevenue, model.SalesBreakdownByStaff), model.SalesBreakdownSortName, false))
+	require.NoError(t, err)
+	require.Contains(t, revenue.SQL, "i.id AS invoice_id, p.received_by AS staff_id", "revenue: whoever took the payment")
+	require.Contains(t, revenue.SQL, "SELECT 4, ca.id, i.customer_id, i.job_id, i.id, NULL::bigint,", "used credit has no one who took it")
 }

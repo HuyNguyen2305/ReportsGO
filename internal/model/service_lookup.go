@@ -56,9 +56,16 @@ type ServiceLookupFilter struct {
 	// them from calendar days in the business time zone. A zero value leaves that side open; a job without a
 	// schedule never matches a bounded side.
 	ScheduledFrom, ScheduledBefore time.Time
-	Statuses                       []JobStatus
-	ServiceTypeIDs                 []int64
-	AssignedToIDs                  []int64
+	// IncludeUnscheduled lets a job without a schedule match the range above. It is set when the range was not sent
+	// but defaulted to the current month, so the Active and Deleted tabs do not hide jobs nobody has scheduled yet.
+	IncludeUnscheduled bool
+	// PoolScheduledFrom and PoolScheduledBefore are the range of the Work Pool, which is the range the caller sent
+	// or open: the defaulted month never applies to it, because pooled jobs are mostly not scheduled yet. They decide
+	// the Work Pool count of the summary on the other tabs too.
+	PoolScheduledFrom, PoolScheduledBefore time.Time
+	Statuses                               []JobStatus
+	ServiceTypeIDs                         []int64
+	AssignedToIDs                          []int64
 	// TagIDs keeps the jobs that have any of these tags.
 	TagIDs []int64
 	// Search matches, case-insensitively and as a substring, the customer name, account number, phone, service type

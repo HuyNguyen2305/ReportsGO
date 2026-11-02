@@ -67,9 +67,10 @@ func grainFor(g model.NoActiveJobsGrain) (noActiveJobsGrain, error) {
 }
 
 // noActiveJobsFrom joins everything the select list, filters and sort expressions can refer to, and keeps only
-// rows that have no active job (any job that is not cancelled or deleted, whatever its status). withLast adds the latest non-deleted job, any
-// status. The phone is the customer's first one (lowest id) taken in a lateral join, so each row stays one row. The
-// list and the summary share it so they always agree about which rows are in scope.
+// rows that have no active job (any job that is not cancelled or deleted, whatever its status). withLast adds the
+// latest non-deleted job that was scheduled, any status (a job that was never scheduled is not a service). The phone is
+// the customer's first one (lowest id) taken in a lateral join, so each row stays one row. The list and the summary
+// share it so they always agree about which rows are in scope.
 func noActiveJobsFrom(g noActiveJobsGrain, withLast bool) string {
 	out := "\n" + g.from + `
 LEFT JOIN LATERAL (
@@ -78,10 +79,10 @@ LEFT JOIN LATERAL (
 	if withLast {
 		out += `
 LEFT JOIN LATERAL (
-    SELECT st.name AS service_type, j.status::text AS job_status, coalesce(j.scheduled_at, j.created_at) AS at
+    SELECT st.name AS service_type, j.status::text AS job_status, j.scheduled_at AS at
     FROM jobs j JOIN service_types st ON st.id = j.service_type_id
-    WHERE ` + fmt.Sprintf(g.jobScope, "j") + ` AND j.deleted_at IS NULL
-    ORDER BY coalesce(j.scheduled_at, j.created_at) DESC, j.id DESC LIMIT 1
+    WHERE ` + fmt.Sprintf(g.jobScope, "j") + ` AND j.deleted_at IS NULL AND j.scheduled_at IS NOT NULL
+    ORDER BY j.scheduled_at DESC, j.id DESC LIMIT 1
 ) ls ON true`
 	}
 	return out

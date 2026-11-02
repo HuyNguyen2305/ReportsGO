@@ -252,6 +252,16 @@ func TestPageForecastMonthsAreReadInTheBusinessTimeZone(t *testing.T) {
 
 func TestPageTagsCountAJobUnderEachTagButOnceInTheSummary(t *testing.T) {
 	e := newEnv(t)
+	overcount := func() model.Money {
+		page := e.page(t, filter(model.SalesBreakdownForecast, model.SalesBreakdownByTag, time.UTC))
+		var rowSum model.Money
+		for _, r := range page.Rows {
+			rowSum += r.Total
+		}
+		return rowSum - page.Summary.Total
+	}
+	// the seed's invoices carry several tags each, so the rows already add up to more than the total
+	before := overcount()
 	jobID := scalar[int64](t, e, `INSERT INTO jobs (customer_id, location_id, service_type_id, status, scheduled_at, invoice_value)
 		SELECT c.id, l.id, (SELECT min(id) FROM service_types), 'confirmed', '2026-10-20 08:00+00', 100
 		FROM customers c JOIN service_locations l ON l.customer_id = c.id WHERE c.account_number = '5002' RETURNING id`)
@@ -261,11 +271,7 @@ func TestPageTagsCountAJobUnderEachTagButOnceInTheSummary(t *testing.T) {
 
 	page := e.page(t, filter(model.SalesBreakdownForecast, model.SalesBreakdownByTag, time.UTC))
 
-	var rowSum model.Money
-	for _, r := range page.Rows {
-		rowSum += r.Total
-	}
-	require.Equal(t, rowSum, page.Summary.Total+10000, "the two-tag job shows under both tags")
+	require.Equal(t, before+10000, overcount(), "the two-tag job shows under both tags")
 	require.Equal(t, model.Money(183126+10000), page.Summary.Total, "but the summary counts it once")
 }
 
@@ -395,7 +401,7 @@ func TestGroupOptions(t *testing.T) {
 	require.NotEmpty(t, opts.Items)
 	require.Len(t, opts.Staff, 2)
 	require.NotEmpty(t, opts.Sources)
-	require.Len(t, opts.Tags, 4)
+	require.Len(t, opts.Tags, 7, "4 job tags and the 3 invoice tags that no job tag shares a name with")
 }
 
 func TestPageRevenueCountsCreditUsedNotCreditBought(t *testing.T) {
@@ -435,4 +441,145 @@ func TestPageRevenueCountsCreditUsedNotCreditBought(t *testing.T) {
 			SELECT ca.amount FROM credit_applications ca JOIN credits cr ON cr.id = ca.credit_id
 			WHERE cr.method_type = 'check' AND EXISTS (SELECT 1 FROM payments cp WHERE cp.credit_id = cr.id AND cp.status = 'paid' AND cp.deleted_at IS NULL)) x`)),
 		e.page(t, f).Summary.Total, "a credit application follows the method of its credit")
+}
+
+func TestPageRevenueByStaffIsWhoeverTookThePayment(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+
+	page := e.page(t, filter(model.SalesBreakdownRevenue, model.SalesBreakdownByStaff, time.UTC))
+
+	rows, err := e.pool.Query(ctx, `SELECT u.full_name, (SUM(p.amount) * 100)::bigint
+		FROM payments p JOIN users u ON u.id = p.received_by
+		WHERE p.invoice_id IS NOT NULL AND p.status = 'paid' AND p.deleted_at IS NULL
+		  AND p.payment_date BETWEEN '2026-01-01' AND '2026-12-31'
+		GROUP BY u.full_name`)
+	require.NoError(t, err)
+	defer rows.Close()
+	want := map[string]model.Money{}
+	for rows.Next() {
+		var name string
+		var cents int64
+		require.NoError(t, rows.Scan(&name, &cents))
+		want[name] = model.Money(cents)
+	}
+	require.NoError(t, rows.Err())
+	require.NotEmpty(t, want, "the seed has cash and check payments with a staff member")
+
+	got := map[string]model.Money{}
+	for _, r := range page.Rows {
+		got[r.Name] = r.Total
+	}
+	require.Equal(t, want, got)
+
+	// online card payments have no one who took them, and used credit has none either
+	unassigned := model.Money(scalar[int64](t, e, `SELECT (((SELECT COALESCE(SUM(amount), 0) FROM payments
+			WHERE invoice_id IS NOT NULL AND received_by IS NULL AND status = 'paid' AND deleted_at IS NULL
+			  AND payment_date BETWEEN '2026-01-01' AND '2026-12-31')
+		+ (SELECT COALESCE(SUM(ca.amount), 0) FROM credit_applications ca
+			WHERE EXISTS (SELECT 1 FROM payments cp WHERE cp.credit_id = ca.credit_id AND cp.status = 'paid' AND cp.deleted_at IS NULL))) * 100)::bigint`))
+	require.NotNil(t, page.Unassigned)
+	require.Equal(t, unassigned, page.Unassigned.Total)
+}
+
+// tagRow finds the row of the tag named name.
+func tagRow(t *testing.T, page model.SalesBreakdownPage, name string) model.SalesBreakdownRow {
+	t.Helper()
+	for _, r := range page.Rows {
+		if r.Name == name {
+			return r
+		}
+	}
+	t.Fatalf("no tag row %q in %v", name, page.Rows)
+	return model.SalesBreakdownRow{}
+}
+
+func TestPageTagsComeFromTheJobAndTheInvoice(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+
+	// addInvoice inserts a sent, job-less invoice of 5002 dated October 2026, with the given invoice tags.
+	addInvoice := func(number string, total float64, tags ...string) {
+		_, err := e.pool.Exec(ctx, `INSERT INTO billing_documents (parent_type, document_number, customer_id, document_date, total, status)
+			SELECT 'invoice', $1, id, '2026-10-10', $2, 'sent' FROM customers WHERE account_number = '5002'`, number, total)
+		require.NoError(t, err)
+		for _, tag := range tags {
+			_, err = e.pool.Exec(ctx, `INSERT INTO invoice_tags (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, tag)
+			require.NoError(t, err)
+			_, err = e.pool.Exec(ctx, `INSERT INTO invoice_tag_links (invoice_id, tag_id)
+				SELECT i.id, t.id FROM billing_documents i, invoice_tags t
+				WHERE i.parent_type = 'invoice' AND i.document_number = $1 AND t.name = $2`, number, tag)
+			require.NoError(t, err)
+		}
+	}
+
+	t.Run("a job-less invoice is under its invoice tags, an invoice-only tag has a negative id", func(t *testing.T) {
+		addInvoice("T-1", 40, "rush")
+
+		page := e.page(t, filter(model.SalesBreakdownForecast, model.SalesBreakdownByTag, time.UTC))
+
+		rush := tagRow(t, page, "rush")
+		require.Less(t, rush.ID, int64(0))
+		require.Equal(t, model.Money(4000), rush.Total)
+		for _, name := range []string{"a", "b", "c"} {
+			require.Less(t, tagRow(t, page, name).ID, int64(0), "invoice-only tag %s", name)
+		}
+	})
+
+	t.Run("a job's amount is also under the tags of its invoices", func(t *testing.T) {
+		page := e.page(t, filter(model.SalesBreakdownForecast, model.SalesBreakdownByTag, time.UTC))
+		// the seed's 85030, 85028 and 85005 carry a, b and c; their job is worth 1.00
+		require.Equal(t, model.Money(100), tagRow(t, page, "a").Total)
+	})
+
+	t.Run("an invoice tag and a job tag of the same name are one row", func(t *testing.T) {
+		_, err := e.pool.Exec(ctx, `INSERT INTO invoice_tags (name) VALUES ('vip')`)
+		require.NoError(t, err)
+		_, err = e.pool.Exec(ctx, `INSERT INTO invoice_tag_links (invoice_id, tag_id)
+			SELECT i.id, t.id FROM billing_documents i, invoice_tags t
+			WHERE i.parent_type = 'invoice' AND i.document_number = '85030' AND t.name = 'vip'`)
+		require.NoError(t, err)
+
+		page := e.page(t, filter(model.SalesBreakdownForecast, model.SalesBreakdownByTag, time.UTC))
+
+		vip := tagRow(t, page, "VIP")
+		require.Greater(t, vip.ID, int64(0), "it is the job tag's id")
+		count := 0
+		for _, r := range page.Rows {
+			if r.Name == "vip" || r.Name == "VIP" {
+				count++
+			}
+		}
+		require.Equal(t, 1, count)
+	})
+
+	t.Run("a payment is under the tags of its job and of its invoice, once", func(t *testing.T) {
+		revenue := e.page(t, filter(model.SalesBreakdownRevenue, model.SalesBreakdownByTag, time.UTC))
+		require.Equal(t, model.Money(scalar[int64](t, e, revenueFactsCents)), revenue.Summary.Total, "each payment counted once")
+		require.NotZero(t, tagRow(t, revenue, "a").Total, "the paid 85005 carries a and b")
+	})
+
+	t.Run("untagged amounts stay unassigned", func(t *testing.T) {
+		require.Nil(t, e.page(t, filter(model.SalesBreakdownForecast, model.SalesBreakdownByTag, time.UTC)).Unassigned, "every seed amount is tagged")
+		addInvoice("T-2", 25)
+
+		page := e.page(t, filter(model.SalesBreakdownForecast, model.SalesBreakdownByTag, time.UTC))
+
+		require.NotNil(t, page.Unassigned)
+		require.Equal(t, model.Money(2500), page.Unassigned.Total)
+	})
+
+	t.Run("a group filter takes a negative id", func(t *testing.T) {
+		all := e.page(t, filter(model.SalesBreakdownForecast, model.SalesBreakdownByTag, time.UTC))
+		a := tagRow(t, all, "a")
+		f := filter(model.SalesBreakdownForecast, model.SalesBreakdownByTag, time.UTC)
+		f.GroupIDs = []int64{a.ID}
+
+		page := e.page(t, f)
+
+		require.Len(t, page.Rows, 1)
+		require.Equal(t, a.Total, page.Rows[0].Total)
+		require.Equal(t, a.Total, page.Summary.Total)
+		require.Nil(t, page.Unassigned)
+	})
 }
