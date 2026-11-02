@@ -157,7 +157,7 @@ func TestAllPartsOfARecurringInvoiceWithANextInvoice(t *testing.T) {
 	r := page.Data[0]
 	require.NotZero(t, r.ID)
 	require.NotEmpty(t, r.Customer.Name)
-	require.Equal(t, "63733", r.AccountNumber)
+	require.Equal(t, "63706", r.AccountNumber)
 	require.Equal(t, dto.RepeatsResponse{
 		Unit: "week", Interval: 2, Weekday: intPtr(2), Occurrences: intPtr(6), Label: "Every 2 weeks on Tuesday, 6 times",
 	}, r.Repeats)
@@ -323,7 +323,7 @@ func TestFilters(t *testing.T) {
 		{"open end", "?from=2026-09-14", 4, "193.50"},
 		{"empty range", "?from=2030-01-01&to=2030-01-31", 0, "0.00"},
 		{"search by next invoice number", "?q=85032", 1, "48.50"},
-		{"search by account number", "?q=63733", 2, "148.49"},
+		{"search by account number", "?q=63733", 1, "99.99"},
 		{"search with a plus-encoded space", "?q=85032+", 1, "48.50"},
 		{"percent is literal", "?q=%25", 0, "0.00"},
 		{"underscore is literal", "?q=850_2", 0, "0.00"},

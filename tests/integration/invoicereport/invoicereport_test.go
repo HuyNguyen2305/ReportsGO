@@ -145,7 +145,7 @@ func TestDefaultRequest(t *testing.T) {
 
 	require.NotNil(t, page.Summary)
 	require.EqualValues(t, 21, page.Summary.Count)
-	require.Equal(t, "264.00", page.Summary.Outstanding)
+	require.Equal(t, "214.00", page.Summary.Outstanding)
 	require.Equal(t, "1.23", page.Summary.Discount)
 
 	// The summary must equal the sum of the rows it describes.
@@ -359,14 +359,14 @@ func TestSummaryFollowsFilters(t *testing.T) {
 	sent := get(t, srv, listPath+"?status=sent").list(t)
 	require.EqualValues(t, 3, sent.Summary.Count)
 	require.Equal(t, "294.00", sent.Summary.Total)
-	require.Equal(t, "264.00", sent.Summary.Outstanding)
+	require.Equal(t, "214.00", sent.Summary.Outstanding)
 
 	paid := get(t, srv, listPath+"?status=paid").list(t)
 	require.Equal(t, "0.00", paid.Summary.Outstanding, "paid invoices owe nothing")
 
 	one := get(t, srv, listPath+"?q=85032").list(t)
 	require.Equal(t, "100.00", one.Summary.Total)
-	require.Equal(t, "70.00", one.Summary.Outstanding, "100.00 less the 30.00 payment")
+	require.Equal(t, "20.00", one.Summary.Outstanding, "100.00 less the 30.00 payment and the 50.00 of credit")
 }
 
 func TestPageSizeAndHasMore(t *testing.T) {
@@ -622,7 +622,7 @@ func TestConcurrentRequestsWithDifferentSortsAgree(t *testing.T) {
 		var page dto.InvoiceListResponse
 		require.NoError(t, json.Unmarshal(r.body, &page))
 		require.Len(t, page.Data, 21, "worker %d (sort %s)", i, r.sortKey)
-		require.Equal(t, "264.00", page.Summary.Outstanding)
+		require.Equal(t, "214.00", page.Summary.Outstanding)
 		require.Equal(t, sorted(numbersOfSeed()), sorted(numbers(page)))
 	}
 }

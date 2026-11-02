@@ -67,7 +67,7 @@ func TestDefaultRequestReturnsTheCurrentMonthWithASummary(t *testing.T) {
 
 	require.NotNil(t, res.Summary)
 	require.EqualValues(t, 21, res.Summary.Count)
-	require.Equal(t, "264.00", res.Summary.Outstanding.String())
+	require.Equal(t, "214.00", res.Summary.Outstanding.String())
 
 	for i := 1; i < len(res.Items); i++ {
 		require.False(t, res.Items[i].Date.After(res.Items[i-1].Date), "newest first by default")
@@ -210,7 +210,7 @@ func TestFilteredRequestsSummarizeExactlyTheirRows(t *testing.T) {
 		wantOutstanding string
 	}{
 		{"sent invoices", service.ListInvoicesParams{Status: []string{"sent"}, Sort: "invoice_number"},
-			[]string{"85031", "85032", "85033"}, "264.00"},
+			[]string{"85031", "85032", "85033"}, "214.00"},
 		{"paid invoices owe nothing", service.ListInvoicesParams{Status: []string{"paid"}, Search: "saliba", Sort: "invoice_number"},
 			[]string{"84975", "84979", "84985", "85000"}, "0.00"},
 		{"archived tab", service.ListInvoicesParams{Lifecycle: "archived"}, []string{"85034"}, "0.00"},

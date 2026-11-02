@@ -362,7 +362,7 @@ SELECT c.id, v.unit::frequency_unit, v.every, v.weekday, v.occurrences, v.action
        v.status::recurring_status, v.total, v.started::date, v.ends::date, i.id, v.next_date::date
 FROM (VALUES
     ('63714', 'month', 1, NULL::smallint, NULL::int, 'create_only',   'paused', 120.00, '2026-08-03', NULL,         NULL,    NULL),
-    ('63733', 'week',  2, 2::smallint,    6,         'send_by_email', 'failed', 48.50,  '2026-10-05', NULL,         '85032', '2026-10-19'),
+    ('63706', 'week',  2, 2::smallint,    6,         'send_by_email', 'failed', 48.50,  '2026-10-05', NULL,         '85032', '2026-10-19'),
     ('63717', 'year',  1, NULL::smallint, NULL::int, 'send_by_email', 'ended',  300.00, '2025-10-01', '2026-10-01', NULL,    NULL),
     ('63706', 'day',   3, NULL::smallint, 10,        'create_only',   'active', 15.00,  '2026-10-15', NULL,         NULL,    '2026-10-18'),
     ('63706', 'week',  1, 4::smallint,    NULL::int, 'send_by_email', 'active', 65.00,  '2026-09-14', NULL,         NULL,    '2026-09-24'),

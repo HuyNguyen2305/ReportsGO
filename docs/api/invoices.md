@@ -65,12 +65,15 @@ Number columns are identifiers, not quantities: `account_number` and `invoice_nu
 ```
 
 - `job`, `billing_email` and `payment_terms` are `null` when the invoice has none; `tags` is always an array.
+  An invoice whose job was deleted still shows that job and still matches the `service_id` filter: the invoice
+  keeps referring to it.
 - `summary` totals the **whole filtered set**, not just this page, and is only present on the **first page**
   (when no `cursor` is sent). It is `null` on later pages.
   `total` and `discount` include every invoice in the filtered set, void and draft invoices too; add
   `status=sent,paid` (or another `status` filter) to leave them out.
-  `outstanding` is the unpaid balance (`total` minus paid payments, never below zero) of the filtered invoices
-  whose status is `sent`.
+  `outstanding` is the unpaid balance (`total` minus paid payments and minus the credit applied to the invoice,
+  never below zero) of the filtered invoices whose status is `sent`. Credit counts only when it was paid for (it has
+  a paid, not deleted payment), as in [Total Sales](total-sales.md) and [Accounts Aging](accounts-aging.md).
 - `range` is the date range actually applied, so a client can show the defaulted month. An open end is `null`.
 - `page.next_cursor` is `null` and `has_more` is `false` on the last page.
 

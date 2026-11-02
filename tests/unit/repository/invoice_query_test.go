@@ -319,6 +319,8 @@ func TestBuildInvoiceSummaryQuery(t *testing.T) {
 	require.Contains(t, stmt.SQL, "count(*)")
 	require.Contains(t, stmt.SQL, "CASE WHEN i.status = 'sent' THEN")
 	require.Contains(t, stmt.SQL, "p.deleted_at IS NULL AND p.status = 'paid'")
+	require.Contains(t, stmt.SQL, "FROM credit_applications ca JOIN credits cr ON cr.id = ca.credit_id", "credit applied reduces the balance")
+	require.Contains(t, stmt.SQL, "cp.credit_id = cr.id AND cp.status = 'paid'", "only credit that was paid for counts")
 	require.NotContains(t, stmt.SQL, "LATERAL", "payments must be summed per sent invoice, not joined for every invoice")
 	require.NotContains(t, stmt.SQL, "ORDER BY")
 	require.NotContains(t, stmt.SQL, "LIMIT")

@@ -103,9 +103,10 @@ func BuildInvoiceListQuery(q model.InvoiceQuery) (Statement, error) {
 }
 
 // BuildInvoiceSummaryQuery builds the statement that totals the whole filtered set.
-// Outstanding is the unpaid balance (total minus paid payments, never below zero) of "sent" invoices.
-// The payments subquery sits inside a CASE branch, so it runs only for "sent" invoices; a join would sum the
-// payments of every invoice in scope just to ignore most of the results.
+// Outstanding is the unpaid balance (total minus paid payments and the credit applied, never below zero) of "sent"
+// invoices; a credit counts only if it was paid for (see creditIsPaid). The subqueries sit inside a CASE branch, so
+// they run only for "sent" invoices; a join would sum the payments of every invoice in scope just to ignore most
+// of the results.
 func BuildInvoiceSummaryQuery(f model.InvoiceFilter) (Statement, error) {
 	var w whereBuilder
 	if err := applyInvoiceFilter(&w, f); err != nil {
@@ -118,7 +119,10 @@ func BuildInvoiceSummaryQuery(f model.InvoiceFilter) (Statement, error) {
     COALESCE(SUM(CASE WHEN i.status = 'sent' THEN GREATEST(i.total - COALESCE((
         SELECT SUM(p.amount)
         FROM payments p
-        WHERE p.invoice_id = i.id AND p.deleted_at IS NULL AND p.status = 'paid'), 0), 0) * 100 END), 0)::bigint` +
+        WHERE p.invoice_id = i.id AND p.deleted_at IS NULL AND p.status = 'paid'), 0) - COALESCE((
+        SELECT SUM(ca.amount)
+        FROM credit_applications ca JOIN credits cr ON cr.id = ca.credit_id
+        WHERE ca.invoice_id = i.id AND ` + creditIsPaid + `), 0), 0) * 100 END), 0)::bigint` +
 		invoiceFrom + w.where()
 	return Statement{SQL: sql, Args: w.args}, nil
 }
