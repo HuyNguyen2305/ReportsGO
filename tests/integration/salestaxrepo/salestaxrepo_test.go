@@ -92,13 +92,13 @@ func TestSummaryCollectedBasisInOctober(t *testing.T) {
 	// VAT: 85009 100.00 + 85011 60.00 + the four 65.00 invoices; its 2.92 surcharge is on 85009
 	require.Equal(t, model.SalesTaxRow{ID: 1, Name: "VAT", Rate: "10.00", TaxableSales: 42000, TaxCollected: 4200, SurchargeTax: 292}, got["VAT"])
 	require.Equal(t, model.SalesTaxRow{ID: 2, Name: "VN", Rate: "30.00", TaxableSales: 22000, TaxCollected: 6600}, got["VN"])
-	// d12: 40.00 (85009) + 17.50 (85010) + 24.00, the 30.00 part payment of 85032's 80.00 taxable and 9.60 tax
-	require.Equal(t, model.SalesTaxRow{ID: 3, Name: "d12", Rate: "12.00", TaxableSales: 8150, TaxCollected: 978}, got["d12"])
+	// d12: 40.00 (85009) + 17.50 (85010) + 24.00 (the 30.00 part payment of 85032, whose lines are 80.00 taxable and 9.60 tax) + 40.00 (the 50.00 of credit applied to 85032)
+	require.Equal(t, model.SalesTaxRow{ID: 3, Name: "d12", Rate: "12.00", TaxableSales: 12150, TaxCollected: 1458}, got["d12"])
 	for _, idle := range allTaxes[3:] {
 		require.Zero(t, got[idle].TaxableSales+got[idle].TaxCollected+got[idle].SurchargeTax, idle)
 	}
 	taxable, tax, surcharge := total(rows)
-	require.Equal(t, []model.Money{72150, 11778, 292}, []model.Money{taxable, tax, surcharge})
+	require.Equal(t, []model.Money{76150, 12258, 292}, []model.Money{taxable, tax, surcharge})
 }
 
 func TestSummaryInvoicedBasisInOctober(t *testing.T) {
@@ -148,8 +148,8 @@ func TestSummaryMethodFilter(t *testing.T) {
 
 	require.Equal(t, model.Money(22000), rows["VN"].TaxableSales, "85004 100.00 and 85005 120.00")
 	require.Equal(t, model.Money(6600), rows["VN"].TaxCollected)
-	require.Equal(t, model.Money(1750), rows["d12"].TaxableSales, "85010 only")
-	require.Equal(t, model.Money(210), rows["d12"].TaxCollected)
+	require.Equal(t, model.Money(3350), rows["d12"].TaxableSales, "85010 and the 20.00 of card credit applied to 85032")
+	require.Equal(t, model.Money(402), rows["d12"].TaxCollected, "2.10 and 1.92 of the credit")
 	require.Equal(t, model.Money(6000), rows["VAT"].TaxableSales, "85011 only")
 	require.Zero(t, rows["VAT"].SurchargeTax, "the surcharge is on 85009, paid in cash")
 
@@ -204,7 +204,7 @@ func TestSummaryCreditPaymentsCarryNoTax(t *testing.T) {
 
 	rows := e.summary(t, october(model.SalesTaxCollected), byTaxableSalesDesc)
 	taxable, _, _ := total(rows)
-	require.Equal(t, model.Money(72150), taxable, "unchanged by the credit payments")
+	require.Equal(t, model.Money(76150), taxable, "credit payments carry no tax; the credit applied to 85032 does")
 }
 
 func TestSummaryRoundsEachPaymentShareToTheCent(t *testing.T) {
@@ -295,7 +295,7 @@ func TestSummaryOpenDateRangeCoversEverything(t *testing.T) {
 	rows := e.summary(t, model.SalesTaxFilter{Basis: model.SalesTaxCollected}, byTaxableSalesDesc)
 
 	taxable, _, _ := total(rows)
-	require.Equal(t, model.Money(72150+1000), taxable, "October plus the September payment")
+	require.Equal(t, model.Money(76150+1000), taxable, "October plus the September payment")
 }
 
 func TestSummarySortOrders(t *testing.T) {
@@ -373,11 +373,11 @@ func TestSummaryReadsOneSnapshotInsideATransaction(t *testing.T) {
 	inside, err := repository.NewSalesTaxRepository(tx).Summary(ctx, october(model.SalesTaxCollected), byTaxableSalesDesc)
 	require.NoError(t, err)
 	insideTaxable, _, _ := total(inside)
-	require.Equal(t, model.Money(72150), insideTaxable, "the payment committed after the snapshot is not seen")
+	require.Equal(t, model.Money(76150), insideTaxable, "the payment committed after the snapshot is not seen")
 
 	outside := e.summary(t, october(model.SalesTaxCollected), byTaxableSalesDesc)
 	outsideTaxable, _, _ := total(outside)
-	require.Equal(t, model.Money(72150+6500), outsideTaxable)
+	require.Equal(t, model.Money(76150+6500), outsideTaxable)
 }
 
 func TestRatesListsEveryTaxRateByName(t *testing.T) {
@@ -397,4 +397,64 @@ func TestRatesListsEveryTaxRateByName(t *testing.T) {
 	require.Equal(t, model.TaxRateOption{ID: 1, Name: "VAT", Rate: "10.00", Active: true}, got["VAT"])
 	require.Equal(t, model.TaxRateOption{ID: 10, Name: "US", Rate: "30.00", Active: false}, got["US"])
 	require.Equal(t, "0.00", got["Tax 32"].Rate)
+}
+
+// addCreditUse buys a credit of amount for 85032's customer (by method, its payment in the given state) and applies
+// applied of it to invoice 85032 on the given day.
+func (e env) addCreditUse(t *testing.T, method, paymentStatus string, amount, applied float64, on string) {
+	t.Helper()
+	ctx := context.Background()
+	var creditID int64
+	require.NoError(t, e.pool.QueryRow(ctx, `INSERT INTO credits (customer_id, amount, method_type, credit_date)
+		SELECT customer_id, $1, $2::payment_method_type, '2026-10-01' FROM billing_documents
+		WHERE parent_type = 'invoice' AND document_number = '85032' RETURNING id`, amount, method).Scan(&creditID))
+	_, err := e.pool.Exec(ctx, `INSERT INTO payments (customer_id, credit_id, method_type, amount, payment_date, status)
+		SELECT customer_id, $1, $2::payment_method_type, $3, '2026-10-01', $4::payment_status FROM credits WHERE id = $1`,
+		creditID, method, amount, paymentStatus)
+	require.NoError(t, err)
+	_, err = e.pool.Exec(ctx, `INSERT INTO credit_applications (credit_id, invoice_id, amount, applied_on)
+		SELECT $1, id, $2, $3::date FROM billing_documents WHERE parent_type = 'invoice' AND document_number = '85032'`,
+		creditID, applied, on)
+	require.NoError(t, err)
+}
+
+func TestSummaryCollectedCountsCreditApplicationsOnTheDayTheyAreApplied(t *testing.T) {
+	e := newEnv(t)
+	taxable := func(f model.SalesTaxFilter) model.Money {
+		got, _, _ := total(e.summary(t, f, byTaxableSalesDesc))
+		return got
+	}
+	before := taxable(october(model.SalesTaxCollected))
+
+	// 10.00 of a 100.00 invoice (80.00 taxable) is 8.00 of taxable sales, on the day it is applied
+	e.addCreditUse(t, "cash", "paid", 10, 10, "2026-10-28")
+	require.Equal(t, before+800, taxable(october(model.SalesTaxCollected)))
+	require.Equal(t, before, taxable(model.SalesTaxFilter{DateFrom: day(2026, 10, 1), DateTo: day(2026, 10, 27), Basis: model.SalesTaxCollected}),
+		"not before the day it is applied")
+	require.Equal(t, model.Money(800), taxable(model.SalesTaxFilter{DateFrom: day(2026, 10, 28), DateTo: day(2026, 10, 28), Basis: model.SalesTaxCollected}),
+		"on the day itself")
+	require.Zero(t, taxable(model.SalesTaxFilter{DateFrom: day(2026, 10, 29), DateTo: day(2026, 10, 29), Basis: model.SalesTaxCollected}),
+		"and not after it")
+
+	t.Run("a credit whose payment was refunded, failed or is missing adds nothing", func(t *testing.T) {
+		now := taxable(october(model.SalesTaxCollected))
+		e.addCreditUse(t, "cash", "refunded", 10, 10, "2026-10-28")
+		e.addCreditUse(t, "cash", "failed", 10, 10, "2026-10-28")
+		e.addCreditUse(t, "cash", "pending", 10, 10, "2026-10-28")
+		require.Equal(t, now, taxable(october(model.SalesTaxCollected)))
+	})
+
+	t.Run("the method filter follows the credit's method", func(t *testing.T) {
+		f := october(model.SalesTaxCollected)
+		f.Methods = []model.PaymentMethod{model.MethodOther}
+		require.Zero(t, taxable(f), "nobody paid by other")
+		e.addCreditUse(t, "other", "paid", 5, 5, "2026-10-29")
+		require.Equal(t, model.Money(400), taxable(f))
+	})
+
+	t.Run("the invoiced basis is unchanged", func(t *testing.T) {
+		invoiced := taxable(october(model.SalesTaxInvoiced))
+		e.addCreditUse(t, "cash", "paid", 10, 10, "2026-10-30")
+		require.Equal(t, invoiced, taxable(october(model.SalesTaxInvoiced)))
+	})
 }

@@ -59,7 +59,7 @@ projected into the forecast. Unscheduled jobs are not forecast.
 |---|---|---|
 | `client` | the job's, invoice's or payment's customer | never |
 | `service` | the service type of the job (for revenue, of the paid invoice's job) | there is no job |
-| `item` | each line item of the invoice, at its share of the amount: `amount × line total ÷ sum of the invoice's line totals`, rounded to the cent. A forecast job is split over the lines of its invoices that are not void or deleted. | there are no lines (for a job: no invoice yet) |
+| `item` | each line item of the invoice, at its share of the amount: `amount × line total ÷ sum of the invoice's line totals`, rounded to the cent, the biggest line taking the rounding remainder. A forecast job is split over the lines of its invoices that are not void or deleted. | there are no lines (for a job: no invoice yet) |
 | `staff` | forecast: the job's assignee. Revenue: the staff member who took the payment, as in [Payments Collected](payments-collected.md) | forecast: there is no job, or nobody is assigned. Revenue: nobody took the payment (an online card payment) or it is used credit |
 | `source` | the customer's lead source | the customer has no source |
 | `tag` | **each** distinct tag of the job and of its invoice (a forecast job: of its invoices). Only invoices that are not void or deleted lend their tags, archived ones do | there is no tag on either |
@@ -69,7 +69,8 @@ tag's id. An invoice tag that no job tag shares a name with is a row of its own,
 invoice tag of that name (so `VIP` and `vip` are one row, and the other ids of that name are not valid in `group`).
 A payment on a void or deleted invoice is still revenue, but it takes the tags of its job only.
 A job with two tags counts under both tag rows, so the tag rows can add up to more than the total. On the item
-grouping the rounded shares can differ from the other groupings' totals by a few cents.
+grouping the shares of a fact add up to its amount exactly, so the total is the same as in the other groupings: the
+biggest line takes what the other lines' rounded shares leave.
 
 ### Response
 
@@ -111,7 +112,9 @@ grouping the rounded shares can differ from the other groupings' totals by a few
   job under two tags is counted once). With a `group` or `q` filter they cover the kept rows only.
 - Rows, unassigned line and summary are read in one database snapshot.
 - The "First name" setting and the Revenue "Details" tab are not part of this endpoint: the first is a display choice,
-  the second is the [Payments Collected](payments-collected.md) list.
+  the second is the [Payments Collected](payments-collected.md) list for the payments, plus the credit applications of
+  the year, which Revenue counts on the day they are applied and Payments Collected does not list (they are not cash
+  received; the [Sales Tax Summary](sales-tax-summary.md) counts them too).
 
 ### Paging
 

@@ -90,7 +90,7 @@ func TestBuildSalesBreakdownListQueryPiecesPerGrouping(t *testing.T) {
 		{model.SalesBreakdownByStaff, "f.staff_id AS group_id", "JOIN users x ON x.id = g.id"},
 		{model.SalesBreakdownBySource, "c.lead_source_id AS group_id", "JOIN lead_sources x ON x.id = g.id"},
 		{model.SalesBreakdownByTag, "SELECT l.tag_id AS group_id FROM job_tag_links l WHERE l.job_id = f.job_id\n        UNION\n        SELECT COALESCE(jt.id, -(SELECT min(x.id) FROM invoice_tags x WHERE lower(x.name) = lower(it.name)))", "SELECT -min(it.id), (array_agg(it.name ORDER BY it.id))[1] FROM invoice_tags it"},
-		{model.SalesBreakdownByItem, "round(f.amount * li.line_total / li.lsum, 2)", "JOIN items x ON x.id = g.id"},
+		{model.SalesBreakdownByItem, "FILTER (WHERE x.rn > 1) OVER ()", "JOIN items x ON x.id = g.id"},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.by), func(t *testing.T) {
@@ -267,4 +267,15 @@ func TestBuildSalesBreakdownListQueryTagsComeFromLiveInvoicesOnly(t *testing.T) 
 		require.Contains(t, stmt.SQL, "WHERE b.deleted_at IS NULL AND b.status <> 'void'\n          AND CASE WHEN f.invoice_id IS NOT NULL THEN b.id = f.invoice_id ELSE b.job_id = f.job_id END",
 			"one rule for the invoices that lend their tags, whatever the fact")
 	}
+}
+
+func TestBuildSalesBreakdownListQueryItemSharesAddUpToTheAmount(t *testing.T) {
+	stmt, err := repository.BuildSalesBreakdownListQuery(breakdownQuery(breakdownFilter(model.SalesBreakdownRevenue, model.SalesBreakdownByItem), model.SalesBreakdownSortName, false))
+	require.NoError(t, err)
+
+	require.Contains(t, stmt.SQL, "row_number() OVER (ORDER BY ii.line_total DESC, ii.id) AS rn", "the biggest line is numbered first")
+	require.Contains(t, stmt.SQL, "THEN f.amount - COALESCE(SUM(round(f.amount * x.line_total / x.lsum, 2)) FILTER (WHERE x.rn > 1) OVER (), 0)",
+		"the biggest line takes what the others leave")
+	require.Contains(t, stmt.SQL, "ELSE round(f.amount * x.line_total / x.lsum, 2) END AS share", "the others are rounded to the cent")
+	require.Contains(t, stmt.SQL, "CASE WHEN li.line_id IS NULL THEN f.amount ELSE li.share END AS amount", "no usable lines: whole and unassigned")
 }

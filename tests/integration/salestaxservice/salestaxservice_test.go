@@ -40,7 +40,7 @@ func TestListDefaultsToThisMonthOnTheCollectedBasisBiggestFirst(t *testing.T) {
 	require.Equal(t, time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC), res.To)
 	require.Len(t, res.Items, 10)
 	require.Equal(t, []string{"VAT", "VN", "d12"}, []string{res.Items[0].Name, res.Items[1].Name, res.Items[2].Name})
-	require.Equal(t, model.SalesTaxSummary{Count: 10, TaxableSales: 72150, TaxCollected: 11778, SurchargeTax: 292}, res.Summary)
+	require.Equal(t, model.SalesTaxSummary{Count: 10, TaxableSales: 76150, TaxCollected: 12258, SurchargeTax: 292}, res.Summary)
 }
 
 func TestListSummaryAlwaysEqualsTheSumOfTheRows(t *testing.T) {

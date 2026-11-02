@@ -36,12 +36,15 @@ are ignored.
 
 | Basis | The tax follows | Counts |
 |---|---|---|
-| `collected` (cash based) | the money received | Every payment that is **paid** and not deleted, made for an invoice, dated in range. Each payment brings its share of each of the invoice's tax lines: the payment amount divided by the invoice total. |
+| `collected` (cash based) | the money received | Every payment that is **paid** and not deleted, made for an invoice, dated in range, and every **credit application** to an invoice (credit that was paid for and is now used) on the day it is applied. Each brings its share of each of the invoice's tax lines: its amount divided by the invoice total. |
 | `invoiced` (accrual) | the invoices | The whole tax lines of the invoices that are sent or paid, not archived or deleted, dated in range. These are the same invoices as in [Total Sales](total-sales.md). |
 
-On the `collected` basis each share (taxable sales, tax and surcharge) is rounded to the cent per payment and tax line,
-and then added up per tax. Credit payments carry no tax, and an invoice with a zero total has nothing to share.
-Pending, failed and refunded payments are not collected. Credits applied to an invoice are not counted yet.
+On the `collected` basis each share (taxable sales, tax and surcharge) is rounded to the cent per payment (or credit
+application) and tax line, and then added up per tax. Buying a credit carries no tax, since there is no invoice: the tax
+comes with the credit when it is applied, and only for a credit that has a paid, not deleted payment. A credit
+application follows the payment method of its credit (the `method` filter). An invoice with a zero total has nothing to
+share. Pending, failed and refunded payments are not collected. The shares are taken per payment, so if an invoice
+is paid more than its total the tax collected on it can be more than its tax lines.
 
 Taxable sales, tax collected and surcharge are the amounts of the invoice's tax lines, so a payment that covers part of
 an invoice carries that part of its tax.

@@ -93,15 +93,22 @@ var salesBreakdownPieces = map[model.SalesBreakdownBy]string{
           AND CASE WHEN f.invoice_id IS NOT NULL THEN b.id = f.invoice_id ELSE b.job_id = f.job_id END
     ) tg ON true`,
 	// A payment or a job-less invoice is split over its invoice's lines; a forecast job over the lines of its
-	// non-void, non-deleted invoices. Each line takes its share of the amount, rounded to the cent; a fact whose
-	// lines add up to nothing stays whole and unassigned.
+	// non-void, non-deleted invoices. Each line takes its share of the amount, rounded to the cent, except the biggest
+	// line (the lowest id among equals), which takes what is left, so the shares of a fact add up to its amount exactly
+	// and the item grouping totals the same as the others. A fact whose lines add up to nothing stays whole and
+	// unassigned.
 	model.SalesBreakdownByItem: `
     SELECT f.kind, f.id, COALESCE(li.line_id, 0) AS line_id, li.item_id AS group_id, f.month,
-        CASE WHEN li.line_id IS NULL THEN f.amount ELSE round(f.amount * li.line_total / li.lsum, 2) END AS amount
+        CASE WHEN li.line_id IS NULL THEN f.amount ELSE li.share END AS amount
     FROM f
     LEFT JOIN LATERAL (
-        SELECT x.id AS line_id, x.item_id, x.line_total, x.lsum FROM (
-            SELECT ii.id, ii.item_id, ii.line_total, SUM(ii.line_total) OVER () AS lsum
+        SELECT x.id AS line_id, x.item_id,
+            CASE WHEN x.rn = 1
+                THEN f.amount - COALESCE(SUM(round(f.amount * x.line_total / x.lsum, 2)) FILTER (WHERE x.rn > 1) OVER (), 0)
+                ELSE round(f.amount * x.line_total / x.lsum, 2) END AS share
+        FROM (
+            SELECT ii.id, ii.item_id, ii.line_total, SUM(ii.line_total) OVER () AS lsum,
+                row_number() OVER (ORDER BY ii.line_total DESC, ii.id) AS rn
             FROM invoice_items ii JOIN billing_documents b ON b.id = ii.invoice_id
             WHERE CASE WHEN f.invoice_id IS NOT NULL THEN b.id = f.invoice_id
                        ELSE b.job_id = f.job_id AND b.deleted_at IS NULL AND b.status <> 'void' END

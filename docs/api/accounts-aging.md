@@ -48,7 +48,7 @@ as-of date, not a date range.
 | Buckets | `d0_30` is 0 to 30 days old, `d31_60` 31 to 60, `d61_90` 61 to 90, `d90_plus` 91 or more. Every balance falls in exactly one bucket, so the four add up to `total`. |
 | Rows | One per customer and service location of the invoice's job. An invoice whose job has no location, or that has no job, falls under its customer with `location_id` and `location` set to `null`. |
 | Available credit | Per customer, not per location: the customer's credits dated on or before `as_of`, less the credit applications dated on or before `as_of`, never below zero. It repeats on each of the customer's rows. |
-| Valid credits | Only a credit with at least one **paid, not deleted** payment counts, both as available credit and as an application against an invoice. A credit whose payments are all pending, failed, refunded or deleted (or that has none) is ignored. |
+| Valid credits | Only a credit with at least one **paid, not deleted** payment counts, both as available credit and as an application against an invoice. A credit whose payments are all pending, failed, refunded or deleted (or that has none) is ignored. Like an invoice's status, this is the credit's state **now**, also when `as_of` is an earlier day: a credit refunded since then is gone from the earlier days too. |
 
 The status of an invoice is its current status, also for a Point in Time view. Payments and credit applications are
 replayed by their dates, but an invoice that was voided, archived or deleted since then is gone from the earlier

@@ -8,6 +8,11 @@ It works like the [Invoices](invoices.md), [Estimates](estimates.md), [Documents
 [Payments](payments.md) reports, with one difference: a credit has **no status** and cannot be deleted or
 archived, so this report has **no `status` filter and no `lifecycle` (Active / Deleted) tab**.
 
+It is the register of every credit that was recorded, whatever became of its payment. Only a credit with at least one
+**paid, not deleted** payment counts as available credit and can pay an invoice in the other reports
+([Accounts Aging](accounts-aging.md), [Total Sales](total-sales.md), [Revenue](sales-breakdown.md)), so this report's
+count and total can be higher than the credit those reports use.
+
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/v1/reports/credits` | One page of the report, with filters, search, sorting, a count and a total |
