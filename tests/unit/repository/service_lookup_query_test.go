@@ -139,13 +139,14 @@ func TestBuildServiceLookupSummaryQuery(t *testing.T) {
 	money := "FILTER (WHERE (j.in_work_pool AND j.deleted_at IS NULL) AND j.status <> 'cancelled')"
 	require.Contains(t, stmt.SQL, "SUM(j.invoice_value * 100) "+money, "a cancelled job adds no money")
 	require.Contains(t, stmt.SQL, "SUM((j.invoice_value - j.tax_amount) * 100) "+money)
+	rng := "(j.scheduled_at >= $6::timestamptz AND j.scheduled_at < $7::timestamptz)"
 	for _, cond := range []string{
-		"(j.deleted_at IS NULL AND NOT j.in_work_pool)", "(j.in_work_pool AND j.deleted_at IS NULL)", "(j.deleted_at IS NOT NULL)",
+		"(j.deleted_at IS NULL AND NOT j.in_work_pool) AND " + rng, "(j.in_work_pool AND j.deleted_at IS NULL)", "(j.deleted_at IS NOT NULL) AND " + rng,
 	} {
 		require.Contains(t, stmt.SQL, "count(*) FILTER (WHERE "+cond+")", "a count for every tab")
 	}
 	require.NotContains(t, stmt.SQL, "\nWHERE (j.", "the tab is a selector of the aggregates, not a condition")
-	require.Contains(t, stmt.SQL, "j.scheduled_at >= $1::timestamptz", "the other filters apply to every tab")
+	require.Contains(t, stmt.SQL, "WHERE j.status::text = ANY($1::text[])", "the other filters apply to every tab")
 	require.Contains(t, stmt.SQL, "EXISTS (SELECT 1 FROM job_tag_links")
 	require.NotContains(t, stmt.SQL, "LEFT JOIN users", "the summary needs no assignee")
 	require.NotContains(t, stmt.SQL, "array_agg", "the summary needs no tag list")
@@ -192,4 +193,39 @@ func TestBuildServiceLookupQueryNeverPutsCallerTextInSQL(t *testing.T) {
 	}
 	require.Contains(t, flat, "drop table jobs", "hostile text must travel as a bind argument")
 	requirePlaceholdersMatchArgs(t, stmt)
+}
+
+func TestBuildServiceLookupSummaryQueryTabRanges(t *testing.T) {
+	oct, nov := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	active := "(j.deleted_at IS NULL AND NOT j.in_work_pool)"
+	pool := "(j.in_work_pool AND j.deleted_at IS NULL)"
+	deleted := "(j.deleted_at IS NOT NULL)"
+
+	t.Run("the defaulted month takes unscheduled jobs but not the work pool", func(t *testing.T) {
+		stmt, err := repository.BuildServiceLookupSummaryQuery(model.ServiceLookupFilter{
+			Tab: model.ServiceLookupActive, ScheduledFrom: oct, ScheduledBefore: nov, IncludeUnscheduled: true,
+		})
+		require.NoError(t, err)
+
+		rng := "((j.scheduled_at >= $1::timestamptz AND j.scheduled_at < $2::timestamptz) OR j.scheduled_at IS NULL)"
+		require.Contains(t, stmt.SQL, "count(*) FILTER (WHERE "+active+" AND "+rng+"),\n    COALESCE(")
+		require.Contains(t, stmt.SQL, "count(*) FILTER (WHERE "+active+" AND "+rng+"),\n    count(*) FILTER (WHERE "+pool+"),\n")
+		require.Contains(t, stmt.SQL, "count(*) FILTER (WHERE "+deleted+" AND "+rng+")")
+		require.NotContains(t, stmt.SQL, pool+" AND", "the work pool count takes no range")
+		require.Equal(t, []any{oct, nov}, stmt.Args, "each bound is bound once")
+		requirePlaceholdersMatchArgs(t, stmt)
+	})
+
+	t.Run("an explicit range applies to every tab, and excludes unscheduled jobs", func(t *testing.T) {
+		stmt, err := repository.BuildServiceLookupSummaryQuery(model.ServiceLookupFilter{
+			Tab: model.ServiceLookupWorkPool, ScheduledFrom: oct, ScheduledBefore: nov, PoolScheduledFrom: oct, PoolScheduledBefore: nov,
+		})
+		require.NoError(t, err)
+
+		rng := "(j.scheduled_at >= $1::timestamptz AND j.scheduled_at < $2::timestamptz)"
+		require.Contains(t, stmt.SQL, "count(*) FILTER (WHERE "+pool+" AND "+rng+")")
+		require.Contains(t, stmt.SQL, "count(*) FILTER (WHERE "+active+" AND "+rng+")")
+		require.NotContains(t, stmt.SQL, "OR j.scheduled_at IS NULL", "no unscheduled jobs")
+		requirePlaceholdersMatchArgs(t, stmt)
+	})
 }

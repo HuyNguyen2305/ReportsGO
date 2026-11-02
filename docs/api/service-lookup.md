@@ -22,7 +22,7 @@ Anything not listed here is rejected (see [Strictness](#strictness)). That inclu
 | Parameter | Type | Meaning | Default |
 |---|---|---|---|
 | `tab` | `active` \| `work_pool` \| `deleted` | See [Tabs](#tabs) | `active` |
-| `from`, `to` | `YYYY-MM-DD` | Inclusive range of the job's **scheduled day**, in the server's `APP_TIMEZONE` (UTC by default). If **both** are missing: the Active and Deleted tabs use the current month and the Work Pool is open. If only one is sent, the other end is open. `to` must not be before `from`. A job that was never scheduled never matches a range. | see left |
+| `from`, `to` | `YYYY-MM-DD` | Inclusive range of the job's **scheduled day**, in the server's `APP_TIMEZONE` (UTC by default). If **both** are missing: the Active and Deleted tabs use the current month **and also list the jobs that are not scheduled yet**, and the Work Pool is open. If only one is sent, the other end is open. `to` must not be before `from`. When a range is sent, a job that was never scheduled does not match it. | see left |
 | `status` | multi | `unconfirmed`, `confirmed`, `completed`, `cancelled` | all |
 | `service_type` | multi | Service type ids | all |
 | `assigned_to` | multi | Staff ids | all |
@@ -80,9 +80,10 @@ Every job is on exactly one tab.
 - `summary` totals the **whole filtered set of the selected tab**, not just the page. `count` includes cancelled jobs,
   since the list shows them, but `invoice_value` and `without_tax` leave them out: a cancelled job earns nothing. It is present on the first page
   (no `cursor`) and `null` on later pages. Rows and summary are read in one database snapshot.
-- `summary.tabs` is how many jobs each tab would show under the **same filters and the same effective date range**,
-  including the defaulted month. A client that switches tab should send an explicit range, because the Work Pool's
-  default range is open and the other tabs' is the current month.
+- `summary.tabs` is how many jobs each tab would show under the **same filters**. The Active and Deleted counts use the
+  effective date range, including the defaulted month with the unscheduled jobs. The Work Pool count never takes the
+  defaulted month: it uses the range you sent, or none, so the badge shows the whole pool. When you send a range it
+  applies to all three counts.
 - `range` is the date range actually applied, so a client can show the defaulted month; an open end is `null`.
 - `data` is always an array, never `null`.
 

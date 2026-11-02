@@ -55,6 +55,18 @@ func tab(t model.ServiceLookupTab) model.ServiceLookupFilter {
 	return model.ServiceLookupFilter{Tab: t}
 }
 
+// explicitRange sets the range the caller sent: it applies to the selected tab and to the work pool alike, and
+// leaves out the jobs that are not scheduled.
+func explicitRange(f *model.ServiceLookupFilter, from, before time.Time) {
+	f.ScheduledFrom, f.ScheduledBefore = from, before
+	f.PoolScheduledFrom, f.PoolScheduledBefore = from, before
+}
+
+func withOctober(f model.ServiceLookupFilter) model.ServiceLookupFilter {
+	explicitRange(&f, day(2026, 10, 1), day(2026, 11, 1))
+	return f
+}
+
 // scalar runs a query that returns one value.
 func scalar[T any](t *testing.T, e env, sql string, args ...any) T {
 	t.Helper()
@@ -164,13 +176,30 @@ func TestPageScheduledRangeAndUnscheduledJobs(t *testing.T) {
 	f := tab(model.ServiceLookupActive)
 	all := e.page(t, f)
 
-	f.ScheduledFrom, f.ScheduledBefore = day(2026, 10, 1), day(2026, 11, 1)
+	explicitRange(&f, day(2026, 10, 1), day(2026, 11, 1))
 	october := e.page(t, f)
 
 	require.Equal(t, int64(34), all.Summary.Count, "33 scheduled seed jobs and the unscheduled one")
 	require.Equal(t, int64(31), october.Summary.Count, "an unscheduled job never matches a range; two seed jobs are outside October")
 	require.Equal(t, int64(31), scalar[int64](t, e, `SELECT count(*) FROM jobs WHERE deleted_at IS NULL AND NOT in_work_pool
 		AND scheduled_at >= '2026-10-01 00:00+00' AND scheduled_at < '2026-11-01 00:00+00'`))
+
+	t.Run("the defaulted month also lists the unscheduled job, and the work pool badge ignores it", func(t *testing.T) {
+		d := tab(model.ServiceLookupActive)
+		d.ScheduledFrom, d.ScheduledBefore, d.IncludeUnscheduled = day(2026, 10, 1), day(2026, 11, 1), true
+		page := e.page(t, d)
+
+		require.Equal(t, int64(32), page.Summary.Count, "31 in October and the unscheduled job")
+		require.Equal(t, int64(32), int64(len(page.Rows)))
+		require.Equal(t, int64(3), page.Summary.Tabs.WorkPool, "every pooled job, whenever it is scheduled")
+		require.Equal(t, int64(32), page.Summary.Tabs.Active)
+	})
+
+	t.Run("an explicit range narrows the work pool badge too", func(t *testing.T) {
+		page := e.page(t, withOctober(f))
+		require.Equal(t, scalar[int64](t, e, `SELECT count(*) FROM jobs WHERE in_work_pool AND deleted_at IS NULL
+			AND scheduled_at >= '2026-10-01 00:00+00' AND scheduled_at < '2026-11-01 00:00+00'`), page.Summary.Tabs.WorkPool)
+	})
 
 	t.Run("one side open", func(t *testing.T) {
 		from := tab(model.ServiceLookupActive)
@@ -210,7 +239,7 @@ func TestPageTabCountsShareTheOtherFilters(t *testing.T) {
 
 	// the range narrows every tab's count
 	f = tab(model.ServiceLookupActive)
-	f.ScheduledFrom, f.ScheduledBefore = day(2026, 10, 22), day(2026, 10, 23)
+	explicitRange(&f, day(2026, 10, 22), day(2026, 10, 23))
 	page = e.page(t, f)
 	require.Equal(t, model.ServiceLookupTabCounts{Active: 0, WorkPool: 0, Deleted: 1}, page.Summary.Tabs)
 }
