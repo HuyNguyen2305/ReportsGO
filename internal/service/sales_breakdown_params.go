@@ -3,7 +3,6 @@ package service
 import (
 	"errors"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -82,7 +81,7 @@ func parseSalesBreakdownParams(p ListSalesBreakdownParams, now time.Time) (model
 
 	// A tag that exists only on invoices has the negated id of its invoice tag, so the tag grouping takes negative ids.
 	if filter.By == model.SalesBreakdownByTag {
-		filter.GroupIDs = v.idsFrom("group", p.Group, math.MinInt64)
+		filter.GroupIDs = v.signedIDs("group", p.Group)
 	} else {
 		filter.GroupIDs = v.ids("group", p.Group)
 	}

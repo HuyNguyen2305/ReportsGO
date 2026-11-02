@@ -152,11 +152,16 @@ func parseEnums[T ~string](v *validator, field string, raw []string, valid []T) 
 }
 
 func (v *validator) ids(field string, raw []string) []int64 {
-	return v.idsFrom(field, raw, 1)
+	return v.parseIDs(field, raw, false)
 }
 
-// idsFrom is ids with a lower bound: min is the smallest id accepted. Zero is never an id.
-func (v *validator) idsFrom(field string, raw []string, min int64) []int64 {
+// signedIDs is ids for a filter that also takes negative ids, such as the tag grouping of the sales breakdown, where an
+// invoice-only tag has the negated id of its invoice tag. Zero is never an id.
+func (v *validator) signedIDs(field string, raw []string) []int64 {
+	return v.parseIDs(field, raw, true)
+}
+
+func (v *validator) parseIDs(field string, raw []string, allowNegative bool) []int64 {
 	if len(raw) > MaxIDsPerFilter {
 		v.add(field, fmt.Sprintf("must have at most %d values", MaxIDsPerFilter))
 		return nil
@@ -169,8 +174,8 @@ func (v *validator) idsFrom(field string, raw []string, min int64) []int64 {
 			continue
 		}
 		n, err := strconv.ParseInt(r, 10, 64)
-		if err != nil || n < min || n == 0 {
-			if min < 0 {
+		if err != nil || n == 0 || (n < 0 && !allowNegative) {
+			if allowNegative {
 				v.add(field, "must be whole numbers other than zero")
 			} else {
 				v.add(field, "must be positive whole numbers")
