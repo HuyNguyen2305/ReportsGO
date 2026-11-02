@@ -436,3 +436,42 @@ func TestPageRevenueCountsCreditUsedNotCreditBought(t *testing.T) {
 			WHERE cr.method_type = 'check' AND EXISTS (SELECT 1 FROM payments cp WHERE cp.credit_id = cr.id AND cp.status = 'paid' AND cp.deleted_at IS NULL)) x`)),
 		e.page(t, f).Summary.Total, "a credit application follows the method of its credit")
 }
+
+func TestPageRevenueByStaffIsWhoeverTookThePayment(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+
+	page := e.page(t, filter(model.SalesBreakdownRevenue, model.SalesBreakdownByStaff, time.UTC))
+
+	rows, err := e.pool.Query(ctx, `SELECT u.full_name, (SUM(p.amount) * 100)::bigint
+		FROM payments p JOIN users u ON u.id = p.received_by
+		WHERE p.invoice_id IS NOT NULL AND p.status = 'paid' AND p.deleted_at IS NULL
+		  AND p.payment_date BETWEEN '2026-01-01' AND '2026-12-31'
+		GROUP BY u.full_name`)
+	require.NoError(t, err)
+	defer rows.Close()
+	want := map[string]model.Money{}
+	for rows.Next() {
+		var name string
+		var cents int64
+		require.NoError(t, rows.Scan(&name, &cents))
+		want[name] = model.Money(cents)
+	}
+	require.NoError(t, rows.Err())
+	require.NotEmpty(t, want, "the seed has cash and check payments with a staff member")
+
+	got := map[string]model.Money{}
+	for _, r := range page.Rows {
+		got[r.Name] = r.Total
+	}
+	require.Equal(t, want, got)
+
+	// online card payments have no one who took them, and used credit has none either
+	unassigned := model.Money(scalar[int64](t, e, `SELECT (((SELECT COALESCE(SUM(amount), 0) FROM payments
+			WHERE invoice_id IS NOT NULL AND received_by IS NULL AND status = 'paid' AND deleted_at IS NULL
+			  AND payment_date BETWEEN '2026-01-01' AND '2026-12-31')
+		+ (SELECT COALESCE(SUM(ca.amount), 0) FROM credit_applications ca
+			WHERE EXISTS (SELECT 1 FROM payments cp WHERE cp.credit_id = ca.credit_id AND cp.status = 'paid' AND cp.deleted_at IS NULL))) * 100)::bigint`))
+	require.NotNil(t, page.Unassigned)
+	require.Equal(t, unassigned, page.Unassigned.Total)
+}

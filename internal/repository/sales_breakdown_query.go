@@ -60,8 +60,7 @@ var salesBreakdownPieces = map[model.SalesBreakdownBy]string{
     SELECT f.kind, f.id, 0::bigint AS line_id, j.service_type_id AS group_id, f.month, f.amount
     FROM f LEFT JOIN jobs j ON j.id = f.job_id`,
 	model.SalesBreakdownByStaff: `
-    SELECT f.kind, f.id, 0::bigint AS line_id, j.assigned_to AS group_id, f.month, f.amount
-    FROM f LEFT JOIN jobs j ON j.id = f.job_id`,
+    SELECT f.kind, f.id, 0::bigint AS line_id, f.staff_id AS group_id, f.month, f.amount FROM f`,
 	model.SalesBreakdownBySource: `
     SELECT f.kind, f.id, 0::bigint AS line_id, c.lead_source_id AS group_id, f.month, f.amount
     FROM f JOIN customers c ON c.id = f.customer_id`,
@@ -104,7 +103,8 @@ func salesBreakdownMonthSums(amount, month string, names bool) string {
 }
 
 // salesBreakdownFacts builds the facts f of the report type: one row per job or job-less invoice (forecast) or per
-// payment (revenue), with its customer, job, invoice, month (1 to 12) and amount. It registers its arguments on w.
+// payment (revenue), with its customer, job, invoice, staff member (the job's assignee for the forecast, the one who
+// took the payment for revenue), month (1 to 12) and amount. It registers its arguments on w.
 func salesBreakdownFacts(w *whereBuilder, f model.SalesBreakdownFilter) (string, error) {
 	if f.YearFrom.IsZero() || f.YearTo.IsZero() {
 		return "", fmt.Errorf("%w: the year is required", ErrInvalidQuery)
@@ -122,13 +122,13 @@ func salesBreakdownFacts(w *whereBuilder, f model.SalesBreakdownFilter) (string,
 		// A scheduled job counts at its value in the month it is scheduled, read in the business time zone through
 		// the month starts; an invoice without a job counts at its total in its invoice month.
 		return `
-    SELECT 1 AS kind, j.id, j.customer_id, j.id AS job_id, NULL::bigint AS invoice_id,
+    SELECT 1 AS kind, j.id, j.customer_id, j.id AS job_id, NULL::bigint AS invoice_id, j.assigned_to AS staff_id,
         width_bucket(j.scheduled_at, ` + bounds + `) AS month, j.invoice_value AS amount
     FROM jobs j
     WHERE j.deleted_at IS NULL AND j.status <> 'cancelled'
       AND j.scheduled_at >= (` + bounds + `)[1] AND j.scheduled_at < (` + bounds + `)[13]
     UNION ALL
-    SELECT 2, i.id, i.customer_id, NULL::bigint, i.id, extract(month FROM i.document_date)::int, i.total
+    SELECT 2, i.id, i.customer_id, NULL::bigint, i.id, NULL::bigint, extract(month FROM i.document_date)::int, i.total
     FROM billing_documents i
     WHERE i.parent_type = 'invoice' AND i.job_id IS NULL AND i.status IN ('sent', 'paid')
       AND i.deleted_at IS NULL AND i.archived_at IS NULL
@@ -155,14 +155,14 @@ func salesBreakdownFacts(w *whereBuilder, f model.SalesBreakdownFilter) (string,
 		// the credit is, when it is used, so a credit application counts at its amount in the month it is applied,
 		// by the method the credit was bought with, provided the credit itself was paid for (see creditIsPaid).
 		return `
-    SELECT 3 AS kind, p.id, p.customer_id, i.job_id, i.id AS invoice_id,
+    SELECT 3 AS kind, p.id, p.customer_id, i.job_id, i.id AS invoice_id, p.received_by AS staff_id,
         extract(month FROM p.payment_date)::int AS month, ` + amount + ` AS amount
     FROM payments p
     JOIN billing_documents i ON i.id = p.invoice_id` + paymentInvoiceTax + `
     WHERE p.status = 'paid' AND p.deleted_at IS NULL
       AND p.payment_date >= ` + from + ` AND p.payment_date <= ` + to + method + `
     UNION ALL
-    SELECT 4, ca.id, i.customer_id, i.job_id, i.id, extract(month FROM ca.applied_on)::int, ` + creditAmount + `
+    SELECT 4, ca.id, i.customer_id, i.job_id, i.id, NULL::bigint, extract(month FROM ca.applied_on)::int, ` + creditAmount + `
     FROM credit_applications ca
     JOIN credits cr ON cr.id = ca.credit_id
     JOIN billing_documents i ON i.id = ca.invoice_id` + creditApplicationInvoiceTax + `

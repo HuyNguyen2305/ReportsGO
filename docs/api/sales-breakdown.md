@@ -56,7 +56,7 @@ projected into the forecast. Unscheduled jobs are not forecast.
 | `client` | the job's, invoice's or payment's customer | never |
 | `service` | the service type of the job (for revenue, of the paid invoice's job) | there is no job |
 | `item` | each line item of the invoice, at its share of the amount: `amount × line total ÷ sum of the invoice's line totals`, rounded to the cent. A forecast job is split over the lines of its invoices that are not void or deleted. | there are no lines (for a job: no invoice yet) |
-| `staff` | the job's assignee | there is no job, or nobody is assigned |
+| `staff` | forecast: the job's assignee. Revenue: the staff member who took the payment, as in [Payments Collected](payments-collected.md) | forecast: there is no job, or nobody is assigned. Revenue: nobody took the payment (an online card payment) or it is used credit |
 | `source` | the customer's lead source | the customer has no source |
 | `tag` | **each** of the job's tags | there is no job, or it has no tags |
 
