@@ -44,6 +44,10 @@ Anything not listed here is rejected (see [Strictness](#strictness)).
 | `revenue` | every **payment** for an invoice that is paid and not deleted: its amount, or with `measure=collected_without_tax` its amount less its share of the invoice's tax (as in [Payments Collected](payments-collected.md)) | the payment date |
 | | every **credit application** to an invoice, i.e. credit that was paid for and is now used: its amount (or less its share of the invoice's tax, as above) | the day it is applied |
 
+A payment counts whatever became of its invoice (voided, archived or deleted), as in
+[Payments Collected](payments-collected.md): it is cash that was collected, unless the payment itself was refunded,
+failed or deleted.
+
 Credit payments (buying a credit) are not revenue; the credit is revenue when it is applied to an invoice, and only a
 credit with a paid, not deleted payment counts. A credit application follows the payment method of its credit (the
 `method` filter). Pending, failed and refunded payments do not count. Recurring invoices are not

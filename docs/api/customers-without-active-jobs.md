@@ -30,7 +30,7 @@ The same for both lists. Anything not listed here is rejected (see [Strictness](
 
 | Parameter | Type | Meaning | Default |
 |---|---|---|---|
-| `status` | multi | The customer's status: `active`, `inactive`, `lead`, `archived`. On the locations list it is the status of the location's customer. | all |
+| `status` | multi | The customer's status: `active`, `inactive`, `lead`, `archived`. On the locations list it is the status of the location's customer. With no `status` every customer is listed, archived and inactive ones too (the screen's "All Statuses"). | all |
 | `q` | text | Case-insensitive substring of the customer name, account number and phone. The locations list also searches the address, city and zip. LIKE wildcards are matched literally. | none |
 | `sort` | key | Customers: `status`, `account_number`, `customer`, `last_service_type`, `job_status`, `last_service_date`. Locations add `address`, `city` and `zip`. | `customer` |
 | `order` | `asc` \| `desc` | Sort direction. With neither `sort` nor `order`: customer name A to Z. With `sort` but no `order`: ascending. Rows with no job sort first when ascending. Ties break by row id in the same direction. | see left |
