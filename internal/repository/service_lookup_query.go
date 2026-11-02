@@ -21,6 +21,10 @@ const serviceLookupAtText = `CASE WHEN j.scheduled_at IS NULL THEN '` + serviceL
 // serviceLookupWithoutTax is the job's value less its tax.
 const serviceLookupWithoutTax = `(j.invoice_value - j.tax_amount)`
 
+// serviceLookupNotCancelled keeps a cancelled job out of the money totals of the summary. The job still counts as a
+// row and in the counts, since the list shows it.
+const serviceLookupNotCancelled = `j.status <> 'cancelled'`
+
 // serviceLookupSorts is the complete list of things the report can be sorted by. SQL text for ORDER BY and the
 // keyset condition comes only from this table, never from the caller. An unscheduled job and an unassigned one sort
 // as the earliest and the empty name.
@@ -136,8 +140,8 @@ func BuildServiceLookupListQuery(q model.ServiceLookupQuery) (Statement, error) 
 	return Statement{SQL: sql, Args: w.args}, nil
 }
 
-// BuildServiceLookupSummaryQuery builds the statement that totals the selected tab's filtered set and counts every
-// tab under the same filters. The tab is not a condition here: each aggregate picks its own tab with FILTER, so all
+// BuildServiceLookupSummaryQuery builds the statement that totals the selected tab's filtered set (cancelled jobs are
+// counted but add no money) and counts every tab under the same filters. The tab is not a condition here: each aggregate picks its own tab with FILTER, so all
 // four numbers come from the same rows.
 func BuildServiceLookupSummaryQuery(f model.ServiceLookupFilter) (Statement, error) {
 	selected, err := serviceLookupTabCond(f.Tab)
@@ -149,8 +153,8 @@ func BuildServiceLookupSummaryQuery(f model.ServiceLookupFilter) (Statement, err
 	applyServiceLookupFilter(&w, f)
 
 	sql := `SELECT count(*) FILTER (WHERE ` + selected + `),
-    COALESCE(SUM(j.invoice_value * 100) FILTER (WHERE ` + selected + `), 0)::bigint,
-    COALESCE(SUM(` + serviceLookupWithoutTax + ` * 100) FILTER (WHERE ` + selected + `), 0)::bigint,
+    COALESCE(SUM(j.invoice_value * 100) FILTER (WHERE ` + selected + ` AND ` + serviceLookupNotCancelled + `), 0)::bigint,
+    COALESCE(SUM(` + serviceLookupWithoutTax + ` * 100) FILTER (WHERE ` + selected + ` AND ` + serviceLookupNotCancelled + `), 0)::bigint,
     count(*) FILTER (WHERE ` + serviceLookupTabConds[model.ServiceLookupActive] + `),
     count(*) FILTER (WHERE ` + serviceLookupTabConds[model.ServiceLookupWorkPool] + `),
     count(*) FILTER (WHERE ` + serviceLookupTabConds[model.ServiceLookupDeleted] + `)` +

@@ -105,8 +105,8 @@ func TestPageSeedTabsAgreeWithIndependentSQL(t *testing.T) {
 			page := e.page(t, tab(tb))
 
 			count := scalar[int64](t, e, "SELECT count(*) FROM jobs WHERE "+conds[tb])
-			value := scalar[int64](t, e, "SELECT COALESCE(sum(invoice_value * 100), 0)::bigint FROM jobs WHERE "+conds[tb])
-			without := scalar[int64](t, e, "SELECT COALESCE(sum((invoice_value - tax_amount) * 100), 0)::bigint FROM jobs WHERE "+conds[tb])
+			value := scalar[int64](t, e, "SELECT COALESCE(sum(invoice_value * 100), 0)::bigint FROM jobs WHERE status <> 'cancelled' AND "+conds[tb])
+			without := scalar[int64](t, e, "SELECT COALESCE(sum((invoice_value - tax_amount) * 100), 0)::bigint FROM jobs WHERE status <> 'cancelled' AND "+conds[tb])
 			require.Equal(t, count, int64(len(page.Rows)))
 			require.Equal(t, count, page.Summary.Count)
 			require.Equal(t, model.Money(value), page.Summary.InvoiceValue)
@@ -116,8 +116,8 @@ func TestPageSeedTabsAgreeWithIndependentSQL(t *testing.T) {
 
 	page := e.page(t, tab(model.ServiceLookupActive))
 	require.Equal(t, model.ServiceLookupTabCounts{Active: 33, WorkPool: 3, Deleted: 1}, page.Summary.Tabs)
-	require.Equal(t, model.Money(161126), page.Summary.InvoiceValue)
-	require.Equal(t, model.Money(158260), page.Summary.WithoutTax)
+	require.Equal(t, model.Money(154626), page.Summary.InvoiceValue, "less the cancelled jobs")
+	require.Equal(t, model.Money(151760), page.Summary.WithoutTax)
 }
 
 func TestPageSeedRowContents(t *testing.T) {
@@ -408,6 +408,9 @@ func TestPageSummaryEqualsTheUnpagedTotals(t *testing.T) {
 
 		var value, without model.Money
 		for _, r := range page.Rows {
+			if r.Status == model.JobCancelled {
+				continue // listed and counted, but no money
+			}
 			value += r.InvoiceValue
 			without += r.WithoutTax
 		}
@@ -457,4 +460,17 @@ func TestFilterLookups(t *testing.T) {
 		names[i] = tg.Name
 	}
 	require.Equal(t, []string{"Commercial", "Follow Up", "Residential", "VIP"}, names, "ordered by name")
+}
+
+func TestPageSummaryCountsACancelledJobButAddsNoMoney(t *testing.T) {
+	e := newEnv(t)
+	before := e.page(t, tab(model.ServiceLookupActive)).Summary
+
+	e.addJob(t, job{status: "cancelled", scheduled: "2026-10-20 08:00+00", value: 50, tax: 5})
+	after := e.page(t, tab(model.ServiceLookupActive))
+
+	require.Equal(t, before.Count+1, after.Summary.Count, "the cancelled job is listed and counted")
+	require.Equal(t, before.Tabs.Active+1, after.Summary.Tabs.Active)
+	require.Equal(t, before.InvoiceValue, after.Summary.InvoiceValue, "but it adds no money")
+	require.Equal(t, before.WithoutTax, after.Summary.WithoutTax)
 }

@@ -136,8 +136,9 @@ func TestBuildServiceLookupSummaryQuery(t *testing.T) {
 
 	selected := "FILTER (WHERE (j.in_work_pool AND j.deleted_at IS NULL))"
 	require.True(t, strings.HasPrefix(stmt.SQL, "SELECT count(*) "+selected), stmt.SQL)
-	require.Contains(t, stmt.SQL, "SUM(j.invoice_value * 100) "+selected)
-	require.Contains(t, stmt.SQL, "SUM((j.invoice_value - j.tax_amount) * 100) "+selected)
+	money := "FILTER (WHERE (j.in_work_pool AND j.deleted_at IS NULL) AND j.status <> 'cancelled')"
+	require.Contains(t, stmt.SQL, "SUM(j.invoice_value * 100) "+money, "a cancelled job adds no money")
+	require.Contains(t, stmt.SQL, "SUM((j.invoice_value - j.tax_amount) * 100) "+money)
 	for _, cond := range []string{
 		"(j.deleted_at IS NULL AND NOT j.in_work_pool)", "(j.in_work_pool AND j.deleted_at IS NULL)", "(j.deleted_at IS NOT NULL)",
 	} {

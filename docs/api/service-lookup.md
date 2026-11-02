@@ -77,7 +77,8 @@ Every job is on exactly one tab.
 - `scheduled_at` is a UTC timestamp, or `null` for a job that was never scheduled. `phone` is the customer's first
   phone, or `null`. `assigned_to` is `null` for an unassigned job. `tags` is `[]` for an untagged job, ordered by name.
 - `without_tax` is the job's `invoice_value` less its tax.
-- `summary` totals the **whole filtered set of the selected tab**, not just the page. It is present on the first page
+- `summary` totals the **whole filtered set of the selected tab**, not just the page. `count` includes cancelled jobs,
+  since the list shows them, but `invoice_value` and `without_tax` leave them out: a cancelled job earns nothing. It is present on the first page
   (no `cursor`) and `null` on later pages. Rows and summary are read in one database snapshot.
 - `summary.tabs` is how many jobs each tab would show under the **same filters and the same effective date range**,
   including the defaulted month. A client that switches tab should send an explicit range, because the Work Pool's
