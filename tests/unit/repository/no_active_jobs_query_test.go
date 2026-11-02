@@ -22,7 +22,7 @@ func TestBuildNoActiveJobsListQueryCustomersGrain(t *testing.T) {
 
 	require.Contains(t, stmt.SQL, "FROM customers c\nLEFT JOIN LATERAL (")
 	require.NotContains(t, stmt.SQL, "service_locations", "the customers report has no location")
-	require.Contains(t, stmt.SQL, "NOT EXISTS (SELECT 1 FROM jobs a WHERE a.customer_id = c.id AND a.status IN ('unconfirmed', 'confirmed') AND a.deleted_at IS NULL)")
+	require.Contains(t, stmt.SQL, "NOT EXISTS (SELECT 1 FROM jobs a WHERE a.customer_id = c.id AND a.status <> 'cancelled' AND a.deleted_at IS NULL)")
 	require.Contains(t, stmt.SQL, "WHERE j.customer_id = c.id AND j.deleted_at IS NULL\n    ORDER BY coalesce(j.scheduled_at, j.created_at) DESC, j.id DESC LIMIT 1")
 	require.Contains(t, stmt.SQL, "c.status::text = ANY($1::text[])")
 	require.Contains(t, stmt.SQL, "(c.display_name ILIKE $2 ESCAPE '\\' OR c.account_number ILIKE $2 ESCAPE '\\' OR ph.number ILIKE $2 ESCAPE '\\')")

@@ -25,7 +25,17 @@ type env struct {
 func newEnv(t *testing.T) env {
 	t.Helper()
 	pool := testdb.SeededPool(t)
+	cancelSeedJobOf5001(t, pool)
 	return env{pool: pool, repo: repository.NewNoActiveJobsRepository(pool)}
+}
+
+// cancelSeedJobOf5001 cancels the seed's one completed job, that of customer 5001. A completed job counts as active, so
+// 5001 would otherwise leave these reports; with the job cancelled it stays listed with a last service.
+func cancelSeedJobOf5001(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(), `UPDATE jobs SET status = 'cancelled'
+		WHERE customer_id = (SELECT id FROM customers WHERE account_number = '5001')`)
+	require.NoError(t, err)
 }
 
 func query(grain model.NoActiveJobsGrain, f model.NoActiveJobsFilter, key model.NoActiveJobsSortKey, desc bool, limit int) model.NoActiveJobsQuery {
@@ -102,7 +112,7 @@ func TestPageSeedCustomersWithoutActiveJobs(t *testing.T) {
 
 	page := e.page(t, model.NoActiveJobsCustomers, model.NoActiveJobsFilter{})
 
-	// no job at all, or jobs that are all finished (5001) - sorted by name
+	// no job at all, or only cancelled jobs (5001, whose completed job the test cancels) - sorted by name
 	require.Equal(t, []string{
 		"63716", "70001", "5002", "70003", "70002", "70005", "70008", "63730", "70004", "70006", "70007", "5001",
 	}, accounts(page.Rows))
@@ -111,15 +121,15 @@ func TestPageSeedCustomersWithoutActiveJobs(t *testing.T) {
 	t.Run("it agrees with an independent query", func(t *testing.T) {
 		var n int
 		require.NoError(t, e.pool.QueryRow(context.Background(), `SELECT count(*) FROM customers c
-			WHERE c.id NOT IN (SELECT customer_id FROM jobs WHERE deleted_at IS NULL AND status IN ('unconfirmed', 'confirmed'))`).Scan(&n))
+			WHERE c.id NOT IN (SELECT customer_id FROM jobs WHERE deleted_at IS NULL AND status <> 'cancelled')`).Scan(&n))
 		require.Equal(t, n, len(page.Rows))
 	})
 
-	t.Run("a customer with only finished jobs shows its last one", func(t *testing.T) {
+	t.Run("a customer with only cancelled jobs shows its last one", func(t *testing.T) {
 		r := e.row(t, model.NoActiveJobsCustomers, "5001")
 		require.NotNil(t, r.LastService)
 		require.Equal(t, "Bi-Monthly Service", r.LastService.ServiceType)
-		require.Equal(t, "completed", r.LastService.JobStatus)
+		require.Equal(t, "cancelled", r.LastService.JobStatus)
 		require.Equal(t, time.Date(2026, 10, 15, 8, 0, 0, 0, time.UTC), r.LastService.At.UTC())
 		require.Nil(t, r.Address, "the customers report has no address")
 	})
@@ -154,12 +164,21 @@ func TestPageSeedLocationsWithoutActiveJobs(t *testing.T) {
 func TestPageWhatMakesAJobActive(t *testing.T) {
 	e := newEnv(t)
 
-	// jobs that are not active, whatever their date: deleted, cancelled, completed
+	// jobs that are not active, whatever their date: deleted and cancelled
 	e.addJob(t, "5002", "", "confirmed", "2026-11-01 08:00+00", "", true)
 	e.addJob(t, "5002", "", "cancelled", "2026-11-02 08:00+00", "", false)
-	e.addJob(t, "5002", "", "completed", "2026-11-03 08:00+00", "", false)
 	require.True(t, e.listed(t, model.NoActiveJobsCustomers, "5002"))
 	require.True(t, e.listed(t, model.NoActiveJobsLocations, "5002"))
+
+	t.Run("a completed job counts as active", func(t *testing.T) {
+		require.True(t, e.listed(t, model.NoActiveJobsCustomers, "5001"), "its job was cancelled")
+		_, err := e.pool.Exec(context.Background(), `UPDATE jobs SET status = 'completed'
+			WHERE customer_id = (SELECT id FROM customers WHERE account_number = '5001')`)
+		require.NoError(t, err)
+
+		require.False(t, e.listed(t, model.NoActiveJobsCustomers, "5001"))
+		require.False(t, e.listed(t, model.NoActiveJobsLocations, "5001"))
+	})
 
 	t.Run("an unconfirmed job makes the customer and the location active", func(t *testing.T) {
 		e.addJob(t, "5002", "", "unconfirmed", "2026-11-04 08:00+00", "", false)
@@ -205,8 +224,8 @@ func TestPageLastServiceRules(t *testing.T) {
 	e := newEnv(t)
 
 	t.Run("the latest non-deleted job counts, deleted and older ones do not", func(t *testing.T) {
-		e.addJob(t, "5001", "", "completed", "2026-12-01 08:00+00", "", true) // newer but deleted
-		e.addJob(t, "5001", "", "completed", "2026-09-01 08:00+00", "", false)
+		e.addJob(t, "5001", "", "cancelled", "2026-12-01 08:00+00", "", true) // newer but deleted
+		e.addJob(t, "5001", "", "cancelled", "2026-09-01 08:00+00", "", false)
 
 		r := e.row(t, model.NoActiveJobsCustomers, "5001")
 		require.Equal(t, time.Date(2026, 10, 15, 8, 0, 0, 0, time.UTC), r.LastService.At.UTC())
@@ -305,7 +324,7 @@ func TestPageNoJobRowsSortFirstAscendingByLastServiceDate(t *testing.T) {
 func TestPageKeysetPagingReproducesTheUnpagedOrderForEverySort(t *testing.T) {
 	e := newEnv(t)
 	e.addLocation(t, "5002", "9 Another Lane", "Austin", "78701")
-	e.addJob(t, "5002", "9 Another Lane", "completed", "2026-09-09 09:00+00", "", false)
+	e.addJob(t, "5002", "9 Another Lane", "cancelled", "2026-09-09 09:00+00", "", false)
 
 	for _, grain := range []model.NoActiveJobsGrain{model.NoActiveJobsCustomers, model.NoActiveJobsLocations} {
 		for _, key := range model.NoActiveJobsSortKeysFor(grain) {

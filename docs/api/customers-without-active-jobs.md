@@ -14,8 +14,8 @@ Two lists share one rule and the same parameters: customers, and service locatio
 
 ## What is listed
 
-- An **active job** is a job that is `unconfirmed` or `confirmed` and not deleted. Work-pool jobs count. Completed,
-  cancelled and deleted jobs do not.
+- An **active job** is a job that is not `cancelled` and not deleted, so `unconfirmed`, `confirmed` and `completed`
+  jobs all count. Work-pool jobs count. Cancelled and deleted jobs do not.
 - The customers list has every customer with **no active job at all**.
 - The locations list has every service location with **no active job of its own**. A customer with an open job at one
   location is not on the customers list, but its other locations are still on the locations list.
@@ -53,7 +53,7 @@ Customers list:
       "account_number": "5001",
       "customer": "William Saliba",
       "phone": "555-0100",
-      "last_service": { "service_type": "Bi-Monthly Service", "job_status": "completed", "date": "2026-10-15" }
+      "last_service": { "service_type": "Bi-Monthly Service", "job_status": "cancelled", "date": "2026-10-15" }
     },
     { "id": 10, "status": "active", "account_number": "5002", "customer": "Alaba David", "phone": null, "last_service": null }
   ],

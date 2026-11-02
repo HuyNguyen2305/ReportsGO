@@ -3,6 +3,7 @@
 package noactivejobsreport_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"reportsgo/internal/dto"
@@ -37,6 +39,7 @@ func newServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
 	pool := testdb.SeededPool(t)
+	cancelSeedJobOf5001(t, pool)
 	logger := slog.New(slog.DiscardHandler)
 	svc := service.NewNoActiveJobsService(repository.NewNoActiveJobsRepository(pool), func() time.Time { return october21 })
 	engine := handler.NewRouter(handler.Deps{
@@ -93,7 +96,7 @@ func TestCustomersReport(t *testing.T) {
 		var one dto.NoActiveJobsCustomersListResponse
 		require.NoError(t, json.Unmarshal(body, &one))
 		require.Len(t, one.Data, 1)
-		require.Equal(t, &dto.LastServiceResponse{ServiceType: "Bi-Monthly Service", JobStatus: "completed", Date: "2026-10-15"}, one.Data[0].LastService)
+		require.Equal(t, &dto.LastServiceResponse{ServiceType: "Bi-Monthly Service", JobStatus: "cancelled", Date: "2026-10-15"}, one.Data[0].LastService)
 	})
 }
 
@@ -181,4 +184,13 @@ func TestOnlyGetIsAllowed(t *testing.T) {
 
 		require.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
 	}
+}
+
+// cancelSeedJobOf5001 cancels the seed's one completed job, that of customer 5001. A completed job counts as active, so
+// 5001 would otherwise leave these reports; with the job cancelled it stays listed with a last service.
+func cancelSeedJobOf5001(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(), `UPDATE jobs SET status = 'cancelled'
+		WHERE customer_id = (SELECT id FROM customers WHERE account_number = '5001')`)
+	require.NoError(t, err)
 }

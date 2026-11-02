@@ -67,7 +67,7 @@ func grainFor(g model.NoActiveJobsGrain) (noActiveJobsGrain, error) {
 }
 
 // noActiveJobsFrom joins everything the select list, filters and sort expressions can refer to, and keeps only
-// rows that have no active job (unconfirmed or confirmed, not deleted). withLast adds the latest non-deleted job, any
+// rows that have no active job (any job that is not cancelled or deleted, whatever its status). withLast adds the latest non-deleted job, any
 // status. The phone is the customer's first one (lowest id) taken in a lateral join, so each row stays one row. The
 // list and the summary share it so they always agree about which rows are in scope.
 func noActiveJobsFrom(g noActiveJobsGrain, withLast bool) string {
@@ -90,7 +90,7 @@ LEFT JOIN LATERAL (
 // applyNoActiveJobsFilter adds the filter's conditions. List and Summary share it.
 func applyNoActiveJobsFilter(w *whereBuilder, g noActiveJobsGrain, f model.NoActiveJobsFilter) {
 	w.add(`NOT EXISTS (SELECT 1 FROM jobs a WHERE ` + fmt.Sprintf(g.jobScope, "a") +
-		` AND a.status IN ('unconfirmed', 'confirmed') AND a.deleted_at IS NULL)`)
+		` AND a.status <> 'cancelled' AND a.deleted_at IS NULL)`)
 	if len(f.Statuses) > 0 {
 		w.add("c.status::text = ANY(" + w.arg(toStrings(f.Statuses)) + "::text[])")
 	}

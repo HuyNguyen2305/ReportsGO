@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"reportsgo/internal/model"
@@ -20,6 +21,7 @@ var october21 = time.Date(2026, 10, 21, 9, 30, 0, 0, time.UTC)
 func newService(t *testing.T, now time.Time) *service.NoActiveJobsService {
 	t.Helper()
 	pool := testdb.SeededPool(t)
+	cancelSeedJobOf5001(t, pool)
 	return service.NewNoActiveJobsService(repository.NewNoActiveJobsRepository(pool), func() time.Time { return now })
 }
 
@@ -94,4 +96,13 @@ func TestListRejectsInvalidInputBeforeTouchingTheDatabase(t *testing.T) {
 		_, err := svc.List(context.Background(), tc.grain, tc.p)
 		require.ErrorIs(t, err, model.ErrInvalidInput, "%s %+v", tc.grain, tc.p)
 	}
+}
+
+// cancelSeedJobOf5001 cancels the seed's one completed job, that of customer 5001. A completed job counts as active, so
+// 5001 would otherwise leave these reports; with the job cancelled it stays listed with a last service.
+func cancelSeedJobOf5001(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(), `UPDATE jobs SET status = 'cancelled'
+		WHERE customer_id = (SELECT id FROM customers WHERE account_number = '5001')`)
+	require.NoError(t, err)
 }

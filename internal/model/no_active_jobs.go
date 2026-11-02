@@ -19,7 +19,7 @@ var CustomerStatuses = []CustomerStatus{
 }
 
 // NoActiveJobsGrain says what a row of the w/o Active Jobs report is: a customer or a service location. An active job
-// is one that is unconfirmed or confirmed and not deleted; a customer (or location) without one is listed.
+// is one that is not cancelled and not deleted (unconfirmed, confirmed or completed); a customer (or location) without one is listed.
 type NoActiveJobsGrain string
 
 // Grains of the w/o Active Jobs reports.
