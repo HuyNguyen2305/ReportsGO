@@ -189,3 +189,19 @@ func TestBuildAccountsAgingListQueryOnlyPaidCreditsCount(t *testing.T) {
 	paid := "EXISTS (SELECT 1 FROM payments cp WHERE cp.credit_id = cr.id AND cp.status = 'paid' AND cp.deleted_at IS NULL)"
 	require.Equal(t, 3, strings.Count(stmt.SQL, paid), "the credits sum, the applications sum and the applications on an invoice")
 }
+
+func TestBuildAccountsAgingListQueryPaidStatusWinsToday(t *testing.T) {
+	f := model.AgingFilter{AsOf: agingAsOf, Today: agingAsOf}
+	stmt, err := repository.BuildAccountsAgingListQuery(agingQuery(f, model.AgingSortCustomer, false))
+	require.NoError(t, err)
+
+	require.Contains(t, stmt.SQL, "(i.status <> 'paid' OR $1::date < $2::date)", "a paid invoice has no balance today, but is replayed for an earlier day")
+	require.Equal(t, []any{agingAsOf, agingAsOf, 51}, stmt.Args)
+	requirePlaceholdersMatchArgs(t, stmt)
+
+	t.Run("no rule without today", func(t *testing.T) {
+		stmt, err := repository.BuildAccountsAgingListQuery(agingQuery(model.AgingFilter{AsOf: agingAsOf}, model.AgingSortCustomer, false))
+		require.NoError(t, err)
+		require.NotContains(t, stmt.SQL, "i.status <> 'paid'")
+	})
+}

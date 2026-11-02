@@ -58,7 +58,7 @@ func TestAgingListDefaults(t *testing.T) {
 	q, res := runAging(t, service.ListAgingParams{}, nil)
 
 	require.Equal(t, model.AgingQuery{
-		Filter: model.AgingFilter{AsOf: date(2026, 10, 21)},
+		Filter: model.AgingFilter{AsOf: date(2026, 10, 21), Today: date(2026, 10, 21)},
 		Sort:   model.AgingSort{Key: model.AgingSortCustomer},
 		Limit:  service.DefaultPageSize,
 	}, q, "the Current tab: today, the customer's name A to Z")
@@ -84,6 +84,7 @@ func TestAgingListAsOf(t *testing.T) {
 
 			require.Equal(t, tt.want, q.Filter.AsOf)
 			require.Equal(t, tt.want, res.AsOf)
+			require.Equal(t, date(2026, 10, 21), q.Filter.Today, "today, whatever day is read")
 		})
 	}
 
@@ -100,6 +101,7 @@ func TestAgingListAsOf(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Equal(t, date(2026, 10, 22), got.Filter.AsOf)
+		require.Equal(t, date(2026, 10, 22), got.Filter.Today)
 	})
 }
 

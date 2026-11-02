@@ -100,6 +100,7 @@ func parseAgingParams(p ListAgingParams, now time.Time) (agingRequest, error) {
 
 	filter := model.AgingFilter{}
 	filter.AsOf = v.asOf(p.AsOf, today)
+	filter.Today = today
 	filter.MinAgeDays = v.minAgeDays(p.Days)
 	filter.ServiceTypeIDs = v.ids("service_type", p.ServiceType)
 	filter.Email = v.email(p.Email)

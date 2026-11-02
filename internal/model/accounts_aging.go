@@ -37,6 +37,10 @@ type AgingFilter struct {
 	// AsOf is the day the balances are read at: invoices dated after it, and payments and credit applications
 	// dated after it, do not count. It is always set; the Current tab is simply today.
 	AsOf time.Time
+	// Today is today's date in the business time zone. When AsOf is Today, an invoice whose status is paid has no
+	// balance, whatever its payments say; for an earlier AsOf the balance is replayed from the payment and credit
+	// dates. The zero value turns the status rule off.
+	Today time.Time
 	// MinAgeDays keeps only rows with an unpaid balance older than this many days (30, 60 or 90); 0 keeps all.
 	MinAgeDays int
 	// ServiceTypeIDs keeps only invoices whose job is of one of these types. Empty means all.

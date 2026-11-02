@@ -43,6 +43,7 @@ as-of date, not a date range.
 |---|---|
 | Invoices | Invoices that are **sent** or **paid**, not archived or deleted, dated on or before `as_of`. Drafts, voids and estimates are not receivables. |
 | Balance | The invoice total, less its paid, non-deleted payments dated on or before `as_of`, less the credit applied to it on or before `as_of`. Only balances above zero are listed. A paid invoice therefore shows up for an earlier `as_of` if it was not yet paid then. |
+| Paid status | For today's view (no `as_of`, or `as_of` = today) an invoice whose status is **paid** has no balance, whatever its payment rows add up to; this matches [Total Sales](total-sales.md). For an earlier `as_of` the balance is replayed from the payment and credit dates, so Point in Time still shows invoices that were unpaid then. |
 | Age | `as_of` minus the **invoice date**, in days. There is no due date. |
 | Buckets | `d0_30` is 0 to 30 days old, `d31_60` 31 to 60, `d61_90` 61 to 90, `d90_plus` 91 or more. Every balance falls in exactly one bucket, so the four add up to `total`. |
 | Rows | One per customer and service location of the invoice's job. An invoice whose job has no location, or that has no job, falls under its customer with `location_id` and `location` set to `null`. |

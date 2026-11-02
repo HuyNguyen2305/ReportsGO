@@ -40,7 +40,7 @@ func takeConds(w *whereBuilder) string {
 //
 //	inv: one row per invoice with an open balance at the as-of date: the total less the paid payments and the credit
 //	     applications dated up to it. Only credits with a paid, not deleted payment count (see creditIsPaid), here and
-//	     in the available credit.
+//	     in the available credit. For today's view an invoice with status paid is left out (see AgingFilter.Today).
 //	a:   inv grouped per customer and service location, split into age buckets.
 //	r:   a with the customer, address, phone, default card and available credit.
 func agingCTEs(w *whereBuilder, f model.AgingFilter) (string, error) {
@@ -61,6 +61,10 @@ func agingCTEs(w *whereBuilder, f model.AgingFilter) (string, error) {
 	// inv
 	w.add("i.parent_type = 'invoice' AND i.status IN ('sent', 'paid') AND i.deleted_at IS NULL AND i.archived_at IS NULL")
 	w.add("i.document_date <= " + asOf)
+	// An invoice marked paid is settled today, whatever its payment rows add up to; an earlier day is replayed.
+	if !f.Today.IsZero() {
+		w.add("(i.status <> 'paid' OR " + asOf + " < " + w.arg(f.Today) + "::date)")
+	}
 	w.add("i.total - COALESCE(pay.paid, 0) - COALESCE(app.applied, 0) > 0")
 	if len(f.ServiceTypeIDs) > 0 {
 		w.add("j.service_type_id = ANY(" + w.arg(f.ServiceTypeIDs) + "::bigint[])")

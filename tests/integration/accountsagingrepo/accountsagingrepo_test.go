@@ -466,3 +466,22 @@ func TestPageOnlyCreditsWithAPaidPaymentAreAvailableAndPayInvoices(t *testing.T)
 		require.Equal(t, model.Money(4000), page.Rows[0].AvailableCredit, "the refunded 25.00 credit does not count")
 	})
 }
+
+func TestPageInvoiceMarkedPaidHasNoBalanceTodayButIsReplayedForAnEarlierDay(t *testing.T) {
+	e := newEnv(t)
+	oct1 := day(2026, 10, 1)
+	e.addInvoice(t, "9200", "5001", oct1, 100, "paid", false, false) // marked paid, with no payment rows
+	e.addInvoice(t, "9201", "5001", oct1, 40, "sent", false, false)
+	saliba := func(f model.AgingFilter) model.Money {
+		for _, r := range e.page(t, f).Rows {
+			if r.CustomerName == "William Saliba" {
+				return r.Total
+			}
+		}
+		return 0
+	}
+
+	require.Equal(t, model.Money(14000), saliba(model.AgingFilter{AsOf: oct20}), "without the rule, payments alone decide")
+	require.Equal(t, model.Money(4000), saliba(model.AgingFilter{AsOf: oct21, Today: oct21}), "today: the paid status wins")
+	require.Equal(t, model.Money(14000), saliba(model.AgingFilter{AsOf: oct20, Today: oct21}), "an earlier day is replayed")
+}
