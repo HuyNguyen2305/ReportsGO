@@ -24,7 +24,7 @@ Anything not listed here is rejected (see [Strictness](#strictness)).
 | `type` | `forecast` \| `revenue` | Which report; see [What counts](#what-counts) | **required** |
 | `by` | `client` \| `service` \| `item` \| `staff` \| `source` \| `tag` | What one row is; see [Groupings](#groupings) | **required** |
 | `year` | int, 2000 – 2100 | The calendar year. Months are read in the server's `APP_TIMEZONE` (UTC by default). | current year |
-| `group` | multi | Ids of the chosen grouping (service type, item, staff, lead source or tag ids; customer ids for clients) | all |
+| `group` | multi | Ids of the chosen grouping (service type, item, staff, lead source or tag ids; customer ids for clients). A tag that exists only as an invoice tag has a **negative** id (see [Groupings](#groupings)); no other id is negative. | all |
 | `measure` | `collected` \| `collected_without_tax` | Revenue only; with `type=forecast` it is a 422 | `collected` |
 | `method` | multi | `cash`, `check`, `card`, `other`. Revenue only; with `type=forecast` it is a 422 | all |
 | `q` | text | Case-insensitive substring of the group name, and of the account number for clients. LIKE wildcards are matched literally. | none |
@@ -58,8 +58,10 @@ projected into the forecast. Unscheduled jobs are not forecast.
 | `item` | each line item of the invoice, at its share of the amount: `amount × line total ÷ sum of the invoice's line totals`, rounded to the cent. A forecast job is split over the lines of its invoices that are not void or deleted. | there are no lines (for a job: no invoice yet) |
 | `staff` | forecast: the job's assignee. Revenue: the staff member who took the payment, as in [Payments Collected](payments-collected.md) | forecast: there is no job, or nobody is assigned. Revenue: nobody took the payment (an online card payment) or it is used credit |
 | `source` | the customer's lead source | the customer has no source |
-| `tag` | **each** of the job's tags | there is no job, or it has no tags |
+| `tag` | **each** distinct tag of the job and of its invoice (a forecast job: of its invoices that are not void or deleted) | there is no tag on either |
 
+Tags are told apart by name (ignoring case): a job tag and an invoice tag with the same name are one row, with the job
+tag's id. An invoice tag that no job tag shares a name with is a row of its own, with the **negated** invoice tag id.
 A job with two tags counts under both tag rows, so the tag rows can add up to more than the total. On the item
 grouping the rounded shares can differ from the other groupings' totals by a few cents.
 
@@ -161,7 +163,7 @@ are found with `q` instead. `sort_keys` is the client list; the other groupings 
     "item": [{ "id": 7, "name": "Travel Fee" }],
     "staff": [{ "id": 2, "name": "thon nguyen" }],
     "source": [{ "id": 3, "name": "Facebook" }],
-    "tag": [{ "id": 1, "name": "VIP" }]
+    "tag": [{ "id": -1, "name": "a" }, { "id": 1, "name": "VIP" }]
   },
   "sort_keys": ["name", "account_number", "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec", "total"],
   "default_sort": { "key": "name", "order": "asc" },

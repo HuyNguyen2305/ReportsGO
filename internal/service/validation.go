@@ -152,6 +152,11 @@ func parseEnums[T ~string](v *validator, field string, raw []string, valid []T) 
 }
 
 func (v *validator) ids(field string, raw []string) []int64 {
+	return v.idsFrom(field, raw, 1)
+}
+
+// idsFrom is ids with a lower bound: min is the smallest id accepted. Zero is never an id.
+func (v *validator) idsFrom(field string, raw []string, min int64) []int64 {
 	if len(raw) > MaxIDsPerFilter {
 		v.add(field, fmt.Sprintf("must have at most %d values", MaxIDsPerFilter))
 		return nil
@@ -164,8 +169,12 @@ func (v *validator) ids(field string, raw []string) []int64 {
 			continue
 		}
 		n, err := strconv.ParseInt(r, 10, 64)
-		if err != nil || n < 1 {
-			v.add(field, "must be positive whole numbers")
+		if err != nil || n < min || n == 0 {
+			if min < 0 {
+				v.add(field, "must be whole numbers other than zero")
+			} else {
+				v.add(field, "must be positive whole numbers")
+			}
 			return nil
 		}
 		if !seen[n] {

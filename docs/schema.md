@@ -123,4 +123,4 @@ generated `invoice_parent_type` column and a composite foreign key, so only invo
 - "Locations w/o Active Jobs" is the screen the request called "Address w/o Active Jobs".
 - The seed figures for tax, items, cards and credit use are plausible October 2026 data, not the exact screenshot numbers.
 - `jobs.tax_amount` is stored on the job because a job may have no invoice yet; invoice tax comes from `invoice_tax_lines`.
-- By Tags in Sales Forecast / Revenue is assumed to use job tags for jobs and `invoice_tags` for invoices; decide per report when its API is designed.
+- By Tags in Sales Forecast / Revenue counts a fact under the tags of its job (`job_tags`) and of its invoice (`invoice_tags`), matched by name; an invoice tag with no same-named job tag is identified by its negated id. By Staff in Revenue is the staff member who took the payment (`payments.received_by`); in the Forecast it is the job's assignee.

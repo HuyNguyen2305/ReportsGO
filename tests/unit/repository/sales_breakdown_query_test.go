@@ -89,7 +89,7 @@ func TestBuildSalesBreakdownListQueryPiecesPerGrouping(t *testing.T) {
 		{model.SalesBreakdownByService, "j.service_type_id AS group_id", "JOIN service_types x ON x.id = g.id"},
 		{model.SalesBreakdownByStaff, "f.staff_id AS group_id", "JOIN users x ON x.id = g.id"},
 		{model.SalesBreakdownBySource, "c.lead_source_id AS group_id", "JOIN lead_sources x ON x.id = g.id"},
-		{model.SalesBreakdownByTag, "l.tag_id AS group_id", "JOIN job_tags x ON x.id = g.id"},
+		{model.SalesBreakdownByTag, "SELECT l.tag_id AS group_id FROM job_tag_links l WHERE l.job_id = f.job_id\n        UNION\n        SELECT COALESCE(jt.id, -it.id)", "SELECT -it.id, it.name FROM invoice_tags it"},
 		{model.SalesBreakdownByItem, "round(f.amount * li.line_total / li.lsum, 2)", "JOIN items x ON x.id = g.id"},
 	}
 	for _, tt := range tests {

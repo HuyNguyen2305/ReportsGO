@@ -174,7 +174,7 @@ func TestFiltersEndpoint(t *testing.T) {
 	require.Equal(t, []string{"forecast", "revenue"}, out.Types)
 	require.Equal(t, []string{"client", "service", "item", "staff", "source", "tag"}, out.Bys)
 	require.Equal(t, []string{"collected", "collected_without_tax"}, out.Measures)
-	require.Len(t, out.Groups.Tag, 4)
+	require.Len(t, out.Groups.Tag, 7, "job tags and invoice-only tags")
 	require.Len(t, out.Groups.Staff, 2)
 	require.NotEmpty(t, out.Groups.Item)
 	require.Equal(t, dto.YearsResponse{Min: 2000, Max: 2100}, out.Years)

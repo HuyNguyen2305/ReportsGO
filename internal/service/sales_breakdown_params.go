@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -79,7 +80,12 @@ func parseSalesBreakdownParams(p ListSalesBreakdownParams, now time.Time) (model
 	filter.YearFrom = time.Date(filter.Year, time.January, 1, 0, 0, 0, 0, time.UTC)
 	filter.YearTo = time.Date(filter.Year, time.December, 31, 0, 0, 0, 0, time.UTC)
 
-	filter.GroupIDs = v.ids("group", p.Group)
+	// A tag that exists only on invoices has the negated id of its invoice tag, so the tag grouping takes negative ids.
+	if filter.By == model.SalesBreakdownByTag {
+		filter.GroupIDs = v.idsFrom("group", p.Group, math.MinInt64)
+	} else {
+		filter.GroupIDs = v.ids("group", p.Group)
+	}
 	filter.Search = v.search(p.Search)
 
 	// The measure and the payment methods describe payments, which only Revenue has.

@@ -170,12 +170,21 @@ func (r *SalesBreakdownRepository) GroupOptions(ctx context.Context) (model.Sale
 		out.Sources = append(out.Sources, model.LeadSource{ID: s.ID, Name: s.Name})
 	}
 
-	tags, err := r.q.ListJobTags(ctx)
+	// Job tags and invoice tags together, as the tag grouping sees them; an invoice-only tag has a negative id.
+	rows, err := r.conn.Query(ctx, `SELECT x.id, x.name FROM `+salesBreakdownTags+` x ORDER BY lower(x.name), x.id`)
 	if err != nil {
-		return out, fmt.Errorf("list job tags: %w", err)
+		return out, fmt.Errorf("list tags: %w", err)
 	}
-	for _, t := range tags {
-		out.Tags = append(out.Tags, model.JobTag{ID: t.ID, Name: t.Name})
+	defer rows.Close()
+	for rows.Next() {
+		var t model.JobTag
+		if err := rows.Scan(&t.ID, &t.Name); err != nil {
+			return out, fmt.Errorf("scan tag: %w", err)
+		}
+		out.Tags = append(out.Tags, t)
+	}
+	if err := rows.Err(); err != nil {
+		return out, fmt.Errorf("read tags: %w", err)
 	}
 	return out, nil
 }
