@@ -583,3 +583,97 @@ func TestPageTagsComeFromTheJobAndTheInvoice(t *testing.T) {
 		require.Nil(t, page.Unassigned)
 	})
 }
+
+// addTaggedInvoice inserts a sent, job-less invoice of customer 5002 in October 2026 with the given total, tags and
+// state, and returns its id.
+func (e env) addTaggedInvoice(t *testing.T, number string, total float64, state string, tags ...string) int64 {
+	t.Helper()
+	ctx := context.Background()
+	id := scalar[int64](t, e, `INSERT INTO billing_documents (parent_type, document_number, customer_id, document_date, total, status,
+			archived_at, deleted_at)
+		SELECT 'invoice', $1, id, '2026-10-10', $2, CASE WHEN $3 = 'void' THEN 'void' ELSE 'sent' END::billing_status,
+		       CASE WHEN $3 = 'archived' THEN now() END, CASE WHEN $3 = 'deleted' THEN now() END
+		FROM customers WHERE account_number = '5002' RETURNING id`, number, total, state)
+	for _, tag := range tags {
+		_, err := e.pool.Exec(ctx, `INSERT INTO invoice_tags (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, tag)
+		require.NoError(t, err)
+		_, err = e.pool.Exec(ctx, `INSERT INTO invoice_tag_links (invoice_id, tag_id) SELECT $1, id FROM invoice_tags WHERE name = $2`, id, tag)
+		require.NoError(t, err)
+	}
+	return id
+}
+
+func TestPageTagsOnlyComeFromInvoicesThatAreNotVoidOrDeleted(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	rows := func(ty model.SalesBreakdownType) map[string]model.Money {
+		out := map[string]model.Money{}
+		for _, r := range e.page(t, filter(ty, model.SalesBreakdownByTag, time.UTC)).Rows {
+			out[r.Name] = r.Total
+		}
+		return out
+	}
+
+	// job-less invoices (a forecast fact) in every state, each with a tag of its own
+	e.addTaggedInvoice(t, "S-live", 10, "live", "t-live")
+	e.addTaggedInvoice(t, "S-archived", 20, "archived", "t-archived")
+	e.addTaggedInvoice(t, "S-void", 30, "void", "t-void")
+	e.addTaggedInvoice(t, "S-deleted", 40, "deleted", "t-deleted")
+
+	forecast := rows(model.SalesBreakdownForecast)
+	require.Equal(t, model.Money(1000), forecast["t-live"])
+	require.NotContains(t, forecast, "t-archived", "an archived invoice is not forecast, so it has no fact")
+	require.NotContains(t, forecast, "t-void")
+	require.NotContains(t, forecast, "t-deleted")
+
+	// a payment on each of them is revenue whatever became of the invoice; only the live and archived invoices lend their tags
+	for _, number := range []string{"S-live", "S-archived", "S-void", "S-deleted"} {
+		_, err := e.pool.Exec(ctx, `INSERT INTO payments (customer_id, invoice_id, method_type, amount, payment_date, status)
+			SELECT customer_id, id, 'cash', 5, '2026-10-12', 'paid' FROM billing_documents WHERE parent_type = 'invoice' AND document_number = $1`, number)
+		require.NoError(t, err)
+	}
+	revenue := rows(model.SalesBreakdownRevenue)
+	require.Equal(t, model.Money(500), revenue["t-live"])
+	require.Equal(t, model.Money(500), revenue["t-archived"], "an archived invoice still lends its tags")
+	require.NotContains(t, revenue, "t-void", "a void invoice does not")
+	require.NotContains(t, revenue, "t-deleted", "nor a deleted one")
+
+	page := e.page(t, filter(model.SalesBreakdownRevenue, model.SalesBreakdownByClient, time.UTC))
+	require.Equal(t, model.Money(scalar[int64](t, e, revenueFactsCents)), page.Summary.Total, "the payments on void and deleted invoices are still revenue")
+}
+
+func TestPageInvoiceTagsOfTheSameNameAreOneRow(t *testing.T) {
+	e := newEnv(t)
+	e.addTaggedInvoice(t, "S-1", 10, "live", "Rush")
+	e.addTaggedInvoice(t, "S-2", 15, "live", "rush")
+
+	page := e.page(t, filter(model.SalesBreakdownForecast, model.SalesBreakdownByTag, time.UTC))
+
+	var rush []model.SalesBreakdownRow
+	for _, r := range page.Rows {
+		if r.Name == "Rush" || r.Name == "rush" {
+			rush = append(rush, r)
+		}
+	}
+	require.Len(t, rush, 1, "'Rush' and 'rush' are one tag")
+	require.Equal(t, "Rush", rush[0].Name, "named by the lowest id")
+	require.Equal(t, model.Money(2500), rush[0].Total)
+	require.Less(t, rush[0].ID, int64(0))
+
+	opts, err := e.repo.GroupOptions(context.Background())
+	require.NoError(t, err)
+	n := 0
+	for _, o := range opts.Tags {
+		if o.Name == "Rush" || o.Name == "rush" {
+			n++
+			require.Equal(t, rush[0].ID, o.ID, "the filter option has the row's id")
+		}
+	}
+	require.Equal(t, 1, n)
+
+	f := filter(model.SalesBreakdownForecast, model.SalesBreakdownByTag, time.UTC)
+	f.GroupIDs = []int64{rush[0].ID}
+	filtered := e.page(t, f)
+	require.Len(t, filtered.Rows, 1)
+	require.Equal(t, model.Money(2500), filtered.Summary.Total)
+}

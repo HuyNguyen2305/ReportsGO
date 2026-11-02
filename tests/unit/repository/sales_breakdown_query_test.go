@@ -89,7 +89,7 @@ func TestBuildSalesBreakdownListQueryPiecesPerGrouping(t *testing.T) {
 		{model.SalesBreakdownByService, "j.service_type_id AS group_id", "JOIN service_types x ON x.id = g.id"},
 		{model.SalesBreakdownByStaff, "f.staff_id AS group_id", "JOIN users x ON x.id = g.id"},
 		{model.SalesBreakdownBySource, "c.lead_source_id AS group_id", "JOIN lead_sources x ON x.id = g.id"},
-		{model.SalesBreakdownByTag, "SELECT l.tag_id AS group_id FROM job_tag_links l WHERE l.job_id = f.job_id\n        UNION\n        SELECT COALESCE(jt.id, -it.id)", "SELECT -it.id, it.name FROM invoice_tags it"},
+		{model.SalesBreakdownByTag, "SELECT l.tag_id AS group_id FROM job_tag_links l WHERE l.job_id = f.job_id\n        UNION\n        SELECT COALESCE(jt.id, -(SELECT min(x.id) FROM invoice_tags x WHERE lower(x.name) = lower(it.name)))", "SELECT -min(it.id), (array_agg(it.name ORDER BY it.id))[1] FROM invoice_tags it"},
 		{model.SalesBreakdownByItem, "round(f.amount * li.line_total / li.lsum, 2)", "JOIN items x ON x.id = g.id"},
 	}
 	for _, tt := range tests {
@@ -258,4 +258,13 @@ func TestBuildSalesBreakdownListQueryFactsCarryTheStaffMember(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, revenue.SQL, "i.id AS invoice_id, p.received_by AS staff_id", "revenue: whoever took the payment")
 	require.Contains(t, revenue.SQL, "SELECT 4, ca.id, i.customer_id, i.job_id, i.id, NULL::bigint,", "used credit has no one who took it")
+}
+
+func TestBuildSalesBreakdownListQueryTagsComeFromLiveInvoicesOnly(t *testing.T) {
+	for _, ty := range []model.SalesBreakdownType{model.SalesBreakdownForecast, model.SalesBreakdownRevenue} {
+		stmt, err := repository.BuildSalesBreakdownListQuery(breakdownQuery(breakdownFilter(ty, model.SalesBreakdownByTag), model.SalesBreakdownSortName, false))
+		require.NoError(t, err)
+		require.Contains(t, stmt.SQL, "WHERE b.deleted_at IS NULL AND b.status <> 'void'\n          AND CASE WHEN f.invoice_id IS NOT NULL THEN b.id = f.invoice_id ELSE b.job_id = f.job_id END",
+			"one rule for the invoices that lend their tags, whatever the fact")
+	}
 }
