@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -191,4 +193,55 @@ func TestOnlyGetIsAllowed(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 
 	require.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
+}
+
+// cents reads a decimal string such as "148.56" as a whole number of cents.
+func cents(t *testing.T, s string) int64 {
+	t.Helper()
+	f, err := strconv.ParseFloat(s, 64)
+	require.NoError(t, err)
+	return int64(math.Round(f * 100))
+}
+
+func TestForecastByTagTakesInvoiceOnlyTagsWithNegativeIds(t *testing.T) {
+	srv := newServer(t)
+
+	all := list(t, srv, "?type=forecast&by=tag")
+	var invoiceOnly *dto.SalesBreakdownRowResponse
+	for i, r := range all.Data {
+		if r.Name == "a" {
+			invoiceOnly = &all.Data[i]
+		}
+	}
+	require.NotNil(t, invoiceOnly, "the seed's invoices are tagged a, b and c")
+	require.Less(t, invoiceOnly.ID, int64(0), "a tag that only invoices carry has a negated id")
+
+	one := list(t, srv, "?type=forecast&by=tag&group="+strconv.FormatInt(invoiceOnly.ID, 10))
+	require.Len(t, one.Data, 1)
+	require.Equal(t, invoiceOnly.Total, one.Data[0].Total)
+	require.Equal(t, invoiceOnly.Total, one.Summary.Total)
+	require.Nil(t, one.Unassigned, "a group filter drops the unassigned line")
+
+	t.Run("the other groupings take positive ids only", func(t *testing.T) {
+		resp, body := get(t, srv, listPath+"?type=forecast&by=staff&group=-1")
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode, "body: %s", body)
+	})
+	t.Run("zero is not an id", func(t *testing.T) {
+		resp, _ := get(t, srv, listPath+"?type=forecast&by=tag&group=0")
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
+	})
+}
+
+func TestRevenueByStaffIsWhoeverTookThePayment(t *testing.T) {
+	srv := newServer(t)
+
+	out := list(t, srv, "?type=revenue&by=staff")
+
+	require.Len(t, out.Data, 2, "the two staff members who took cash and check payments")
+	require.NotNil(t, out.Unassigned, "online card payments and used credit have no one who took them")
+	var sum int64
+	for _, r := range out.Data {
+		sum += cents(t, r.Total)
+	}
+	require.Equal(t, cents(t, out.Summary.Total), sum+cents(t, out.Unassigned.Total), "rows and the unassigned line add up to the total")
 }

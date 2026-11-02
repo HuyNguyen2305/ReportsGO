@@ -183,3 +183,17 @@ func TestOnlyGetIsAllowed(t *testing.T) {
 
 	require.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
 }
+
+func TestListWithADateRangeLeavesOutJobsNobodyScheduled(t *testing.T) {
+	srv := newServer(t)
+
+	byDefault := list(t, srv, "?limit=200")
+	ranged := list(t, srv, "?limit=200&from=2026-10-01&to=2026-10-31")
+
+	require.Len(t, byDefault.Data, 32, "the defaulted month lists the unscheduled job too")
+	require.Len(t, ranged.Data, 31, "a range that was sent does not")
+	for _, r := range ranged.Data {
+		require.NotNil(t, r.ScheduledAt)
+	}
+	require.Equal(t, int64(3), ranged.Summary.Tabs.WorkPool, "the range narrows the work pool badge too")
+}

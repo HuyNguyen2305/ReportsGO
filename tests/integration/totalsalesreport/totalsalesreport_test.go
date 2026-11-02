@@ -204,3 +204,16 @@ func TestOnlyGetIsAllowed(t *testing.T) {
 
 	require.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
 }
+
+func TestListCountsCreditAppliedToAnInvoiceTowardsItsStatus(t *testing.T) {
+	srv := newServer(t)
+
+	// 85032 is 100.00: 30.00 in payments and 50.00 in credit applied, so it is partly paid
+	out := list(t, srv, "?q=85032")
+	require.Len(t, out.Data, 1)
+	require.Equal(t, "partial", out.Data[0].Status)
+
+	partial := list(t, srv, "?status=partial")
+	require.Len(t, partial.Data, 1)
+	require.Equal(t, "85032", partial.Data[0].InvoiceNumber)
+}

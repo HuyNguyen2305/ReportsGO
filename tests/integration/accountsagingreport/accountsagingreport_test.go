@@ -193,3 +193,23 @@ func TestOnlyGetIsAllowed(t *testing.T) {
 
 	require.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
 }
+
+func TestListAPaidInvoiceHasNoBalanceTodayButIsReplayedForAnEarlierDay(t *testing.T) {
+	srv := newServer(t, december1)
+	total := func(out dto.AgingListResponse, customer string) string {
+		for _, r := range out.Data {
+			if r.Customer == customer {
+				return r.Total
+			}
+		}
+		return "0.00"
+	}
+
+	today := list(t, srv, "")
+	earlier := list(t, srv, "?as_of=2026-10-14")
+
+	// the invoices 85009 (148.56) and 85004 (138.63) of AAA1 ccc1 are marked paid, and were paid on 10-15
+	require.Equal(t, "2026-12-01", today.AsOf)
+	require.Equal(t, "287.19", total(earlier, "AAA1 ccc1"), "still owing the day before the payments")
+	require.Equal(t, "20.00", total(today, "AAA1 ccc1"), "today only 85032 is left, after its payment and credit")
+}
