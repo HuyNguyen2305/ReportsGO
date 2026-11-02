@@ -62,10 +62,12 @@ projected into the forecast. Unscheduled jobs are not forecast.
 | `item` | each line item of the invoice, at its share of the amount: `amount × line total ÷ sum of the invoice's line totals`, rounded to the cent. A forecast job is split over the lines of its invoices that are not void or deleted. | there are no lines (for a job: no invoice yet) |
 | `staff` | forecast: the job's assignee. Revenue: the staff member who took the payment, as in [Payments Collected](payments-collected.md) | forecast: there is no job, or nobody is assigned. Revenue: nobody took the payment (an online card payment) or it is used credit |
 | `source` | the customer's lead source | the customer has no source |
-| `tag` | **each** distinct tag of the job and of its invoice (a forecast job: of its invoices that are not void or deleted) | there is no tag on either |
+| `tag` | **each** distinct tag of the job and of its invoice (a forecast job: of its invoices). Only invoices that are not void or deleted lend their tags, archived ones do | there is no tag on either |
 
 Tags are told apart by name (ignoring case): a job tag and an invoice tag with the same name are one row, with the job
-tag's id. An invoice tag that no job tag shares a name with is a row of its own, with the **negated** invoice tag id.
+tag's id. An invoice tag that no job tag shares a name with is a row of its own, with the **negated** id of the lowest
+invoice tag of that name (so `VIP` and `vip` are one row, and the other ids of that name are not valid in `group`).
+A payment on a void or deleted invoice is still revenue, but it takes the tags of its job only.
 A job with two tags counts under both tag rows, so the tag rows can add up to more than the total. On the item
 grouping the rounded shares can differ from the other groupings' totals by a few cents.
 

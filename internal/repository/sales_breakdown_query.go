@@ -33,13 +33,15 @@ var salesBreakdownSorts = func() map[model.SalesBreakdownSortKey]sortSpec {
 	return m
 }()
 
-// salesBreakdownTags is the table of tags a tag row is one of: every job tag, and every invoice tag that has no job tag
-// of the same name (case-insensitive) under the negated id, so the two tables' ids cannot clash. It is the dimension of
-// the tag grouping and the source of its filter options.
+// salesBreakdownTags is the table of tags a tag row is one of: every job tag, and the invoice tags that have no job tag
+// of the same name (case-insensitive), one per name, under the negated lowest id of that name and with its name, so the
+// two tables' ids cannot clash and 'VIP' and 'vip' are one tag. It is the dimension of the tag grouping and the source
+// of its filter options.
 const salesBreakdownTags = `(SELECT jt.id, jt.name FROM job_tags jt
         UNION ALL
-        SELECT -it.id, it.name FROM invoice_tags it
-        WHERE NOT EXISTS (SELECT 1 FROM job_tags jt WHERE lower(jt.name) = lower(it.name)))`
+        SELECT -min(it.id), (array_agg(it.name ORDER BY it.id))[1] FROM invoice_tags it
+        WHERE NOT EXISTS (SELECT 1 FROM job_tags jt WHERE lower(jt.name) = lower(it.name))
+        GROUP BY lower(it.name))`
 
 // salesBreakdownDim is the table a grouping's rows come from: its name column and, for clients, the account number.
 type salesBreakdownDim struct {
@@ -72,22 +74,23 @@ var salesBreakdownPieces = map[model.SalesBreakdownBy]string{
 	model.SalesBreakdownBySource: `
     SELECT f.kind, f.id, 0::bigint AS line_id, c.lead_source_id AS group_id, f.month, f.amount
     FROM f JOIN customers c ON c.id = f.customer_id`,
-	// A fact is a piece under each distinct tag of its job and of its invoice (for a forecast job, of its invoices that
-	// are not void or deleted). The two kinds of tag are told apart by name: a tag is the job tag of that name when
-	// there is one, else the negated id of the invoice tag (see salesBreakdownTags).
+	// A fact is a piece under each distinct tag of its job and of its invoice (for a forecast job, of its invoices).
+	// Only invoices that are not void or deleted lend their tags, whatever the kind of fact; archived ones still do. The
+	// two kinds of tag are told apart by name: a tag is the job tag of that name when there is one, else the negated
+	// lowest id of the invoice tags of that name (see salesBreakdownTags).
 	model.SalesBreakdownByTag: `
     SELECT f.kind, f.id, 0::bigint AS line_id, tg.group_id, f.month, f.amount
     FROM f
     LEFT JOIN LATERAL (
         SELECT l.tag_id AS group_id FROM job_tag_links l WHERE l.job_id = f.job_id
         UNION
-        SELECT COALESCE(jt.id, -it.id)
+        SELECT COALESCE(jt.id, -(SELECT min(x.id) FROM invoice_tags x WHERE lower(x.name) = lower(it.name)))
         FROM invoice_tag_links il
         JOIN invoice_tags it ON it.id = il.tag_id
         LEFT JOIN job_tags jt ON lower(jt.name) = lower(it.name)
         JOIN billing_documents b ON b.id = il.invoice_id
-        WHERE CASE WHEN f.invoice_id IS NOT NULL THEN b.id = f.invoice_id
-                   ELSE b.job_id = f.job_id AND b.deleted_at IS NULL AND b.status <> 'void' END
+        WHERE b.deleted_at IS NULL AND b.status <> 'void'
+          AND CASE WHEN f.invoice_id IS NOT NULL THEN b.id = f.invoice_id ELSE b.job_id = f.job_id END
     ) tg ON true`,
 	// A payment or a job-less invoice is split over its invoice's lines; a forecast job over the lines of its
 	// non-void, non-deleted invoices. Each line takes its share of the amount, rounded to the cent; a fact whose
