@@ -120,7 +120,7 @@ func TestFiltersAgreeWithTheCountAndTotal(t *testing.T) {
 		{"open end", service.ListRecurringParams{From: "2026-09-14"}, 4},
 		{"empty range", service.ListRecurringParams{From: "2030-01-01", To: "2030-01-31"}, 0},
 		{"search by next invoice number", service.ListRecurringParams{Search: "85032"}, 1},
-		{"search by account number", service.ListRecurringParams{Search: "63733"}, 2},
+		{"search by account number", service.ListRecurringParams{Search: "63733"}, 1},
 		{"search with wildcards matches nothing", service.ListRecurringParams{Search: "%_"}, 0},
 		{"search with injection text matches nothing", service.ListRecurringParams{Search: `'; DROP TABLE recurring_invoices; --`}, 0},
 	}

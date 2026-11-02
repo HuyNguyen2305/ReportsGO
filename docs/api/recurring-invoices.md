@@ -92,7 +92,9 @@ Number columns are identifiers, not quantities: `account_number` sorts as text, 
   contract; use `label` when you only need text.
 - **`next_invoice`** is always an object, but each part is `null` when unknown: a recurring invoice can have a
   due `date` before its invoice has been created (`invoice_id` and `invoice_number` are `null`), and one that has
-  ended has none of the three.
+  ended has none of the three. The invoice is shown only when it is the customer's own: if the stored link points at
+  another customer's invoice, `invoice_id` and `invoice_number` are `null` (the `date` stays as stored) and a `q`
+  search does not match that invoice's number.
 - `ends_on` is `null` when there is no end date.
 - `summary` counts and totals the **whole filtered set**, not just this page, and is only present on the
   **first page** (when no `cursor` is sent). It is `null` on later pages. The rows and the summary are read from

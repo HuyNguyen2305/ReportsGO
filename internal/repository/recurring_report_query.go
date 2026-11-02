@@ -38,11 +38,12 @@ var recurringSorts = map[model.RecurringSortKey]sortSpec{
 }
 
 // recurringFrom joins everything the select list, filters and sort expressions can refer to. The list and the
-// summary share it so they always agree about which recurring invoices are in scope.
+// summary share it so they always agree about which recurring invoices are in scope. The next invoice counts only
+// when it is the customer's own: another customer's invoice is shown as no invoice, and a search does not match it.
 const recurringFrom = `
 FROM recurring_invoices r
 JOIN customers c ON c.id = r.customer_id
-LEFT JOIN billing_documents i ON i.id = r.next_invoice_id`
+LEFT JOIN billing_documents i ON i.id = r.next_invoice_id AND i.customer_id = r.customer_id`
 
 // applyRecurringFilter adds the filter's conditions. List and Summary share it.
 func applyRecurringFilter(w *whereBuilder, f model.RecurringFilter) {

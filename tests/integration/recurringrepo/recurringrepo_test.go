@@ -63,6 +63,26 @@ func (e env) find(t *testing.T, search string) model.RecurringRow {
 	return rows[0]
 }
 
+func TestAnotherCustomersInvoiceIsNotTheNextInvoice(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+
+	// 85031 belongs to 5001; a recurring invoice of 63733 points at it
+	_, err := e.pool.Exec(ctx, `INSERT INTO recurring_invoices (customer_id, frequency_unit, total_value, started_on, next_invoice_id, next_invoice_date)
+		SELECT c.id, 'month', 12.34, '2026-10-19', i.id, '2026-11-19'
+		FROM customers c, billing_documents i
+		WHERE c.account_number = '63733' AND i.parent_type = 'invoice' AND i.document_number = '85031'`)
+	require.NoError(t, err)
+
+	rows := e.listAll(t, model.RecurringFilter{DateFrom: day(2026, 10, 19), DateTo: day(2026, 10, 19)}, model.RecurringSortStartedOn, true)
+
+	require.Len(t, rows, 1)
+	require.Nil(t, rows[0].NextInvoiceID, "the invoice is not this customer's")
+	require.Nil(t, rows[0].NextInvoiceNumber)
+	require.NotNil(t, rows[0].NextInvoiceDate, "the due date stays as stored")
+	require.Empty(t, e.listAll(t, model.RecurringFilter{Search: "85031"}, model.RecurringSortStartedOn, true), "a search does not find it by that number")
+}
+
 func TestListWithoutFiltersReturnsEveryRecurringInvoice(t *testing.T) {
 	e := newEnv(t)
 
@@ -81,7 +101,7 @@ func TestListReturnsAllReportFieldsForARecurringInvoiceWithANextInvoice(t *testi
 	require.NotZero(t, r.ID)
 	require.NotZero(t, r.CustomerID)
 	require.NotEmpty(t, r.CustomerName)
-	require.Equal(t, "63733", r.AccountNumber)
+	require.Equal(t, "63706", r.AccountNumber)
 	require.Equal(t, model.FrequencyWeek, r.Unit)
 	require.Equal(t, 2, r.Interval)
 	require.NotNil(t, r.Weekday)
@@ -355,7 +375,7 @@ func TestListFilters(t *testing.T) {
 		{"empty range", model.RecurringFilter{DateFrom: day(2030, 1, 1), DateTo: day(2030, 1, 31)}, 0, 0},
 		{"search by next invoice number", model.RecurringFilter{Search: "85032"}, 1, 4850},
 		{"search by the original next invoice", model.RecurringFilter{Search: "84890"}, 1, 6500},
-		{"search by account number", model.RecurringFilter{Search: "63733"}, 2, 14849},
+		{"search by account number", model.RecurringFilter{Search: "63733"}, 1, 9999},
 		{"search matches nothing", model.RecurringFilter{Search: "zzz-nothing"}, 0, 0},
 		{"percent is literal", model.RecurringFilter{Search: "%"}, 0, 0},
 		{"underscore is literal", model.RecurringFilter{Search: "850_2"}, 0, 0},

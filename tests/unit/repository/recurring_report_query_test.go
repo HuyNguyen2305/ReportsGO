@@ -34,7 +34,7 @@ func TestBuildRecurringListQueryDefault(t *testing.T) {
 
 	require.Contains(t, stmt.SQL, "FROM recurring_invoices r")
 	require.Contains(t, stmt.SQL, "JOIN customers c ON c.id = r.customer_id")
-	require.Contains(t, stmt.SQL, "LEFT JOIN billing_documents i ON i.id = r.next_invoice_id")
+	require.Contains(t, stmt.SQL, "LEFT JOIN billing_documents i ON i.id = r.next_invoice_id AND i.customer_id = r.customer_id")
 	require.Contains(t, stmt.SQL, "ORDER BY r.started_on DESC, r.id DESC")
 	for _, absent := range []string{"deleted_at", "archived_at", "WHERE"} {
 		require.NotContains(t, stmt.SQL, absent, "no tabs, and an empty filter adds no condition")
