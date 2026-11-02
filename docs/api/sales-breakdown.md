@@ -111,7 +111,9 @@ grouping the rounded shares can differ from the other groupings' totals by a few
   job under two tags is counted once). With a `group` or `q` filter they cover the kept rows only.
 - Rows, unassigned line and summary are read in one database snapshot.
 - The "First name" setting and the Revenue "Details" tab are not part of this endpoint: the first is a display choice,
-  the second is the [Payments Collected](payments-collected.md) list.
+  the second is the [Payments Collected](payments-collected.md) list for the payments, plus the credit applications of
+  the year, which Revenue counts on the day they are applied and Payments Collected does not list (they are not cash
+  received; the [Sales Tax Summary](sales-tax-summary.md) counts them too).
 
 ### Paging
 

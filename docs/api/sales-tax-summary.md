@@ -43,7 +43,8 @@ On the `collected` basis each share (taxable sales, tax and surcharge) is rounde
 application) and tax line, and then added up per tax. Buying a credit carries no tax, since there is no invoice: the tax
 comes with the credit when it is applied, and only for a credit that has a paid, not deleted payment. A credit
 application follows the payment method of its credit (the `method` filter). An invoice with a zero total has nothing to
-share. Pending, failed and refunded payments are not collected.
+share. Pending, failed and refunded payments are not collected. The shares are taken per payment, so if an invoice
+is paid more than its total the tax collected on it can be more than its tax lines.
 
 Taxable sales, tax collected and surcharge are the amounts of the invoice's tax lines, so a payment that covers part of
 an invoice carries that part of its tax.
