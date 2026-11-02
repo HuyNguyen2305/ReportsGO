@@ -65,6 +65,8 @@ Number columns are identifiers, not quantities: `account_number` and `invoice_nu
 ```
 
 - `job`, `billing_email` and `payment_terms` are `null` when the invoice has none; `tags` is always an array.
+  An invoice whose job was deleted still shows that job and still matches the `service_id` filter: the invoice
+  keeps referring to it.
 - `summary` totals the **whole filtered set**, not just this page, and is only present on the **first page**
   (when no `cursor` is sent). It is `null` on later pages.
   `total` and `discount` include every invoice in the filtered set, void and draft invoices too; add
