@@ -168,3 +168,26 @@ func TestBuildSalesTaxQueryNeverPutsCallerTextInSQL(t *testing.T) {
 	require.Contains(t, flat, "drop table tax_rates", "hostile text must travel as a bind argument")
 	requirePlaceholdersMatchArgs(t, stmt)
 }
+
+func TestBuildSalesTaxQueryCollectedBasisAddsCreditApplications(t *testing.T) {
+	stmt, err := repository.BuildSalesTaxQuery(collectedFilter(), defaultSalesTaxSort)
+	require.NoError(t, err)
+
+	require.Contains(t, stmt.SQL, "UNION ALL", "payments and credit applications")
+	require.Contains(t, stmt.SQL, "FROM credit_applications ca\n    JOIN credits cr ON cr.id = ca.credit_id\n    JOIN billing_documents i ON i.id = ca.invoice_id")
+	require.Contains(t, stmt.SQL, "round(l.tax_amount * ca.amount / i.total, 2) AS tax", "at the amount applied")
+	require.Contains(t, stmt.SQL, "cp.credit_id = cr.id AND cp.status = 'paid' AND cp.deleted_at IS NULL", "only a credit that was paid for")
+	require.Contains(t, stmt.SQL, "ca.applied_on >= $1::date")
+	require.Contains(t, stmt.SQL, "ca.applied_on <= $2::date")
+	require.Contains(t, stmt.SQL, "p.payment_date >= $1::date", "the same bound is used by both sources")
+	require.Contains(t, stmt.SQL, "cr.method_type::text = ANY($3::text[])", "a credit application follows its credit's method")
+	require.Contains(t, stmt.SQL, "p.method_type::text = ANY($3::text[])")
+	require.Len(t, stmt.Args, 3, "each argument is bound once")
+	requirePlaceholdersMatchArgs(t, stmt)
+
+	t.Run("the invoiced basis has no credit applications", func(t *testing.T) {
+		stmt, err := repository.BuildSalesTaxQuery(invoicedFilter(), defaultSalesTaxSort)
+		require.NoError(t, err)
+		require.NotContains(t, stmt.SQL, "credit_applications")
+	})
+}

@@ -83,7 +83,7 @@ func TestListReturnsTheWholeReportWithItsSummary(t *testing.T) {
 	require.Len(t, out.Data, 10)
 	require.Equal(t, "collected", out.Basis)
 	require.Equal(t, dto.DateRangeResponse{From: ptr("2026-10-01"), To: ptr("2026-10-31")}, out.Range)
-	require.Equal(t, dto.SalesTaxSummaryResponse{Count: 10, TaxableSales: "721.50", TaxCollected: "117.78", SurchargeTax: "2.92"}, out.Summary)
+	require.Equal(t, dto.SalesTaxSummaryResponse{Count: 10, TaxableSales: "761.50", TaxCollected: "122.58", SurchargeTax: "2.92"}, out.Summary)
 	require.Equal(t, dto.SalesTaxResponse{
 		ID: 1, Name: "VAT", TaxableSales: "420.00", TaxRate: "10.00", TaxCollected: "42.00", SurchargeTax: "2.92",
 	}, out.Data[0])
