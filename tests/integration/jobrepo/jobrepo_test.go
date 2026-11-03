@@ -117,6 +117,7 @@ func TestListHandlesAJobWithoutASource(t *testing.T) {
 
 var sortCast = map[model.JobSortKey]string{
 	model.JobSortCustomer: "text", model.JobSortAccountNumber: "text", model.JobSortServiceType: "text",
+	model.JobSortPhone: "text", model.JobSortAddress: "text",
 	model.JobSortSource: "text", model.JobSortInvoiceValue: "numeric", model.JobSortCreatedAt: "timestamptz",
 	model.JobSortStatus: "text",
 }
@@ -621,4 +622,74 @@ func TestStaffListsEveryUser(t *testing.T) {
 		names[i] = s.Name
 	}
 	require.ElementsMatch(t, []string{"thon nguyen", "Thọ Nguyễn Quang"}, names, "the order follows the database collation")
+}
+
+func TestRowsCarryTheJobsAddressAndTheCustomersFirstPhone(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+
+	// a second, later phone for AAA1 ccc1: the report keeps showing the first one
+	_, err := e.pool.Exec(ctx, `INSERT INTO customer_phones (customer_id, number, kind)
+		SELECT id, '555-9999', 'home' FROM customers WHERE account_number = '63706'`)
+	require.NoError(t, err)
+
+	byAccount := func(account string) model.JobRow {
+		t.Helper()
+		f := october()
+		f.Search = account
+		rows := e.listAll(t, f, model.JobSortCreatedAt, false)
+		require.NotEmpty(t, rows)
+		return rows[0]
+	}
+
+	withPhone := byAccount("63706")
+	require.NotNil(t, withPhone.Phone)
+	require.Equal(t, "(098) 765-4321", *withPhone.Phone, "the customer's first phone")
+	require.Equal(t, model.LookupAddress{Line1: "Miami Beach Boardwalk 2", City: "Miami", State: "FL", Zip: "33139", County: "Miami-Dade County"},
+		withPhone.Address)
+
+	withoutPhone := byAccount("5001")
+	require.Nil(t, withoutPhone.Phone, "William Saliba has no phone")
+	require.Equal(t, model.LookupAddress{Line1: "West Loop 1604 South", City: "San Antonio", State: "TX", Zip: "78264", County: "Bexar County"},
+		withoutPhone.Address)
+}
+
+func TestSearchMatchesThePhoneAndTheAddress(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+
+	// independent count of the live October jobs whose customer or location matches
+	want := func(cond string) int64 {
+		var n int64
+		require.NoError(t, e.pool.QueryRow(ctx, `
+			SELECT count(*) FROM jobs j
+			JOIN customers c ON c.id = j.customer_id
+			JOIN service_locations sl ON sl.id = j.location_id
+			WHERE j.deleted_at IS NULL
+			  AND j.created_at >= '2026-10-01 00:00:00+00' AND j.created_at < '2026-11-01 00:00:00+00'
+			  AND `+cond).Scan(&n))
+		return n
+	}
+
+	tests := []struct {
+		name, search, cond string
+	}{
+		{"part of a phone number", "765-43", `c.account_number = '63706'`},
+		{"part of an address line, any case", "BOARDWALK", `sl.address_line1 = 'Miami Beach Boardwalk 2'`},
+		{"a city", "san antonio", `sl.city = 'San Antonio'`},
+		{"a second phone is not searched", "555-9999", `false`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := october()
+			f.Search = tt.search
+
+			rows := e.listAll(t, f, model.JobSortCreatedAt, false)
+			s, err := e.repo.Summary(ctx, f)
+
+			require.NoError(t, err)
+			require.Equal(t, want(tt.cond), s.Count, "the summary follows the same search")
+			require.Len(t, rows, int(s.Count))
+		})
+	}
 }

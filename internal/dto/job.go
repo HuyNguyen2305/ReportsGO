@@ -1,17 +1,19 @@
 package dto
 
 // JobResponse is one line of the New Jobs report. InvoiceValue is a decimal string and CreatedAt is always UTC
-// with six fractional digits, for example "2026-10-22T08:15:30.123456Z". Source is null when the job has no
-// lead source.
+// with six fractional digits, for example "2026-10-22T08:15:30.123456Z". Phone is the customer's first phone number,
+// null when there is none; Address is the job's service location. Source is null when the job has no lead source.
 type JobResponse struct {
-	ID            int64           `json:"id"`
-	Customer      CustomerRef     `json:"customer"`
-	AccountNumber string          `json:"account_number"`
-	ServiceType   OptionResponse  `json:"service_type"`
-	Source        *OptionResponse `json:"source"`
-	InvoiceValue  string          `json:"invoice_value"`
-	CreatedAt     string          `json:"created_at"`
-	Status        string          `json:"status"`
+	ID            int64                        `json:"id"`
+	Customer      CustomerRef                  `json:"customer"`
+	AccountNumber string                       `json:"account_number"`
+	ServiceType   OptionResponse               `json:"service_type"`
+	Phone         *string                      `json:"phone"`
+	Address       ServiceLookupAddressResponse `json:"address"`
+	Source        *OptionResponse              `json:"source"`
+	InvoiceValue  string                       `json:"invoice_value"`
+	CreatedAt     string                       `json:"created_at"`
+	Status        string                       `json:"status"`
 }
 
 // JobListResponse is one page of the New Jobs report.

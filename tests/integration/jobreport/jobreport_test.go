@@ -410,9 +410,10 @@ func TestJSONContract(t *testing.T) {
 
 	job := list["data"].([]any)[0].(map[string]any)
 	require.Equal(t, []string{
-		"account_number", "created_at", "customer", "id", "invoice_value", "service_type", "source", "status",
+		"account_number", "address", "created_at", "customer", "id", "invoice_value", "phone", "service_type", "source", "status",
 	}, keysOf(job))
 	require.Equal(t, []string{"id", "name"}, keysOf(job["customer"].(map[string]any)))
+	require.Equal(t, []string{"city", "county", "line1", "line2", "state", "zip"}, keysOf(job["address"].(map[string]any)))
 	require.Equal(t, []string{"id", "name"}, keysOf(job["service_type"].(map[string]any)))
 	require.Equal(t, []string{"id", "name"}, keysOf(job["source"].(map[string]any)))
 
@@ -462,7 +463,7 @@ func TestFiltersEndpointMatchesWhatTheListAccepts(t *testing.T) {
 		require.NotEmpty(t, o.Name)
 	}
 	require.Equal(t, []string{"unconfirmed", "confirmed", "completed", "cancelled"}, f.Statuses)
-	require.Len(t, f.SortKeys, 7)
+	require.Len(t, f.SortKeys, 9)
 	require.Equal(t, dto.SortResponse{Key: "created_at", Order: "desc"}, f.DefaultSort)
 	require.Equal(t, dto.PageLimitsResponse{Default: 50, Max: 200}, f.Limits)
 

@@ -86,7 +86,9 @@ func listJobs(ctx context.Context, conn db.DBTX, q model.JobQuery) ([]model.JobR
 		)
 		if err := rows.Scan(
 			&row.ID, &row.CustomerID, &row.CustomerName, &row.AccountNumber, &row.ServiceTypeID, &row.ServiceType,
-			&row.SourceID, &row.Source, &value, &row.CreatedAt, &status, &row.SortValue,
+			&row.Phone, &row.Address.Line1, &row.Address.Line2, &row.Address.City, &row.Address.State,
+			&row.Address.Zip, &row.Address.County, &row.SourceID, &row.Source, &value, &row.CreatedAt, &status,
+			&row.SortValue,
 		); err != nil {
 			return nil, fmt.Errorf("scan new jobs report row: %w", err)
 		}

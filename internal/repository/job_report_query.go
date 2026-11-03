@@ -15,11 +15,13 @@ const jobCreatedAtText = `to_char(j.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T
 
 // jobSorts is the complete list of things the report can be sorted by. SQL text for ORDER BY and the keyset
 // condition comes only from this table, never from the caller. A job without a lead source sorts as an empty
-// name.
+// name, and a customer without a phone as an empty number.
 var jobSorts = map[model.JobSortKey]sortSpec{
 	model.JobSortCustomer:      {expr: `lower(c.display_name)`, cast: "text"},
 	model.JobSortAccountNumber: {expr: `c.account_number`, cast: "text"},
 	model.JobSortServiceType:   {expr: `lower(st.name)`, cast: "text"},
+	model.JobSortPhone:         {expr: `lower(coalesce(ph.number, ''))`, cast: "text"},
+	model.JobSortAddress:       {expr: `lower(sl.address_line1)`, cast: "text"},
 	model.JobSortSource:        {expr: `lower(coalesce(ls.name, ''))`, cast: "text"},
 	model.JobSortInvoiceValue:  {expr: `j.invoice_value`, cast: "numeric"},
 	model.JobSortCreatedAt:     {expr: `j.created_at`, text: jobCreatedAtText, cast: "timestamptz"},
@@ -27,12 +29,17 @@ var jobSorts = map[model.JobSortKey]sortSpec{
 }
 
 // jobFrom joins everything the select list, filters and sort expressions can refer to. The list and the summary
-// share it so they always agree about which jobs are in scope.
+// share it so they always agree about which jobs are in scope. The address is the job's own location; the phone is
+// the customer's first one (lowest id) taken in a lateral join, so each job stays one row.
 const jobFrom = `
 FROM jobs j
 JOIN customers c ON c.id = j.customer_id
 JOIN service_types st ON st.id = j.service_type_id
-LEFT JOIN lead_sources ls ON ls.id = j.lead_source_id`
+JOIN service_locations sl ON sl.id = j.location_id
+LEFT JOIN lead_sources ls ON ls.id = j.lead_source_id
+LEFT JOIN LATERAL (
+    SELECT p.number FROM customer_phones p WHERE p.customer_id = c.id ORDER BY p.id LIMIT 1
+) ph ON true`
 
 // applyJobFilter adds the filter's conditions. List and Summary share it. A deleted job is never part of the
 // report: it is neither listed, counted nor totalled.
@@ -56,7 +63,7 @@ func applyJobFilter(w *whereBuilder, f model.JobFilter) {
 	if len(f.AssignedToIDs) > 0 {
 		w.add("j.assigned_to = ANY(" + w.arg(f.AssignedToIDs) + "::bigint[])")
 	}
-	applySearchOn(w, f.Search, "c.display_name", "c.account_number", "st.name")
+	applySearchOn(w, f.Search, "c.display_name", "c.account_number", "st.name", "ph.number", "sl.address_line1", "sl.city")
 }
 
 // BuildJobListQuery builds the statement for one page of the new jobs report. It selects limit+1 rows so the
@@ -77,7 +84,8 @@ func BuildJobListQuery(q model.JobQuery) (Statement, error) {
 	}
 	limit := w.arg(q.Limit + 1)
 
-	sql := `SELECT j.id, c.id, c.display_name, c.account_number, st.id, st.name, ls.id, ls.name,
+	sql := `SELECT j.id, c.id, c.display_name, c.account_number, st.id, st.name, ph.number,
+    sl.address_line1, sl.address_line2, sl.city, sl.state, sl.postal_code, sl.county, ls.id, ls.name,
     (j.invoice_value * 100)::bigint, j.created_at, j.status::text,
     (` + spec.sortText() + `)::text AS sort_value` +
 		jobFrom + w.where() + orderAndLimit(jobAlias, spec, q.Sort.Desc, limit)

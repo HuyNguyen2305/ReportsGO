@@ -16,6 +16,8 @@ var jobSortValue = map[model.JobSortKey]string{
 	model.JobSortCustomer:      "william saliba",
 	model.JobSortAccountNumber: "63706",
 	model.JobSortServiceType:   "bi-monthly",
+	model.JobSortPhone:         "(098) 765-4321",
+	model.JobSortAddress:       "miami beach boardwalk 2",
 	model.JobSortSource:        "google",
 	model.JobSortInvoiceValue:  "65.00",
 	model.JobSortCreatedAt:     "2026-10-22T08:15:30.123456Z",
@@ -49,6 +51,16 @@ func TestJobCursorAcceptsAnEmptySource(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "", got.SortValue, "jobs without a lead source sort as an empty name")
+}
+
+func TestJobCursorAcceptsAnEmptyPhone(t *testing.T) {
+	sort := model.JobSort{Key: model.JobSortPhone, Desc: true}
+	raw := service.EncodeJobCursor(sort, model.JobRow{ID: 5, SortValue: ""})
+
+	got, err := service.DecodeJobCursor(raw, sort)
+
+	require.NoError(t, err)
+	require.Equal(t, "", got.SortValue, "a customer without a phone sorts as an empty number")
 }
 
 func TestJobCursorRejectsInvalidCursors(t *testing.T) {

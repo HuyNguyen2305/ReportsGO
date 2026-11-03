@@ -28,9 +28,9 @@ of the other reports, such as `method` and `document_type_id`.
 | `service_type_id` | multi | Service type ids (from `/filters`). | all |
 | `lead_source_id` | multi | Lead source ids (from `/filters`). Jobs without a source are only matched when no source filter is sent. | all |
 | `assigned_to` | multi | Staff ids (`staff` from `/filters`), the Assigned To filter: the staff member the job is assigned to. Unassigned jobs are only matched when no `assigned_to` is sent. Same name and meaning as in [Service Lookup](service-lookup.md). | all |
-| `q` | text | Case-insensitive substring search over customer name, account number and service type name. `%`, `_` and `\` are matched literally. At most 100 characters. | none |
-| `sort` | key | `customer`, `account_number`, `service_type`, `source`, `invoice_value`, `created_at`, `status` | `created_at` |
-| `order` | `asc` \| `desc` | Sort direction. With neither `sort` nor `order`: newest first (`created_at` descending). With `sort` but no `order`: ascending. A job without a source sorts as an empty name: first when ascending. | see left |
+| `q` | text | Case-insensitive substring search over customer name, account number, service type name, phone, address line 1 and city. `%`, `_` and `\` are matched literally. At most 100 characters. | none |
+| `sort` | key | `customer`, `account_number`, `service_type`, `phone`, `address`, `source`, `invoice_value`, `created_at`, `status` | `created_at` |
+| `order` | `asc` \| `desc` | Sort direction. With neither `sort` nor `order`: newest first (`created_at` descending). With `sort` but no `order`: ascending. A job without a source sorts as an empty name, and a customer without a phone as an empty number: first when ascending. `address` sorts by address line 1. | see left |
 | `limit` | integer 1 to 200 | Page size. Out of range is an error, not clamped. | 50 |
 | `cursor` | opaque | `page.next_cursor` from the previous response. Must be used with the same `sort` and `order`. | first page |
 
@@ -50,6 +50,8 @@ Number columns are identifiers, not quantities: `account_number` sorts as text, 
       "customer": { "id": 2, "name": "Customer 1" },
       "account_number": "63733",
       "service_type": { "id": 2, "name": "Initial Service" },
+      "phone": null,
+      "address": { "line1": "Ewald Drive 12322 East Freeway", "line2": "", "city": "Penfield", "state": "NY", "zip": "14625", "county": "" },
       "source": { "id": 2, "name": "Google" },
       "invoice_value": "95.00",
       "created_at": "2026-10-22T08:15:30.123456Z",
@@ -60,6 +62,8 @@ Number columns are identifiers, not quantities: `account_number` sorts as text, 
       "customer": { "id": 11, "name": "William Saliba" },
       "account_number": "5001",
       "service_type": { "id": 1, "name": "Bi-Monthly Service" },
+      "phone": null,
+      "address": { "line1": "West Loop 1604 South", "line2": "", "city": "San Antonio", "state": "TX", "zip": "78264", "county": "Bexar County" },
       "source": null,
       "invoice_value": "65.00",
       "created_at": "2026-10-15T08:00:00.000000Z",
@@ -72,6 +76,9 @@ Number columns are identifiers, not quantities: `account_number` sorts as text, 
 }
 ```
 
+- `phone` is the customer's first phone number (the one added first), or `null` when the customer has none. Only the
+  number is returned: the screenshot's phone kind ("Mobile") is not part of the report.
+- `address` is the job's own service location, the same object as in [Service Lookup](service-lookup.md).
 - `source` is `null` when the job has no lead source.
 - `invoice_value` is the job's invoice value.
 - `created_at` is always UTC with exactly six fractional digits, so every value has the same shape, whatever `APP_TIMEZONE` is. Only the `from`/`to` day boundaries follow `APP_TIMEZONE`.
@@ -166,7 +173,7 @@ the static lists and limits mean the frontend never has to hard-code them.
     { "id": 1, "name": "Thọ Nguyễn Quang" }
   ],
   "statuses": ["unconfirmed", "confirmed", "completed", "cancelled"],
-  "sort_keys": ["customer", "account_number", "service_type", "source", "invoice_value", "created_at", "status"],
+  "sort_keys": ["customer", "account_number", "service_type", "phone", "address", "source", "invoice_value", "created_at", "status"],
   "default_sort": { "key": "created_at", "order": "desc" },
   "limits": { "default": 50, "max": 200 }
 }
@@ -189,7 +196,7 @@ curl.exe "http://localhost:8080/api/v1/reports/new-jobs?service_type_id=2&lead_s
 # Jobs assigned to staff member 1 or 2 (ids come from /filters)
 curl.exe "http://localhost:8080/api/v1/reports/new-jobs?assigned_to=1,2"
 
-# Search by customer, account number or service type, two per page
+# Search by customer, account number, service type, phone, address or city, two per page
 curl.exe "http://localhost:8080/api/v1/reports/new-jobs?q=saliba&limit=2"
 
 # All of September

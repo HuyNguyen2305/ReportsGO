@@ -84,6 +84,7 @@ generated `invoice_parent_type` column and a composite foreign key, so only invo
 | | Started / End Date / Next Invoice | `started_on` / `ends_on` / `next_invoice_id`, `next_invoice_date` |
 | New Jobs | Service Type / Source / Invoice Value | `service_types.name` / `lead_sources.name` / `jobs.invoice_value` |
 | | Job Created Date / Status | `jobs.created_at` / `jobs.status` |
+| | Phone / Service Address | first `customer_phones.number` (lowest id) / `jobs.location_id` → `service_locations` |
 | New Customers | Date / Source / Email / Top Note | `customers.created_at` / `lead_sources.name` / `email` / `top_note` |
 | | Service Address | `service_locations` |
 | | Job Created Date / Completed Jobs | derived from `jobs` |
