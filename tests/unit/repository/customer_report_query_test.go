@@ -35,8 +35,14 @@ func TestBuildCustomerListQueryDefault(t *testing.T) {
 	require.Contains(t, stmt.SQL, "LEFT JOIN lead_sources ls ON ls.id = c.lead_source_id")
 	require.Contains(t, stmt.SQL, "LEFT JOIN LATERAL (")
 	require.Contains(t, stmt.SQL, "SELECT p.number FROM customer_phones p WHERE p.customer_id = c.id ORDER BY p.id LIMIT 1")
+	require.Contains(t, stmt.SQL, "FROM service_locations l WHERE l.customer_id = c.id ORDER BY l.id LIMIT 1",
+		"the address is the first location")
+	require.Contains(t, stmt.SQL, "WHERE j.customer_id = c.id AND j.deleted_at IS NULL\n    ORDER BY j.created_at, j.id LIMIT 1",
+		"the first job is the earliest one that is not deleted")
+	require.Contains(t, stmt.SQL, "WHERE j.customer_id = c.id AND j.deleted_at IS NULL AND j.status = 'completed'",
+		"completed jobs that are not deleted are counted")
 	require.Contains(t, stmt.SQL, "ORDER BY c.created_at DESC, c.id DESC")
-	for _, absent := range []string{"deleted_at", "archived_at", "\nWHERE "} {
+	for _, absent := range []string{"c.deleted_at", "archived_at", "\nWHERE "} {
 		require.NotContains(t, stmt.SQL, absent, "customers have no tabs and an empty filter adds no condition")
 	}
 	require.Contains(t, stmt.SQL, "LIMIT $1")
@@ -50,6 +56,7 @@ func TestBuildCustomerListQueryEverySortKeyAndDirection(t *testing.T) {
 		model.CustomerSortAccountNumber: {"c.account_number", "text"},
 		model.CustomerSortEmail:         {"lower(coalesce(c.email, ''))", "text"},
 		model.CustomerSortPhone:         {"coalesce(ph.number, '')", "text"},
+		model.CustomerSortAddress:       {"lower(coalesce(addr.address_line1, ''))", "text"},
 		model.CustomerSortSource:        {"lower(coalesce(ls.name, ''))", "text"},
 		model.CustomerSortCreatedAt:     {"c.created_at", "timestamptz"},
 	}
@@ -227,6 +234,9 @@ func TestBuildCustomerSummaryQuery(t *testing.T) {
 	require.NoError(t, err)
 
 	require.True(t, strings.HasPrefix(stmt.SQL, "SELECT count(*)\nFROM customers c"))
+	for _, listOnly := range []string{") addr ON true", ") fj ON true", ") cj ON true"} {
+		require.NotContains(t, stmt.SQL, listOnly, "the count needs none of the list-only columns")
+	}
 	require.NotContains(t, stmt.SQL, "\nORDER BY")
 	require.NotContains(t, stmt.SQL, "LIMIT $")
 	requirePlaceholdersMatchArgs(t, stmt)

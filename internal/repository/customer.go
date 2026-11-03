@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -79,14 +80,31 @@ func listCustomers(ctx context.Context, conn db.DBTX, q model.CustomerQuery) ([]
 
 	out := make([]model.CustomerRow, 0, q.Limit+1)
 	for rows.Next() {
-		var row model.CustomerRow
+		var (
+			row                                    model.CustomerRow
+			line1, line2, city, state, zip, county *string
+			jobID, jobTypeID                       *int64
+			jobType                                *string
+			jobCreatedAt                           *time.Time
+		)
 		if err := rows.Scan(
 			&row.ID, &row.Name, &row.AccountNumber, &row.Email, &row.Phone, &row.SourceID, &row.Source,
-			&row.CreatedAt, &row.SortValue,
+			&row.CreatedAt, &row.TopNote, &line1, &line2, &city, &state, &zip, &county,
+			&jobID, &jobTypeID, &jobType, &jobCreatedAt, &row.CompletedJobs, &row.SortValue,
 		); err != nil {
 			return nil, fmt.Errorf("scan new customers report row: %w", err)
 		}
 		row.CreatedAt = row.CreatedAt.UTC()
+		if line1 != nil { // a location's columns are NOT NULL, so line 1 tells whether there is one
+			row.Address = &model.LookupAddress{
+				Line1: *line1, Line2: *line2, City: *city, State: *state, Zip: *zip, County: *county,
+			}
+		}
+		if jobID != nil {
+			row.FirstJob = &model.CustomerFirstJob{
+				ID: *jobID, ServiceTypeID: *jobTypeID, ServiceType: *jobType, CreatedAt: jobCreatedAt.UTC(),
+			}
+		}
 		out = append(out, row)
 	}
 	if err := rows.Err(); err != nil {

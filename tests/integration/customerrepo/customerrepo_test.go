@@ -136,7 +136,8 @@ func TestACustomerWithSeveralPhonesIsOneRow(t *testing.T) {
 
 var sortCast = map[model.CustomerSortKey]string{
 	model.CustomerSortCustomer: "text", model.CustomerSortAccountNumber: "text", model.CustomerSortEmail: "text",
-	model.CustomerSortPhone: "text", model.CustomerSortSource: "text", model.CustomerSortCreatedAt: "timestamptz",
+	model.CustomerSortPhone: "text", model.CustomerSortAddress: "text", model.CustomerSortSource: "text",
+	model.CustomerSortCreatedAt: "timestamptz",
 }
 
 // compare asks Postgres to order two sort values, so text keys use the same collation as ORDER BY.
@@ -503,4 +504,91 @@ func TestCancelledContextIsReturnedAsAnError(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	_, err = e.repo.LeadSources(ctx)
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+// customer returns the report row of one customer, whatever its creation date.
+func (e env) customer(t *testing.T, account string) model.CustomerRow {
+	t.Helper()
+	for _, r := range e.listAll(t, model.CustomerFilter{Search: account}, model.CustomerSortCreatedAt, false) {
+		if r.AccountNumber == account {
+			return r
+		}
+	}
+	t.Fatalf("customer %s is not listed", account)
+	return model.CustomerRow{}
+}
+
+func TestRowsCarryTheTopNoteAddressFirstJobAndCompletedJobs(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+
+	t.Run("every row agrees with independent SQL", func(t *testing.T) {
+		for _, r := range e.listAll(t, model.CustomerFilter{}, model.CustomerSortCreatedAt, false) {
+			var (
+				topNote   string
+				line1     *string
+				firstJob  *int64
+				completed int64
+			)
+			require.NoError(t, e.pool.QueryRow(ctx, `SELECT c.top_note,
+				(SELECT address_line1 FROM service_locations WHERE customer_id = c.id ORDER BY id LIMIT 1),
+				(SELECT id FROM jobs WHERE customer_id = c.id AND deleted_at IS NULL ORDER BY created_at, id LIMIT 1),
+				(SELECT count(*) FROM jobs WHERE customer_id = c.id AND deleted_at IS NULL AND status = 'completed')
+				FROM customers c WHERE c.id = $1`, r.ID).Scan(&topNote, &line1, &firstJob, &completed))
+
+			require.Equal(t, topNote, r.TopNote, r.AccountNumber)
+			if line1 == nil {
+				require.Nil(t, r.Address, r.AccountNumber)
+			} else {
+				require.NotNil(t, r.Address, r.AccountNumber)
+				require.Equal(t, *line1, r.Address.Line1, r.AccountNumber)
+			}
+			if firstJob == nil {
+				require.Nil(t, r.FirstJob, r.AccountNumber)
+			} else {
+				require.NotNil(t, r.FirstJob, r.AccountNumber)
+				require.Equal(t, *firstJob, r.FirstJob.ID, r.AccountNumber)
+			}
+			require.Equal(t, completed, r.CompletedJobs, r.AccountNumber)
+		}
+	})
+
+	t.Run("the screenshot's customer #1", func(t *testing.T) {
+		r := e.customer(t, "63749")
+		require.Empty(t, r.TopNote)
+		require.Equal(t, &model.LookupAddress{Line1: "1 2", City: "3", State: "4", Zip: "5"}, r.Address)
+		require.NotNil(t, r.FirstJob)
+		require.Equal(t, "Blank Service 123", r.FirstJob.ServiceType)
+		require.Equal(t, utc(2026, 11, 2, 3, 42, 0, 0), r.FirstJob.CreatedAt)
+		require.Equal(t, time.UTC, r.FirstJob.CreatedAt.Location())
+		require.Zero(t, r.CompletedJobs)
+	})
+
+	t.Run("a top note, and completed jobs counted", func(t *testing.T) {
+		r := e.customer(t, "63714")
+		require.Equal(t, "Here's top note #F", r.TopNote)
+		require.Equal(t, "S1 S2", r.Address.Line1)
+		require.Equal(t, int64(1), r.CompletedJobs, "the Full service job of 10-10")
+	})
+
+	t.Run("no location and no job", func(t *testing.T) {
+		r := e.customer(t, "70001")
+		require.Nil(t, r.Address)
+		require.Nil(t, r.FirstJob)
+		require.Zero(t, r.CompletedJobs)
+	})
+
+	t.Run("a deleted job is neither the first job nor counted", func(t *testing.T) {
+		before := e.customer(t, "63714")
+		require.NotNil(t, before.FirstJob)
+		_, err := e.pool.Exec(ctx, `UPDATE jobs SET deleted_at = now() WHERE id = $1 OR (customer_id = $2 AND status = 'completed')`,
+			before.FirstJob.ID, before.ID)
+		require.NoError(t, err)
+
+		after := e.customer(t, "63714")
+		if after.FirstJob != nil {
+			require.NotEqual(t, before.FirstJob.ID, after.FirstJob.ID)
+		}
+		require.Zero(t, after.CompletedJobs)
+	})
 }

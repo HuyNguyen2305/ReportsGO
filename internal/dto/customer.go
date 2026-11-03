@@ -11,6 +11,20 @@ type CustomerResponse struct {
 	Phone         *string         `json:"phone"`
 	Source        *OptionResponse `json:"source"`
 	CreatedAt     string          `json:"created_at"`
+	// TopNote is "" when the customer has none. Address is the first service location, null when there is none.
+	TopNote string                        `json:"top_note"`
+	Address *ServiceLookupAddressResponse `json:"address"`
+	// FirstJob is the earliest created job that is not deleted, null when there is none. CompletedJobs counts the
+	// completed jobs that are not deleted.
+	FirstJob      *CustomerFirstJobResponse `json:"first_job"`
+	CompletedJobs int64                     `json:"completed_jobs"`
+}
+
+// CustomerFirstJobResponse is the job a new customer booked first. CreatedAt is UTC with six fractional digits.
+type CustomerFirstJobResponse struct {
+	ID          int64          `json:"id"`
+	ServiceType OptionResponse `json:"service_type"`
+	CreatedAt   string         `json:"created_at"`
 }
 
 // CustomerListResponse is one page of the New Customers report.

@@ -7,7 +7,9 @@ digits (`"2026-10-22T08:15:30.123456Z"`); dates are `YYYY-MM-DD`.
 It works like the [New Jobs](new-jobs.md) report: the date is a creation timestamp (shown in UTC, filtered by day in `APP_TIMEZONE`) and the filter choices
 come from the database. Customers have no status and no Active / Deleted tab, so there are no `status` or
 `lifecycle` parameters. The summary is a count only, because customers have no monetary value to total.
-The screenshot's Top Note, Service Address, Job Created Date and Completed Jobs columns are not part of this report.
+Besides the customer's own fields, each row carries the screenshot's Top Note, Service Address, Job Created Date and
+Completed Jobs columns (see [Response](#response) for the rule behind each). The screenshot's "First name" dropdown is a
+display choice of the frontend; the report returns the customer's display name.
 
 | Endpoint | Purpose |
 |---|---|
@@ -26,8 +28,8 @@ parameters of the other reports, such as `service_type_id` and `method`.
 | `from`, `to` | `YYYY-MM-DD` | Inclusive range on the day the customer was **created**, read in the server's `APP_TIMEZONE` (UTC by default); `from` and `to` are days in that zone, whether sent or defaulted. If **both** are missing the range is the current calendar month (in the server's `APP_TIMEZONE`, UTC by default). If only one is sent, the other end is open. `to` must not be before `from`. | current month |
 | `lead_source_id` | multi | Lead source ids (from `/filters`). Customers without a lead source are only matched when no source filter is sent. | all |
 | `q` | text | Case-insensitive substring search over name, account number, email and the phone shown in the report (the customer's first phone). `%`, `_` and `\` are matched literally. At most 100 characters. | none |
-| `sort` | key | `customer`, `account_number`, `email`, `phone`, `source`, `created_at` | `created_at` |
-| `order` | `asc` \| `desc` | Sort direction. With neither `sort` nor `order`: newest first (`created_at` descending). With `sort` but no `order`: ascending. A customer without an email, phone or source sorts as an empty value: first when ascending. | see left |
+| `sort` | key | `customer`, `account_number`, `email`, `phone`, `address`, `source`, `created_at` | `created_at` |
+| `order` | `asc` \| `desc` | Sort direction. With neither `sort` nor `order`: newest first (`created_at` descending). With `sort` but no `order`: ascending. A customer without an email, phone, service location or source sorts as an empty value: first when ascending. `address` sorts by address line 1. | see left |
 | `limit` | integer 1 to 200 | Page size. Out of range is an error, not clamped. | 50 |
 | `cursor` | opaque | `page.next_cursor` from the previous response. Must be used with the same `sort` and `order`. | first page |
 
@@ -48,7 +50,11 @@ Number columns are identifiers, not quantities: `account_number` sorts as text, 
       "email": "ada@example.com",
       "phone": "555-0101",
       "source": { "id": 2, "name": "Google" },
-      "created_at": "2026-10-22T08:15:30.123456Z"
+      "created_at": "2026-10-22T08:15:30.123456Z",
+      "top_note": "",
+      "address": null,
+      "first_job": null,
+      "completed_jobs": 0
     },
     {
       "id": 2,
@@ -57,7 +63,11 @@ Number columns are identifiers, not quantities: `account_number` sorts as text, 
       "email": null,
       "phone": null,
       "source": null,
-      "created_at": "2026-10-16T00:00:00.000000Z"
+      "created_at": "2026-10-16T00:00:00.000000Z",
+      "top_note": "",
+      "address": { "line1": "Ewald Drive 12322 East Freeway", "line2": "", "city": "Penfield", "state": "NY", "zip": "14625", "county": "" },
+      "first_job": { "id": 35, "service_type": { "id": 3, "name": "Blank Service 123" }, "created_at": "2026-10-12T06:00:00.000000Z" },
+      "completed_jobs": 0
     }
   ],
   "page": { "limit": 2, "has_more": true, "next_cursor": "eyJrIjoiY3JlYXRlZF9hdCIsImQiOnRydWUsInYiOiIyMDI2LTEwLTE2VDAwOjAwOjAwLjAwMDAwMFoiLCJpZCI6Mn0" },
@@ -69,6 +79,13 @@ Number columns are identifiers, not quantities: `account_number` sorts as text, 
 - `id` and `customer.id` are the same customer id; `customer` has the same shape as in the other reports.
 - `email`, `phone` and `source` are `null` when the customer has none. A customer with several phone numbers shows
   the first one only.
+- `top_note` is the customer's top note, `""` when there is none.
+- `address` is the customer's **first** service location (the one added first), the same object as in
+  [New Jobs](new-jobs.md), or `null` when the customer has no location.
+- `first_job` is the customer's **first** job: the earliest created job that is not deleted, whatever its status
+  (the screenshot's Job Created Date, "Blank Service (02/11/2026)"), or `null` when there is none. Its `created_at`
+  has the same form as the customer's.
+- `completed_jobs` counts the customer's completed jobs that are not deleted.
 - `created_at` is always UTC with exactly six fractional digits, so every value has the same shape, whatever `APP_TIMEZONE` is. Only the `from`/`to` day boundaries follow `APP_TIMEZONE`.
 - `summary` counts the **whole filtered set**, not just this page, and is only present on the **first page**
   (when no `cursor` is sent). It is `null` on later pages. The rows and the count are read from one database
@@ -148,7 +165,7 @@ limits mean the frontend never has to hard-code them.
     { "id": 2, "name": "Google" },
     { "id": 3, "name": "Referral" }
   ],
-  "sort_keys": ["customer", "account_number", "email", "phone", "source", "created_at"],
+  "sort_keys": ["customer", "account_number", "email", "phone", "address", "source", "created_at"],
   "default_sort": { "key": "created_at", "order": "desc" },
   "limits": { "default": 50, "max": 200 }
 }

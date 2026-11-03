@@ -36,9 +36,23 @@ func toCustomerResponse(r model.CustomerRow) dto.CustomerResponse {
 		Email:         r.Email,
 		Phone:         r.Phone,
 		CreatedAt:     r.CreatedAt.UTC().Format(timestampLayout),
+		TopNote:       r.TopNote,
+		CompletedJobs: r.CompletedJobs,
 	}
 	if r.SourceID != nil && r.Source != nil {
 		out.Source = &dto.OptionResponse{ID: *r.SourceID, Name: *r.Source}
+	}
+	if a := r.Address; a != nil {
+		out.Address = &dto.ServiceLookupAddressResponse{
+			Line1: a.Line1, Line2: a.Line2, City: a.City, State: a.State, Zip: a.Zip, County: a.County,
+		}
+	}
+	if j := r.FirstJob; j != nil {
+		out.FirstJob = &dto.CustomerFirstJobResponse{
+			ID:          j.ID,
+			ServiceType: dto.OptionResponse{ID: j.ServiceTypeID, Name: j.ServiceType},
+			CreatedAt:   j.CreatedAt.UTC().Format(timestampLayout),
+		}
 	}
 	return out
 }
