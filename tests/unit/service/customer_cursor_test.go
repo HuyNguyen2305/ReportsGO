@@ -17,6 +17,7 @@ var customerSortValue = map[model.CustomerSortKey]string{
 	model.CustomerSortAccountNumber: "70001",
 	model.CustomerSortEmail:         "ada@example.com",
 	model.CustomerSortPhone:         "555-0101",
+	model.CustomerSortAddress:       "12 alaba street",
 	model.CustomerSortSource:        "google",
 	model.CustomerSortCreatedAt:     "2026-10-22T08:15:30.123456Z",
 }

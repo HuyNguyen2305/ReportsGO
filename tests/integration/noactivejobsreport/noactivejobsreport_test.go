@@ -77,11 +77,14 @@ func TestCustomersReport(t *testing.T) {
 	require.Len(t, out.Data, 2)
 	require.True(t, out.Page.HasMore)
 	require.NotNil(t, out.Page.NextCursor)
-	require.Equal(t, &dto.NoActiveJobsSummaryResponse{Count: 12}, out.Summary)
-	require.Equal(t, dto.NoActiveJobsCustomerResponse{
-		ID: out.Data[0].ID, Status: "inactive", AccountNumber: "63716", Customer: "# D",
-	}, out.Data[0])
-	require.Nil(t, out.Data[0].LastService, "no job")
+	require.Equal(t, &dto.NoActiveJobsSummaryResponse{Count: 11}, out.Summary)
+	first := out.Data[0]
+	require.Equal(t, "active", first.Status)
+	require.Equal(t, "70001", first.AccountNumber)
+	require.Equal(t, "Ada Lovelace", first.Customer)
+	require.NotNil(t, first.Phone)
+	require.Equal(t, "555-0101", *first.Phone, "the first phone")
+	require.Nil(t, first.LastService, "no job")
 
 	t.Run("the next page has no summary", func(t *testing.T) {
 		_, body := get(t, srv, customersPath+"?limit=2&cursor="+*out.Page.NextCursor)

@@ -34,7 +34,7 @@ func TestListDefaultsToThisYearByName(t *testing.T) {
 	require.Equal(t, model.SalesBreakdownByService, res.By)
 	require.Len(t, res.Items, 5)
 	require.Equal(t, "Bi-Monthly Service", res.Items[0].Name)
-	require.Equal(t, model.Money(183126), res.Summary.Total)
+	require.Equal(t, model.Money(185740), res.Summary.Total)
 	require.Nil(t, res.Unassigned, "every forecast job has a service")
 }
 

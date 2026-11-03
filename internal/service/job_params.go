@@ -16,6 +16,7 @@ type ListJobsParams struct {
 	Status         []string // status
 	ServiceTypeIDs []string // service_type_id
 	LeadSourceIDs  []string // lead_source_id
+	AssignedTo     []string // assigned_to
 
 	Search string // q
 	Sort   string // sort
@@ -43,6 +44,7 @@ func parseJobParams(p ListJobsParams, now time.Time) (jobRequest, error) {
 	filter.Statuses = parseEnums(&v, "status", p.Status, model.JobStatuses)
 	filter.ServiceTypeIDs = v.ids("service_type_id", p.ServiceTypeIDs)
 	filter.LeadSourceIDs = v.ids("lead_source_id", p.LeadSourceIDs)
+	filter.AssignedToIDs = v.ids("assigned_to", p.AssignedTo)
 	filter.Search = v.search(p.Search)
 
 	key, desc := parseSort(&v, p.Sort, p.Order, model.JobSortKeys, model.JobSortCreatedAt)

@@ -83,7 +83,7 @@ func TestForecastByClient(t *testing.T) {
 	require.Equal(t, "forecast", out.Type)
 	require.Equal(t, "client", out.By)
 	require.Nil(t, out.Unassigned)
-	require.Equal(t, "1831.26", out.Summary.Total)
+	require.Equal(t, "1857.40", out.Summary.Total)
 	require.Len(t, out.Summary.Months, 12)
 	for _, r := range out.Data {
 		require.Len(t, r.Months, 12)

@@ -25,6 +25,7 @@ func fullJobFilter() model.JobFilter {
 		Statuses:       []model.JobStatus{model.JobCompleted, model.JobCancelled},
 		ServiceTypeIDs: []int64{1, 2},
 		LeadSourceIDs:  []int64{3},
+		AssignedToIDs:  []int64{2, 1},
 		Search:         "saliba",
 	}
 }
@@ -37,10 +38,14 @@ func TestBuildJobListQueryDefault(t *testing.T) {
 	require.Contains(t, stmt.SQL, "JOIN customers c ON c.id = j.customer_id")
 	require.Contains(t, stmt.SQL, "JOIN service_types st ON st.id = j.service_type_id")
 	require.Contains(t, stmt.SQL, "LEFT JOIN lead_sources ls ON ls.id = j.lead_source_id")
+	require.Contains(t, stmt.SQL, "JOIN service_locations sl ON sl.id = j.location_id", "the address is the job's own location")
+	require.Contains(t, stmt.SQL, "SELECT p.number FROM customer_phones p WHERE p.customer_id = c.id ORDER BY p.id LIMIT 1",
+		"the phone is the customer's first one")
+	require.Contains(t, stmt.SQL, "st.id, st.name, ph.number,\n    sl.address_line1, sl.address_line2, sl.city, sl.state, sl.postal_code, sl.county,")
 	require.Contains(t, stmt.SQL, "ORDER BY j.created_at DESC, j.id DESC")
-	for _, absent := range []string{"deleted_at", "archived_at", "WHERE"} {
-		require.NotContains(t, stmt.SQL, absent, "jobs have no tabs and an empty filter adds no condition")
-	}
+	require.Contains(t, stmt.SQL, "WHERE j.deleted_at IS NULL\nORDER BY", "deleted jobs are always left out")
+	require.NotContains(t, stmt.SQL, "archived_at", "jobs have no tabs")
+	require.NotContains(t, stmt.SQL, "AND", "an empty filter adds no other condition")
 	require.Contains(t, stmt.SQL, "LIMIT $1")
 	require.Equal(t, []any{51}, stmt.Args, "one extra row is fetched to detect another page")
 	requirePlaceholdersMatchArgs(t, stmt)
@@ -51,6 +56,8 @@ func TestBuildJobListQueryEverySortKeyAndDirection(t *testing.T) {
 		model.JobSortCustomer:      {"lower(c.display_name)", "text"},
 		model.JobSortAccountNumber: {"c.account_number", "text"},
 		model.JobSortServiceType:   {"lower(st.name)", "text"},
+		model.JobSortPhone:         {"lower(coalesce(ph.number, ''))", "text"},
+		model.JobSortAddress:       {"lower(sl.address_line1)", "text"},
 		model.JobSortSource:        {"lower(coalesce(ls.name, ''))", "text"},
 		model.JobSortInvoiceValue:  {"j.invoice_value", "numeric"},
 		model.JobSortCreatedAt:     {"j.created_at", "timestamptz"},
@@ -113,6 +120,7 @@ func TestBuildJobListQueryFiltersAddClausesAndArgsInOrder(t *testing.T) {
 		[]string{"completed", "cancelled"},
 		[]int64{1, 2},
 		[]int64{3},
+		[]int64{2, 1},
 		"%saliba%",
 		"2026-10-12T08:00:00.000000Z",
 		int64(9),
@@ -125,11 +133,15 @@ func TestBuildJobListQueryFiltersAddClausesAndArgsInOrder(t *testing.T) {
 		"j.status::text = ANY($3::text[])",
 		"j.service_type_id = ANY($4::bigint[])",
 		"j.lead_source_id = ANY($5::bigint[])",
-		"c.display_name ILIKE $6",
-		"c.account_number ILIKE $6",
-		"st.name ILIKE $6",
-		"(($7::text)::timestamptz, $8::bigint)",
-		"LIMIT $9",
+		"j.assigned_to = ANY($6::bigint[])",
+		"c.display_name ILIKE $7",
+		"c.account_number ILIKE $7",
+		"st.name ILIKE $7",
+		"ph.number ILIKE $7",
+		"sl.address_line1 ILIKE $7",
+		"sl.city ILIKE $7",
+		"(($8::text)::timestamptz, $9::bigint)",
+		"LIMIT $10",
 	} {
 		require.Contains(t, stmt.SQL, want)
 	}
@@ -234,8 +246,12 @@ func TestBuildJobSummaryQuery(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Contains(t, stmt.SQL, "SELECT count(*), COALESCE(SUM(j.invoice_value * 100), 0)::bigint")
-	require.NotContains(t, stmt.SQL, "ORDER BY")
-	require.NotContains(t, stmt.SQL, "LIMIT")
+	require.Contains(t, stmt.SQL, "JOIN service_locations sl ON sl.id = j.location_id", "the search can match the address")
+	require.Contains(t, stmt.SQL, ") ph ON true", "the search can match the phone")
+	// only the phone's lateral subquery orders and limits; the summary itself does neither
+	require.NotContains(t, stmt.SQL, "\nORDER BY")
+	require.NotContains(t, stmt.SQL, "\nLIMIT")
+	require.Equal(t, 1, strings.Count(stmt.SQL, "ORDER BY"))
 	requirePlaceholdersMatchArgs(t, stmt)
 }
 

@@ -64,6 +64,13 @@ func TestCustomerListResponseJSONContract(t *testing.T) {
 				ID: 15, Name: "Ada Lovelace", AccountNumber: "70001",
 				Email: strPtr("ada@example.com"), Phone: strPtr("555-0101"), SourceID: int64Ptr(2), Source: strPtr("Google"),
 				CreatedAt: time.Date(2026, 10, 22, 8, 15, 30, 123456000, time.UTC),
+				TopNote:   "Gate code 1234",
+				Address:   &model.LookupAddress{Line1: "1 2", City: "3", State: "4", Zip: "5"},
+				FirstJob: &model.CustomerFirstJob{
+					ID: 40, ServiceTypeID: 3, ServiceType: "Blank Service 123",
+					CreatedAt: time.Date(2026, 11, 2, 10, 42, 0, 0, plus7),
+				},
+				CompletedJobs: 2,
 			},
 			{
 				// nothing optional; a whole second from a non-UTC zone is still written in UTC with six fractional digits
@@ -86,12 +93,16 @@ func TestCustomerListResponseJSONContract(t *testing.T) {
 			{
 				"id": 15, "customer": {"id": 15, "name": "Ada Lovelace"}, "account_number": "70001",
 				"email": "ada@example.com", "phone": "555-0101", "source": {"id": 2, "name": "Google"},
-				"created_at": "2026-10-22T08:15:30.123456Z"
+				"created_at": "2026-10-22T08:15:30.123456Z", "top_note": "Gate code 1234",
+				"address": {"line1": "1 2", "line2": "", "city": "3", "state": "4", "zip": "5", "county": ""},
+				"first_job": {"id": 40, "service_type": {"id": 3, "name": "Blank Service 123"}, "created_at": "2026-11-02T03:42:00.000000Z"},
+				"completed_jobs": 2
 			},
 			{
 				"id": 3, "customer": {"id": 3, "name": "PerfTest"}, "account_number": "63701",
 				"email": null, "phone": null, "source": null,
-				"created_at": "2026-10-12T08:00:00.000000Z"
+				"created_at": "2026-10-12T08:00:00.000000Z", "top_note": "", "address": null, "first_job": null,
+				"completed_jobs": 0
 			}
 		],
 		"page": {"limit": 50, "has_more": true, "next_cursor": "opaque-cursor"},
@@ -302,7 +313,7 @@ func TestCustomerFiltersResponseJSONContract(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.JSONEq(t, `{
 		"lead_sources": [{"id": 1, "name": "Facebook"}, {"id": 2, "name": "Google"}],
-		"sort_keys": ["customer", "account_number", "email", "phone", "source", "created_at"],
+		"sort_keys": ["customer", "account_number", "email", "phone", "address", "source", "created_at"],
 		"default_sort": {"key": "created_at", "order": "desc"},
 		"limits": {"default": 50, "max": 200}
 	}`, rec.Body.String())

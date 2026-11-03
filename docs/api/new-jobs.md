@@ -5,7 +5,9 @@ JSON and carries `Cache-Control: no-store` and an `X-Request-ID` header. Timesta
 digits (`"2026-10-22T08:15:30.123456Z"`); dates are `YYYY-MM-DD`; money is a decimal string with two places.
 
 It works like the [Documents](documents.md) report: the date is a creation timestamp (shown in UTC, filtered by day in `APP_TIMEZONE`) and the filter choices
-come from the database. Jobs have no Active / Deleted tab, so there is no `lifecycle` parameter.
+come from the database. Jobs have no Active / Deleted tab, so there is no `lifecycle` parameter: a deleted job is
+never part of the report. It is not listed, counted or totalled (the [Service Lookup](service-lookup.md) Deleted tab
+shows it). A cancelled job that is not deleted is listed, counted and totalled like any other.
 
 | Endpoint | Purpose |
 |---|---|
@@ -25,9 +27,10 @@ of the other reports, such as `method` and `document_type_id`.
 | `status` | multi | `unconfirmed`, `confirmed`, `completed`, `cancelled` | all |
 | `service_type_id` | multi | Service type ids (from `/filters`). | all |
 | `lead_source_id` | multi | Lead source ids (from `/filters`). Jobs without a source are only matched when no source filter is sent. | all |
-| `q` | text | Case-insensitive substring search over customer name, account number and service type name. `%`, `_` and `\` are matched literally. At most 100 characters. | none |
-| `sort` | key | `customer`, `account_number`, `service_type`, `source`, `invoice_value`, `created_at`, `status` | `created_at` |
-| `order` | `asc` \| `desc` | Sort direction. With neither `sort` nor `order`: newest first (`created_at` descending). With `sort` but no `order`: ascending. A job without a source sorts as an empty name: first when ascending. | see left |
+| `assigned_to` | multi | Staff ids (`staff` from `/filters`), the Assigned To filter: the staff member the job is assigned to. Unassigned jobs are only matched when no `assigned_to` is sent. Same name and meaning as in [Service Lookup](service-lookup.md). | all |
+| `q` | text | Case-insensitive substring search over customer name, account number, service type name, phone, address line 1 and city. `%`, `_` and `\` are matched literally. At most 100 characters. | none |
+| `sort` | key | `customer`, `account_number`, `service_type`, `phone`, `address`, `source`, `invoice_value`, `created_at`, `status` | `created_at` |
+| `order` | `asc` \| `desc` | Sort direction. With neither `sort` nor `order`: newest first (`created_at` descending). With `sort` but no `order`: ascending. A job without a source sorts as an empty name, and a customer without a phone as an empty number: first when ascending. `address` sorts by address line 1. | see left |
 | `limit` | integer 1 to 200 | Page size. Out of range is an error, not clamped. | 50 |
 | `cursor` | opaque | `page.next_cursor` from the previous response. Must be used with the same `sort` and `order`. | first page |
 
@@ -47,6 +50,8 @@ Number columns are identifiers, not quantities: `account_number` sorts as text, 
       "customer": { "id": 2, "name": "Customer 1" },
       "account_number": "63733",
       "service_type": { "id": 2, "name": "Initial Service" },
+      "phone": null,
+      "address": { "line1": "Ewald Drive 12322 East Freeway", "line2": "", "city": "Penfield", "state": "NY", "zip": "14625", "county": "" },
       "source": { "id": 2, "name": "Google" },
       "invoice_value": "95.00",
       "created_at": "2026-10-22T08:15:30.123456Z",
@@ -57,6 +62,8 @@ Number columns are identifiers, not quantities: `account_number` sorts as text, 
       "customer": { "id": 11, "name": "William Saliba" },
       "account_number": "5001",
       "service_type": { "id": 1, "name": "Bi-Monthly Service" },
+      "phone": null,
+      "address": { "line1": "West Loop 1604 South", "line2": "", "city": "San Antonio", "state": "TX", "zip": "78264", "county": "Bexar County" },
       "source": null,
       "invoice_value": "65.00",
       "created_at": "2026-10-15T08:00:00.000000Z",
@@ -64,11 +71,14 @@ Number columns are identifiers, not quantities: `account_number` sorts as text, 
     }
   ],
   "page": { "limit": 2, "has_more": true, "next_cursor": "eyJrIjoiY3JlYXRlZF9hdCIsImQiOnRydWUsInYiOiIyMDI2LTEwLTE1VDA4OjAwOjAwLjAwMDAwMFoiLCJpZCI6Mjl9" },
-  "summary": { "count": 35, "total": "1861.26" },
+  "summary": { "count": 34, "total": "1796.26" },
   "range": { "from": "2026-10-01", "to": "2026-10-31" }
 }
 ```
 
+- `phone` is the customer's first phone number (the one added first), or `null` when the customer has none. Only the
+  number is returned: the screenshot's phone kind ("Mobile") is not part of the report.
+- `address` is the job's own service location, the same object as in [Service Lookup](service-lookup.md).
 - `source` is `null` when the job has no lead source.
 - `invoice_value` is the job's invoice value.
 - `created_at` is always UTC with exactly six fractional digits, so every value has the same shape, whatever `APP_TIMEZONE` is. Only the `from`/`to` day boundaries follow `APP_TIMEZONE`.
@@ -140,7 +150,8 @@ value is validated; fix them, and any remaining value errors are reported next.
 
 ## `GET /api/v1/reports/new-jobs/filters`
 
-Everything needed to build the filter controls. Use the returned ids for `service_type_id` and `lead_source_id`;
+Everything needed to build the filter controls. Use the returned ids for `service_type_id`, `lead_source_id` and
+`assigned_to` (from `staff`);
 the static lists and limits mean the frontend never has to hard-code them.
 
 ```json
@@ -157,8 +168,12 @@ the static lists and limits mean the frontend never has to hard-code them.
     { "id": 2, "name": "Google" },
     { "id": 3, "name": "Referral" }
   ],
+  "staff": [
+    { "id": 2, "name": "thon nguyen" },
+    { "id": 1, "name": "Thọ Nguyễn Quang" }
+  ],
   "statuses": ["unconfirmed", "confirmed", "completed", "cancelled"],
-  "sort_keys": ["customer", "account_number", "service_type", "source", "invoice_value", "created_at", "status"],
+  "sort_keys": ["customer", "account_number", "service_type", "phone", "address", "source", "invoice_value", "created_at", "status"],
   "default_sort": { "key": "created_at", "order": "desc" },
   "limits": { "default": 50, "max": 200 }
 }
@@ -178,7 +193,10 @@ curl.exe "http://localhost:8080/api/v1/reports/new-jobs?status=cancelled&sort=so
 # One service type and one lead source (ids come from /filters), highest value first
 curl.exe "http://localhost:8080/api/v1/reports/new-jobs?service_type_id=2&lead_source_id=2&sort=invoice_value&order=desc"
 
-# Search by customer, account number or service type, two per page
+# Jobs assigned to staff member 1 or 2 (ids come from /filters)
+curl.exe "http://localhost:8080/api/v1/reports/new-jobs?assigned_to=1,2"
+
+# Search by customer, account number, service type, phone, address or city, two per page
 curl.exe "http://localhost:8080/api/v1/reports/new-jobs?q=saliba&limit=2"
 
 # All of September

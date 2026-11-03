@@ -12,13 +12,14 @@ const (
 	CustomerSortAccountNumber CustomerSortKey = "account_number"
 	CustomerSortEmail         CustomerSortKey = "email"
 	CustomerSortPhone         CustomerSortKey = "phone"
+	CustomerSortAddress       CustomerSortKey = "address"
 	CustomerSortSource        CustomerSortKey = "source"
 	CustomerSortCreatedAt     CustomerSortKey = "created_at"
 )
 
 // CustomerSortKeys lists every valid CustomerSortKey.
 var CustomerSortKeys = []CustomerSortKey{
-	CustomerSortCustomer, CustomerSortAccountNumber, CustomerSortEmail, CustomerSortPhone,
+	CustomerSortCustomer, CustomerSortAccountNumber, CustomerSortEmail, CustomerSortPhone, CustomerSortAddress,
 	CustomerSortSource, CustomerSortCreatedAt,
 }
 
@@ -68,8 +69,24 @@ type CustomerRow struct {
 	SourceID  *int64
 	Source    *string
 	CreatedAt time.Time
+	// TopNote is the customer's top note, empty when there is none.
+	TopNote string
+	// Address is the customer's first service location (lowest id), nil when the customer has none.
+	Address *LookupAddress
+	// FirstJob is the customer's earliest created job that is not deleted, whatever its status; nil when there is none.
+	FirstJob *CustomerFirstJob
+	// CompletedJobs counts the customer's completed jobs that are not deleted.
+	CompletedJobs int64
 	// SortValue is this row's value for the sort key, as text, used to build the next page's cursor.
 	SortValue string
+}
+
+// CustomerFirstJob is the job a new customer booked first: its service type and when it was created.
+type CustomerFirstJob struct {
+	ID            int64
+	ServiceTypeID int64
+	ServiceType   string
+	CreatedAt     time.Time
 }
 
 // CustomerPage is one page of the report read from a single database snapshot. Summary is nil unless it was

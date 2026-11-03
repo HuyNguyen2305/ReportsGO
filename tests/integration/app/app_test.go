@@ -717,7 +717,7 @@ func TestServerServesTheNewCustomersReportRoutes(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", body)
 	var filters dto.CustomerFiltersResponse
 	require.NoError(t, json.Unmarshal(body, &filters))
-	require.Equal(t, []string{"customer", "account_number", "email", "phone", "source", "created_at"}, filters.SortKeys)
+	require.Equal(t, []string{"customer", "account_number", "email", "phone", "address", "source", "created_at"}, filters.SortKeys)
 	require.NotNil(t, filters.LeadSources)
 
 	resp, body = get(t, s.base+"/api/v1/reports/new-customers?status=active", nil)

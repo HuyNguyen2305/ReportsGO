@@ -127,9 +127,9 @@ func TestPageSeedTabsAgreeWithIndependentSQL(t *testing.T) {
 	}
 
 	page := e.page(t, tab(model.ServiceLookupActive))
-	require.Equal(t, model.ServiceLookupTabCounts{Active: 34, WorkPool: 3, Deleted: 1}, page.Summary.Tabs)
-	require.Equal(t, model.Money(154626), page.Summary.InvoiceValue, "less the cancelled jobs")
-	require.Equal(t, model.Money(151760), page.Summary.WithoutTax)
+	require.Equal(t, model.ServiceLookupTabCounts{Active: 36, WorkPool: 3, Deleted: 1}, page.Summary.Tabs)
+	require.Equal(t, model.Money(157240), page.Summary.InvoiceValue, "less the cancelled jobs")
+	require.Equal(t, model.Money(154374), page.Summary.WithoutTax)
 }
 
 func TestPageSeedRowContents(t *testing.T) {
@@ -178,8 +178,8 @@ func TestPageScheduledRangeAndUnscheduledJobs(t *testing.T) {
 	explicitRange(&f, day(2026, 10, 1), day(2026, 11, 1))
 	october := e.page(t, f)
 
-	require.Equal(t, int64(34), all.Summary.Count, "33 scheduled seed jobs and the unscheduled one")
-	require.Equal(t, int64(31), october.Summary.Count, "an unscheduled job never matches a range; two seed jobs are outside October")
+	require.Equal(t, int64(36), all.Summary.Count, "35 scheduled seed jobs and the unscheduled one")
+	require.Equal(t, int64(31), october.Summary.Count, "an unscheduled job never matches a range; four seed jobs are outside October")
 	require.Equal(t, int64(31), scalar[int64](t, e, `SELECT count(*) FROM jobs WHERE deleted_at IS NULL AND NOT in_work_pool
 		AND scheduled_at >= '2026-10-01 00:00+00' AND scheduled_at < '2026-11-01 00:00+00'`))
 
@@ -222,7 +222,7 @@ func TestPageTabsAreExclusive(t *testing.T) {
 	require.NotContains(t, ids(active.Rows), pooledAndDeleted)
 	require.NotContains(t, ids(pool.Rows), pooledAndDeleted, "a deleted job leaves the work pool")
 	require.Contains(t, ids(deleted.Rows), pooledAndDeleted)
-	require.Equal(t, model.ServiceLookupTabCounts{Active: 34, WorkPool: 3, Deleted: 2}, active.Summary.Tabs)
+	require.Equal(t, model.ServiceLookupTabCounts{Active: 36, WorkPool: 3, Deleted: 2}, active.Summary.Tabs)
 }
 
 func TestPageTabCountsShareTheOtherFilters(t *testing.T) {
@@ -234,11 +234,12 @@ func TestPageTabCountsShareTheOtherFilters(t *testing.T) {
 
 	require.Empty(t, page.Rows, "no pooled job is cancelled")
 	require.Equal(t, model.ServiceLookupSummary{Tabs: model.ServiceLookupTabCounts{Active: 1, WorkPool: 0, Deleted: 1}}, *page.Summary,
-		"the cancelled job sits in Active (id 37) and Deleted (id 32)")
+		"the cancelled job sits in Active (id 32) and Deleted (id 37)")
 
 	// the range narrows every tab's count
 	f = tab(model.ServiceLookupActive)
-	explicitRange(&f, day(2026, 10, 22), day(2026, 10, 23))
+	f.Statuses = []model.JobStatus{model.JobCancelled}
+	explicitRange(&f, day(2026, 10, 13), day(2026, 10, 14))
 	page = e.page(t, f)
 	require.Equal(t, model.ServiceLookupTabCounts{Active: 0, WorkPool: 0, Deleted: 1}, page.Summary.Tabs)
 }

@@ -242,3 +242,65 @@ func (_c *MockJobRepository_ServiceTypes_Call) RunAndReturn(run func(ctx context
 	_c.Call.Return(run)
 	return _c
 }
+
+// Staff provides a mock function for the type MockJobRepository
+func (_mock *MockJobRepository) Staff(ctx context.Context) ([]model.StaffOption, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Staff")
+	}
+
+	var r0 []model.StaffOption
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]model.StaffOption, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) []model.StaffOption); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]model.StaffOption)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockJobRepository_Staff_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Staff'
+type MockJobRepository_Staff_Call struct {
+	*mock.Call
+}
+
+// Staff is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockJobRepository_Expecter) Staff(ctx any) *MockJobRepository_Staff_Call {
+	return &MockJobRepository_Staff_Call{Call: _e.mock.On("Staff", ctx)}
+}
+
+func (_c *MockJobRepository_Staff_Call) Run(run func(ctx context.Context)) *MockJobRepository_Staff_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockJobRepository_Staff_Call) Return(staffOptions []model.StaffOption, err error) *MockJobRepository_Staff_Call {
+	_c.Call.Return(staffOptions, err)
+	return _c
+}
+
+func (_c *MockJobRepository_Staff_Call) RunAndReturn(run func(ctx context.Context) ([]model.StaffOption, error)) *MockJobRepository_Staff_Call {
+	_c.Call.Return(run)
+	return _c
+}

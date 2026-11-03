@@ -25,6 +25,8 @@ const (
 	JobSortCustomer      JobSortKey = "customer"
 	JobSortAccountNumber JobSortKey = "account_number"
 	JobSortServiceType   JobSortKey = "service_type"
+	JobSortPhone         JobSortKey = "phone"
+	JobSortAddress       JobSortKey = "address"
 	JobSortSource        JobSortKey = "source"
 	JobSortInvoiceValue  JobSortKey = "invoice_value"
 	JobSortCreatedAt     JobSortKey = "created_at"
@@ -33,7 +35,7 @@ const (
 
 // JobSortKeys lists every valid JobSortKey.
 var JobSortKeys = []JobSortKey{
-	JobSortCustomer, JobSortAccountNumber, JobSortServiceType, JobSortSource,
+	JobSortCustomer, JobSortAccountNumber, JobSortServiceType, JobSortPhone, JobSortAddress, JobSortSource,
 	JobSortInvoiceValue, JobSortCreatedAt, JobSortStatus,
 }
 
@@ -43,8 +45,8 @@ type JobSort struct {
 	Desc bool
 }
 
-// JobFilter narrows the new jobs report. An empty list means "All". Jobs cannot be deleted or archived, so there
-// is no tab.
+// JobFilter narrows the new jobs report. An empty list means "All". Deleted jobs are always left out, so there is
+// no tab.
 type JobFilter struct {
 	// CreatedFrom is the first instant included and CreatedBefore the first instant excluded. The service builds
 	// them from calendar days in the business time zone.
@@ -53,8 +55,10 @@ type JobFilter struct {
 	Statuses                   []JobStatus
 	ServiceTypeIDs             []int64
 	LeadSourceIDs              []int64
-	// Search matches, case-insensitively and as a substring, the customer name, account number and service
-	// type name. It is plain text: LIKE wildcards in it are matched literally.
+	// AssignedToIDs are the staff members the job is assigned to; an unassigned job matches only when it is empty.
+	AssignedToIDs []int64
+	// Search matches, case-insensitively and as a substring, the customer name, account number, service type name,
+	// phone, address line and city. It is plain text: LIKE wildcards in it are matched literally.
 	Search string
 }
 
@@ -81,6 +85,10 @@ type JobRow struct {
 	AccountNumber string
 	ServiceTypeID int64
 	ServiceType   string
+	// Phone is the customer's first phone number, nil when the customer has none.
+	Phone *string
+	// Address is the job's own service location.
+	Address LookupAddress
 	// SourceID and Source describe where the job came from; both are nil when no lead source is recorded.
 	SourceID     *int64
 	Source       *string

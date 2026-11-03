@@ -34,9 +34,14 @@ func toJobResponse(r model.JobRow) dto.JobResponse {
 		Customer:      dto.CustomerRef{ID: r.CustomerID, Name: r.CustomerName},
 		AccountNumber: r.AccountNumber,
 		ServiceType:   dto.OptionResponse{ID: r.ServiceTypeID, Name: r.ServiceType},
-		InvoiceValue:  r.InvoiceValue.String(),
-		CreatedAt:     r.CreatedAt.UTC().Format(timestampLayout),
-		Status:        string(r.Status),
+		Phone:         r.Phone,
+		Address: dto.ServiceLookupAddressResponse{
+			Line1: r.Address.Line1, Line2: r.Address.Line2, City: r.Address.City,
+			State: r.Address.State, Zip: r.Address.Zip, County: r.Address.County,
+		},
+		InvoiceValue: r.InvoiceValue.String(),
+		CreatedAt:    r.CreatedAt.UTC().Format(timestampLayout),
+		Status:       string(r.Status),
 	}
 	if r.SourceID != nil && r.Source != nil {
 		out.Source = &dto.OptionResponse{ID: *r.SourceID, Name: *r.Source}
@@ -48,6 +53,7 @@ func toJobFiltersResponse(opts *service.JobFilterOptions) dto.JobFiltersResponse
 	out := dto.JobFiltersResponse{
 		ServiceTypes: make([]dto.OptionResponse, len(opts.ServiceTypes)),
 		LeadSources:  make([]dto.OptionResponse, len(opts.LeadSources)),
+		Staff:        make([]dto.OptionResponse, len(opts.Staff)),
 		Statuses:     toStrings(model.JobStatuses),
 		SortKeys:     toStrings(model.JobSortKeys),
 		DefaultSort:  dto.SortResponse{Key: string(model.JobSortCreatedAt), Order: "desc"},
@@ -58,6 +64,9 @@ func toJobFiltersResponse(opts *service.JobFilterOptions) dto.JobFiltersResponse
 	}
 	for i, s := range opts.LeadSources {
 		out.LeadSources[i] = dto.OptionResponse{ID: s.ID, Name: s.Name}
+	}
+	for i, s := range opts.Staff {
+		out.Staff[i] = dto.OptionResponse{ID: s.ID, Name: s.Name}
 	}
 	return out
 }

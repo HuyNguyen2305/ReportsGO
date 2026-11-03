@@ -264,8 +264,8 @@ func TestFilters(t *testing.T) {
 		{"one day", "?from=2026-10-22&to=2026-10-22", 1},
 		{"the first and last instant of a day", "?from=2026-10-10&to=2026-10-10", 2},
 		{"september", "?from=2026-09-01&to=2026-09-30", 4},
-		{"november 1", "?from=2026-11-01&to=2026-11-01", 1},
-		{"everything", "?from=2000-01-01&to=2100-01-01", 19},
+		{"november 1", "?from=2026-11-01&to=2026-11-01", 2},
+		{"everything", "?from=2000-01-01&to=2100-01-01", 20},
 		{"open start", "?to=2026-10-05", 9},
 		{"search by name with plus as space", "?q=Ada+Lovelace", 1},
 		{"search by account number", "?q=7000", 6},
@@ -402,7 +402,8 @@ func TestJSONContract(t *testing.T) {
 
 	customer := list["data"].([]any)[0].(map[string]any)
 	require.Equal(t, []string{
-		"account_number", "created_at", "customer", "email", "id", "phone", "source",
+		"account_number", "address", "completed_jobs", "created_at", "customer", "email", "first_job", "id", "phone",
+		"source", "top_note",
 	}, keysOf(customer))
 	require.Equal(t, []string{"id", "name"}, keysOf(customer["customer"].(map[string]any)))
 	require.Equal(t, []string{"id", "name"}, keysOf(customer["source"].(map[string]any)))
@@ -446,7 +447,7 @@ func TestFiltersEndpointMatchesWhatTheListAccepts(t *testing.T) {
 		require.NotZero(t, o.ID)
 		require.NotEmpty(t, o.Name)
 	}
-	require.Equal(t, []string{"customer", "account_number", "email", "phone", "source", "created_at"}, f.SortKeys)
+	require.Equal(t, []string{"customer", "account_number", "email", "phone", "address", "source", "created_at"}, f.SortKeys)
 	require.Equal(t, dto.SortResponse{Key: "created_at", Order: "desc"}, f.DefaultSort)
 	require.Equal(t, dto.PageLimitsResponse{Default: 50, Max: 200}, f.Limits)
 

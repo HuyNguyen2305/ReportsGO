@@ -38,12 +38,12 @@ func TestListDefault(t *testing.T) {
 	res, err := svc.List(context.Background(), service.ListJobsParams{Limit: "200"})
 
 	require.NoError(t, err)
-	require.Len(t, res.Items, 35, "the October jobs only")
+	require.Len(t, res.Items, 34, "the October jobs only")
 	require.Equal(t, time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), res.From)
 	require.Equal(t, time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC), res.To)
 	require.NotNil(t, res.Summary)
-	require.EqualValues(t, 35, res.Summary.Count)
-	require.Equal(t, model.Money(186126), res.Summary.Total)
+	require.EqualValues(t, 34, res.Summary.Count)
+	require.Equal(t, model.Money(179626), res.Summary.Total)
 	for i := 1; i < len(res.Items); i++ {
 		require.False(t, res.Items[i].CreatedAt.After(res.Items[i-1].CreatedAt), "newest first")
 	}
@@ -59,7 +59,7 @@ func TestFollowingNextCursorWalksEveryKeyAndDirectionExactly(t *testing.T) {
 				t.Run(fmt.Sprintf("%s/%s/limit=%d", key, order, limit), func(t *testing.T) {
 					all, err := svc.List(ctx, service.ListJobsParams{Sort: string(key), Order: order, Limit: "200"})
 					require.NoError(t, err)
-					require.Len(t, all.Items, 35)
+					require.Len(t, all.Items, 34)
 
 					p := service.ListJobsParams{Sort: string(key), Order: order, Limit: fmt.Sprint(limit)}
 					var got []model.JobRow
@@ -71,8 +71,8 @@ func TestFollowingNextCursorWalksEveryKeyAndDirectionExactly(t *testing.T) {
 						require.Equal(t, limit, res.Limit)
 						if page == 0 {
 							require.NotNil(t, res.Summary, "the first page carries the totals")
-							require.EqualValues(t, 35, res.Summary.Count)
-							require.Equal(t, model.Money(186126), res.Summary.Total)
+							require.EqualValues(t, 34, res.Summary.Count)
+							require.Equal(t, model.Money(179626), res.Summary.Total)
 						} else {
 							require.Nil(t, res.Summary, "later pages do not")
 						}
@@ -130,16 +130,16 @@ func TestFiltersAgreeWithTheCount(t *testing.T) {
 		wantCount int
 	}{
 		{"unconfirmed", service.ListJobsParams{Status: []string{"unconfirmed"}}, 6},
-		{"cancelled", service.ListJobsParams{Status: []string{"cancelled"}}, 2},
-		{"completed or cancelled, mixed case", service.ListJobsParams{Status: []string{"Completed", "CANCELLED"}}, 20},
+		{"cancelled", service.ListJobsParams{Status: []string{"cancelled"}}, 1},
+		{"completed or cancelled, mixed case", service.ListJobsParams{Status: []string{"Completed", "CANCELLED"}}, 19},
 		{"one service type", service.ListJobsParams{ServiceTypeIDs: []string{typeID["Initial Service"]}}, 4},
-		{"two service types", service.ListJobsParams{ServiceTypeIDs: []string{typeID["Initial Service"], typeID["Bi-Monthly Service"]}}, 24},
+		{"two service types", service.ListJobsParams{ServiceTypeIDs: []string{typeID["Initial Service"], typeID["Bi-Monthly Service"]}}, 23},
 		{"one source", service.ListJobsParams{LeadSourceIDs: []string{sourceID["Google"]}}, 2},
 		{"two sources", service.ListJobsParams{LeadSourceIDs: []string{sourceID["Google"], sourceID["Referral"]}}, 3},
 		{"status and source together", service.ListJobsParams{Status: []string{"cancelled"}, LeadSourceIDs: []string{sourceID["Google"]}}, 1},
 		{"september 30 only", service.ListJobsParams{From: "2026-09-30", To: "2026-09-30"}, 1},
 		{"november 1 only", service.ListJobsParams{From: "2026-11-01", To: "2026-11-01"}, 1},
-		{"everything", service.ListJobsParams{From: "2000-01-01", To: "2100-01-01"}, 38},
+		{"everything", service.ListJobsParams{From: "2000-01-01", To: "2100-01-01"}, 39},
 		{"search by service type", service.ListJobsParams{Search: "initial serv"}, 4},
 		{"search with wildcards matches nothing", service.ListJobsParams{Search: "%_"}, 0},
 		{"search with injection text matches nothing", service.ListJobsParams{Search: `'; DROP TABLE jobs; --`}, 0},
@@ -184,6 +184,27 @@ func TestFilterOptionsListTheSeededLookups(t *testing.T) {
 		require.NotZero(t, s.ID)
 		require.NotEmpty(t, s.Name)
 	}
+	require.Len(t, opts.Staff, 2)
+}
+
+func TestAssignedToFlowsThroughToTheReport(t *testing.T) {
+	svc := newService(t)
+	ctx := context.Background()
+
+	opts, err := svc.FilterOptions(ctx)
+	require.NoError(t, err)
+	all, err := svc.List(ctx, service.ListJobsParams{Limit: "200"})
+	require.NoError(t, err)
+
+	var assigned int64
+	for _, s := range opts.Staff {
+		res, err := svc.List(ctx, service.ListJobsParams{AssignedTo: []string{fmt.Sprint(s.ID)}, Limit: "200"})
+		require.NoError(t, err)
+		require.Len(t, res.Items, int(res.Summary.Count))
+		require.Positive(t, res.Summary.Count, "%s has October jobs", s.Name)
+		assigned += res.Summary.Count
+	}
+	require.Less(t, assigned, all.Summary.Count, "the unassigned jobs are left out once a staff member is chosen")
 }
 
 func TestInvalidInputIsReportedPerFieldWithoutHittingTheData(t *testing.T) {

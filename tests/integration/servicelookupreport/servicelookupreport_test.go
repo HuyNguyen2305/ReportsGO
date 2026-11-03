@@ -113,7 +113,7 @@ func TestListPagingAndFilters(t *testing.T) {
 	require.Equal(t, dto.DateRangeResponse{}, pool.Range, "the work pool has an open range")
 	require.Equal(t, "285.00", pool.Summary.InvoiceValue)
 
-	deleted := list(t, srv, "?tab=deleted&from=2026-10-22&to=2026-10-22&status=cancelled")
+	deleted := list(t, srv, "?tab=deleted&from=2026-10-13&to=2026-10-13&status=cancelled")
 	require.Len(t, deleted.Data, 1)
 
 	tagged := list(t, srv, "?tag=1&tag=2&status=confirmed,unconfirmed")

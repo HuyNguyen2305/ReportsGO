@@ -63,12 +63,18 @@ func TestJobListResponseJSONContract(t *testing.T) {
 			{
 				ID: 17, CustomerID: 2, CustomerName: "Customer 1", AccountNumber: "63733",
 				ServiceTypeID: 1, ServiceType: "Initial Service", SourceID: int64Ptr(4), Source: strPtr("Google"),
+				Phone: strPtr("(012) 332-1211"),
+				Address: model.LookupAddress{
+					Line1: "Ewald Drive 12322 East Freeway", City: "Penfield", State: "NY", Zip: "14625", County: "Monroe",
+				},
 				InvoiceValue: 9500, CreatedAt: time.Date(2026, 10, 22, 8, 15, 30, 123456000, time.UTC), Status: model.JobCancelled,
 			},
 			{
-				// no source; a whole second from a non-UTC zone is still written in UTC with six fractional digits
+				// no source and no phone; a whole second from a non-UTC zone is still written in UTC with six
+				// fractional digits
 				ID: 3, CustomerID: 6, CustomerName: "# D", AccountNumber: "63716",
 				ServiceTypeID: 2, ServiceType: "Bi-Monthly Service",
+				Address:      model.LookupAddress{Line1: "Shearwood Forest Drive", City: "Bridgeport", State: "WV", Zip: "26330"},
 				InvoiceValue: 0, CreatedAt: time.Date(2026, 10, 12, 15, 0, 0, 0, plus7), Status: model.JobConfirmed,
 			},
 		},
@@ -86,12 +92,16 @@ func TestJobListResponseJSONContract(t *testing.T) {
 		"data": [
 			{
 				"id": 17, "customer": {"id": 2, "name": "Customer 1"}, "account_number": "63733",
-				"service_type": {"id": 1, "name": "Initial Service"}, "source": {"id": 4, "name": "Google"},
+				"service_type": {"id": 1, "name": "Initial Service"}, "phone": "(012) 332-1211",
+				"address": {"line1": "Ewald Drive 12322 East Freeway", "line2": "", "city": "Penfield", "state": "NY", "zip": "14625", "county": "Monroe"},
+				"source": {"id": 4, "name": "Google"},
 				"invoice_value": "95.00", "created_at": "2026-10-22T08:15:30.123456Z", "status": "cancelled"
 			},
 			{
 				"id": 3, "customer": {"id": 6, "name": "# D"}, "account_number": "63716",
-				"service_type": {"id": 2, "name": "Bi-Monthly Service"}, "source": null,
+				"service_type": {"id": 2, "name": "Bi-Monthly Service"}, "phone": null,
+				"address": {"line1": "Shearwood Forest Drive", "line2": "", "city": "Bridgeport", "state": "WV", "zip": "26330", "county": ""},
+				"source": null,
 				"invoice_value": "0.00", "created_at": "2026-10-12T08:00:00.000000Z", "status": "confirmed"
 			}
 		],
@@ -132,10 +142,11 @@ func TestJobListQueryParsing(t *testing.T) {
 		{"repeated and comma separated mixed", "?status=unconfirmed,confirmed&status=completed", service.ListJobsParams{Status: []string{"unconfirmed", "confirmed", "completed"}}},
 		{"service types in every form", "?service_type_id=1,2&service_type_id=3", service.ListJobsParams{ServiceTypeIDs: []string{"1", "2", "3"}}},
 		{"lead sources in every form", "?lead_source_id=4&lead_source_id=5,6", service.ListJobsParams{LeadSourceIDs: []string{"4", "5", "6"}}},
+		{"staff in every form", "?assigned_to=1,2&assigned_to=3", service.ListJobsParams{AssignedTo: []string{"1", "2", "3"}}},
 		{"whitespace and blanks are dropped", "?status=%20confirmed%20,,completed,&status=", service.ListJobsParams{Status: []string{"confirmed", "completed"}}},
-		{"only blanks leaves the lists empty", "?status=&service_type_id=,&lead_source_id=", service.ListJobsParams{}},
-		{"all multi-value parameters", "?status=cancelled&service_type_id=4&lead_source_id=2",
-			service.ListJobsParams{Status: []string{"cancelled"}, ServiceTypeIDs: []string{"4"}, LeadSourceIDs: []string{"2"}}},
+		{"only blanks leaves the lists empty", "?status=&service_type_id=,&lead_source_id=&assigned_to=,", service.ListJobsParams{}},
+		{"all multi-value parameters", "?status=cancelled&service_type_id=4&lead_source_id=2&assigned_to=1",
+			service.ListJobsParams{Status: []string{"cancelled"}, ServiceTypeIDs: []string{"4"}, LeadSourceIDs: []string{"2"}, AssignedTo: []string{"1"}}},
 		{"empty single values stay empty strings", "?from=&limit=", service.ListJobsParams{}},
 
 		{"percent-encoded at sign", "?q=d%40cm.co", service.ListJobsParams{Search: "d@cm.co"}},
@@ -168,6 +179,7 @@ func TestJobListRejectsUnsupportedAndDuplicatedParameters(t *testing.T) {
 		{"document parameter document_type_id", "?document_type_id=1", unsupported("document_type_id")},
 		{"invoice parameter service_id", "?service_id=1", unsupported("service_id")},
 		{"source has a longer name", "?source_id=1", unsupported("source_id")},
+		{"staff is assigned_to, not assigned_to_id", "?assigned_to_id=1", unsupported("assigned_to_id")},
 		{"single-value parameter twice", "?limit=1&limit=2", []dto.ErrorDetail{{Field: "limit", Message: "must be given only once"}}},
 		{"from twice", "?from=2026-10-01&from=2026-10-02", []dto.ErrorDetail{{Field: "from", Message: "must be given only once"}}},
 		{"problems are listed in a stable order", "?zzz=1&aaa=2&limit=1&limit=2", []dto.ErrorDetail{
@@ -302,6 +314,7 @@ func TestJobFiltersResponseJSONContract(t *testing.T) {
 	svc.EXPECT().FilterOptions(mock.Anything).Return(&service.JobFilterOptions{
 		ServiceTypes: []model.ServiceType{{ID: 2, Name: "Initial Service"}, {ID: 1, Name: "Bi-Monthly Service"}},
 		LeadSources:  []model.LeadSource{{ID: 3, Name: "Facebook"}},
+		Staff:        []model.StaffOption{{ID: 1, Name: "Thọ Nguyễn Quang"}},
 	}, nil).Once()
 
 	rec := do(jobEngine(svc), http.MethodGet, jobsPath+"/filters", "")
@@ -310,8 +323,9 @@ func TestJobFiltersResponseJSONContract(t *testing.T) {
 	require.JSONEq(t, `{
 		"service_types": [{"id": 2, "name": "Initial Service"}, {"id": 1, "name": "Bi-Monthly Service"}],
 		"lead_sources": [{"id": 3, "name": "Facebook"}],
+		"staff": [{"id": 1, "name": "Thọ Nguyễn Quang"}],
 		"statuses": ["unconfirmed", "confirmed", "completed", "cancelled"],
-		"sort_keys": ["customer", "account_number", "service_type", "source", "invoice_value", "created_at", "status"],
+		"sort_keys": ["customer", "account_number", "service_type", "phone", "address", "source", "invoice_value", "created_at", "status"],
 		"default_sort": {"key": "created_at", "order": "desc"},
 		"limits": {"default": 50, "max": 200}
 	}`, rec.Body.String())
@@ -325,6 +339,7 @@ func TestJobFiltersWithNoOptionsUseEmptyArrays(t *testing.T) {
 
 	require.Contains(t, rec.Body.String(), `"service_types":[]`)
 	require.Contains(t, rec.Body.String(), `"lead_sources":[]`)
+	require.Contains(t, rec.Body.String(), `"staff":[]`)
 }
 
 func TestJobFiltersServiceError(t *testing.T) {

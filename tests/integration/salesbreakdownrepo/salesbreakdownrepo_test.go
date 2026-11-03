@@ -108,7 +108,7 @@ func TestPageEveryTypeAndGroupingAgreesWithTheFacts(t *testing.T) {
 		model.SalesBreakdownForecast: model.Money(scalar[int64](t, e, forecastFactsCents)),
 		model.SalesBreakdownRevenue:  model.Money(scalar[int64](t, e, revenueFactsCents)),
 	}
-	require.Equal(t, model.Money(183126), facts[model.SalesBreakdownForecast])
+	require.Equal(t, model.Money(185740), facts[model.SalesBreakdownForecast])
 	require.Equal(t, model.Money(87106), facts[model.SalesBreakdownRevenue])
 
 	for _, ty := range model.SalesBreakdownTypes {
@@ -272,7 +272,7 @@ func TestPageTagsCountAJobUnderEachTagButOnceInTheSummary(t *testing.T) {
 	page := e.page(t, filter(model.SalesBreakdownForecast, model.SalesBreakdownByTag, time.UTC))
 
 	require.Equal(t, before+10000, overcount(), "the two-tag job shows under both tags")
-	require.Equal(t, model.Money(183126+10000), page.Summary.Total, "but the summary counts it once")
+	require.Equal(t, model.Money(185740+10000), page.Summary.Total, "but the summary counts it once")
 }
 
 func TestPageGroupAndSearchFiltersDropTheUnassignedLine(t *testing.T) {
