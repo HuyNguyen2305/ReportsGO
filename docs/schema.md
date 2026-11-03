@@ -119,6 +119,7 @@ generated `invoice_parent_type` column and a composite foreign key, so only invo
 - `billing_documents.frequency_label` is stored text, separate from `recurring_invoices`.
 - Credits are inferred from "Credit" rows on the Payments report (no Credits screenshot).
 - New Customers: Top Note, Service Address, Job Created Date and Completed Jobs are in the screenshot and mapped above, but the report does not return them. It covers the customer name, account number, email, phone, source and created date. Adding them would be a feature: a customer can have several service locations and several jobs, so each column needs a rule (first, latest or count).
+- Documents: the avatar shown next to Created By has no source (`users` stores only `full_name` and `email`), so the report returns the creator's name only. Adding it would be a feature: a `users` picture column (or URL) and a `created_by` object instead of a string.
 - Customer statuses (`active`, `inactive`, `lead`, `archived`) are inferred from the "All Statuses" filter; confirm the real values.
 - "Locations w/o Active Jobs" is the screen the request called "Address w/o Active Jobs".
 - The seed figures for tax, items, cards and credit use are plausible October 2026 data, not the exact screenshot numbers.

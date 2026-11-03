@@ -6,6 +6,7 @@ digits (`"2026-10-22T08:15:30.123456Z"`); dates are `YYYY-MM-DD`.
 
 It works like the [Invoices](invoices.md) and [Estimates](estimates.md) reports; only the columns, the statuses,
 the tabs and the filters differ.
+The screenshot's avatar next to Created By is not part of this report: users have no picture, so `created_by` is the name only.
 
 | Endpoint | Purpose |
 |---|---|
