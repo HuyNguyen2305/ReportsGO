@@ -34,8 +34,10 @@ JOIN customers c ON c.id = j.customer_id
 JOIN service_types st ON st.id = j.service_type_id
 LEFT JOIN lead_sources ls ON ls.id = j.lead_source_id`
 
-// applyJobFilter adds the filter's conditions. List and Summary share it.
+// applyJobFilter adds the filter's conditions. List and Summary share it. A deleted job is never part of the
+// report: it is neither listed, counted nor totalled.
 func applyJobFilter(w *whereBuilder, f model.JobFilter) {
+	w.add("j.deleted_at IS NULL")
 	if !f.CreatedFrom.IsZero() {
 		w.add("j.created_at >= " + w.arg(f.CreatedFrom.UTC()) + "::timestamptz")
 	}

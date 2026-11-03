@@ -541,8 +541,11 @@ UPDATE jobs j SET in_work_pool = true
 FROM customers c
 WHERE c.id = j.customer_id AND c.account_number = '63689' AND j.status = 'unconfirmed';
 
-UPDATE jobs SET deleted_at = '2026-10-14 09:00:00+00'
-WHERE id = (SELECT j.id FROM jobs j WHERE j.status = 'cancelled' ORDER BY j.id LIMIT 1);
+-- William Saliba's cancelled job (created 2026-10-13 09:30) is deleted the next morning, so it is deleted after it was
+-- created. The other cancelled job (63733, created 2026-10-22) stays live.
+UPDATE jobs j SET deleted_at = '2026-10-14 09:00:00+00'
+FROM customers c
+WHERE c.id = j.customer_id AND c.account_number = '5001' AND j.status = 'cancelled';
 
 INSERT INTO job_tags (name) VALUES ('VIP'), ('Commercial'), ('Residential'), ('Follow Up');
 

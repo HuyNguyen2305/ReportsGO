@@ -5,7 +5,9 @@ JSON and carries `Cache-Control: no-store` and an `X-Request-ID` header. Timesta
 digits (`"2026-10-22T08:15:30.123456Z"`); dates are `YYYY-MM-DD`; money is a decimal string with two places.
 
 It works like the [Documents](documents.md) report: the date is a creation timestamp (shown in UTC, filtered by day in `APP_TIMEZONE`) and the filter choices
-come from the database. Jobs have no Active / Deleted tab, so there is no `lifecycle` parameter.
+come from the database. Jobs have no Active / Deleted tab, so there is no `lifecycle` parameter: a deleted job is
+never part of the report. It is not listed, counted or totalled (the [Service Lookup](service-lookup.md) Deleted tab
+shows it). A cancelled job that is not deleted is listed, counted and totalled like any other.
 
 | Endpoint | Purpose |
 |---|---|
@@ -64,7 +66,7 @@ Number columns are identifiers, not quantities: `account_number` sorts as text, 
     }
   ],
   "page": { "limit": 2, "has_more": true, "next_cursor": "eyJrIjoiY3JlYXRlZF9hdCIsImQiOnRydWUsInYiOiIyMDI2LTEwLTE1VDA4OjAwOjAwLjAwMDAwMFoiLCJpZCI6Mjl9" },
-  "summary": { "count": 35, "total": "1861.26" },
+  "summary": { "count": 34, "total": "1796.26" },
   "range": { "from": "2026-10-01", "to": "2026-10-31" }
 }
 ```

@@ -180,3 +180,22 @@ func TestInvoicesOutstandingIsWhatAccountsAgingSays(t *testing.T) {
 	require.NotZero(t, invoices.Outstanding)
 	require.Equal(t, aging.Summary.Total, invoices.Outstanding, "the sent invoices still owe what Accounts Aging reports")
 }
+
+func TestNewJobsAndServiceLookupSplitTheJobsIntoLiveAndDeleted(t *testing.T) {
+	pool := testdb.SeededPool(t)
+	ctx := context.Background()
+
+	newJobs, err := repository.NewJobRepository(pool).Summary(ctx, model.JobFilter{})
+	require.NoError(t, err)
+	deleted, err := repository.NewServiceLookupRepository(pool).Page(ctx, model.ServiceLookupQuery{
+		Filter: model.ServiceLookupFilter{Tab: model.ServiceLookupDeleted, ScheduledFrom: day(2000, 1, 1), ScheduledBefore: day(2100, 1, 1)},
+		Sort:   model.ServiceLookupSort{Key: model.ServiceLookupSortScheduledAt}, Limit: 1,
+	}, true)
+	require.NoError(t, err)
+
+	require.Positive(t, deleted.Summary.Tabs.Deleted, "the seed has a deleted job")
+	require.Equal(t, scalar(t, pool, `SELECT count(*) FROM jobs WHERE deleted_at IS NULL`), newJobs.Count,
+		"New Jobs counts every live job and no deleted one")
+	require.Equal(t, scalar(t, pool, `SELECT count(*) FROM jobs`), newJobs.Count+deleted.Summary.Tabs.Deleted,
+		"every job is either a new job or in the Service Lookup Deleted tab")
+}

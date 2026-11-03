@@ -123,12 +123,12 @@ func TestDefaultRequest(t *testing.T) {
 	resp := get(t, srv, listPath+"?limit=200")
 	page := resp.list(t)
 
-	require.Len(t, page.Data, 35, "the October jobs")
+	require.Len(t, page.Data, 34, "the October jobs")
 	require.False(t, page.Page.HasMore)
 	require.Nil(t, page.Page.NextCursor)
 	require.NotNil(t, page.Summary)
-	require.EqualValues(t, 35, page.Summary.Count)
-	require.Equal(t, "1861.26", page.Summary.Total)
+	require.EqualValues(t, 34, page.Summary.Count)
+	require.Equal(t, "1796.26", page.Summary.Total)
 	require.Equal(t, "2026-10-01", *page.Range.From)
 	require.Equal(t, "2026-10-31", *page.Range.To)
 	require.Equal(t, "no-store", resp.header.Get("Cache-Control"))
@@ -163,7 +163,7 @@ func TestAJobWithoutASourceHasANullSource(t *testing.T) {
 	srv := newServer(t)
 
 	var list map[string]any
-	require.NoError(t, json.Unmarshal(get(t, srv, listPath+"?status=cancelled&limit=200&sort=source").body, &list))
+	require.NoError(t, json.Unmarshal(get(t, srv, listPath+"?limit=200&sort=source").body, &list))
 	first := list["data"].([]any)[0].(map[string]any)
 
 	require.Contains(t, first, "source")
@@ -179,7 +179,7 @@ func TestPagingOverHTTPFollowsNextCursorForEverySortAndOrder(t *testing.T) {
 				base := fmt.Sprintf("%s?sort=%s&order=%s", listPath, key, order)
 
 				all := get(t, srv, base+"&limit=200").list(t)
-				require.Len(t, all.Data, 35)
+				require.Len(t, all.Data, 34)
 
 				var got []int64
 				target := base + "&limit=6"
@@ -191,7 +191,7 @@ func TestPagingOverHTTPFollowsNextCursorForEverySortAndOrder(t *testing.T) {
 
 					if pages == 1 {
 						require.NotNil(t, page.Summary)
-						require.EqualValues(t, 35, page.Summary.Count)
+						require.EqualValues(t, 34, page.Summary.Count)
 					} else {
 						require.Nil(t, page.Summary, "only the first page carries the summary")
 					}
@@ -224,8 +224,8 @@ func TestMultiValueParametersAreEquivalentInEveryForm(t *testing.T) {
 	var reference []int64
 	for i, form := range forms {
 		page := get(t, srv, listPath+form).list(t)
-		require.Len(t, page.Data, 8, form)
-		require.EqualValues(t, 8, page.Summary.Count, form)
+		require.Len(t, page.Data, 7, form)
+		require.EqualValues(t, 7, page.Summary.Count, form)
 		if i == 0 {
 			reference = idsOf(page)
 			continue
@@ -257,17 +257,17 @@ func TestFilters(t *testing.T) {
 		wantTotal string // empty: not checked
 	}{
 		{"unconfirmed", "?status=unconfirmed", 6, ""},
-		{"cancelled", "?status=cancelled", 2, ""},
+		{"cancelled", "?status=cancelled", 1, ""},
 		{"one service type", "?service_type_id=" + initial, 4, ""},
-		{"two service types, comma separated", "?service_type_id=" + initial + "," + bimonthly, 24, ""},
-		{"two service types, repeated", "?service_type_id=" + initial + "&service_type_id=" + bimonthly, 24, ""},
+		{"two service types, comma separated", "?service_type_id=" + initial + "," + bimonthly, 23, ""},
+		{"two service types, repeated", "?service_type_id=" + initial + "&service_type_id=" + bimonthly, 23, ""},
 		{"one source", "?lead_source_id=" + google, 2, ""},
 		{"two sources", "?lead_source_id=" + google + "," + referral, 3, ""},
 		{"status and source", "?status=cancelled&lead_source_id=" + google, 1, "95.00"},
 		{"one day", "?from=2026-10-22&to=2026-10-22", 1, "95.00"},
 		{"september 30", "?from=2026-09-30&to=2026-09-30", 1, "65.00"},
 		{"november 1", "?from=2026-11-01&to=2026-11-01", 1, "65.00"},
-		{"everything", "?from=2000-01-01&to=2100-01-01", 38, ""},
+		{"everything", "?from=2000-01-01&to=2100-01-01", 37, ""},
 		{"search by service type", "?q=initial+serv", 4, ""},
 		{"search by account number", "?q=63733", 0, "-"},
 		{"percent is literal", "?q=%25", 0, ""},
@@ -295,17 +295,17 @@ func TestFilters(t *testing.T) {
 func TestPageSizeAndHasMore(t *testing.T) {
 	srv := newServer(t)
 
-	page := get(t, srv, listPath+"?limit=35").list(t)
-	require.Len(t, page.Data, 35)
+	page := get(t, srv, listPath+"?limit=34").list(t)
+	require.Len(t, page.Data, 34)
 	require.False(t, page.Page.HasMore, "an exactly full last page has no successor")
 	require.Nil(t, page.Page.NextCursor)
 
-	page = get(t, srv, listPath+"?limit=34").list(t)
-	require.Len(t, page.Data, 34)
+	page = get(t, srv, listPath+"?limit=33").list(t)
+	require.Len(t, page.Data, 33)
 	require.True(t, page.Page.HasMore)
 	require.NotNil(t, page.Page.NextCursor)
-	require.EqualValues(t, 35, page.Summary.Count, "the count covers all pages")
-	require.Equal(t, "1861.26", page.Summary.Total)
+	require.EqualValues(t, 34, page.Summary.Count, "the count covers all pages")
+	require.Equal(t, "1796.26", page.Summary.Total)
 }
 
 func TestErrorContract(t *testing.T) {
@@ -553,8 +553,8 @@ func TestConcurrentRequestsWithDifferentSortsAgree(t *testing.T) {
 		require.Equal(t, http.StatusOK, r.status, "worker %d (sort %s)", i, r.sortKey)
 		var page dto.JobListResponse
 		require.NoError(t, json.Unmarshal(r.body, &page))
-		require.Len(t, page.Data, 35, "worker %d (sort %s)", i, r.sortKey)
-		require.EqualValues(t, 35, page.Summary.Count)
-		require.Equal(t, "1861.26", page.Summary.Total)
+		require.Len(t, page.Data, 34, "worker %d (sort %s)", i, r.sortKey)
+		require.EqualValues(t, 34, page.Summary.Count)
+		require.Equal(t, "1796.26", page.Summary.Total)
 	}
 }

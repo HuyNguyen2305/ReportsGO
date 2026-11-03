@@ -234,11 +234,12 @@ func TestPageTabCountsShareTheOtherFilters(t *testing.T) {
 
 	require.Empty(t, page.Rows, "no pooled job is cancelled")
 	require.Equal(t, model.ServiceLookupSummary{Tabs: model.ServiceLookupTabCounts{Active: 1, WorkPool: 0, Deleted: 1}}, *page.Summary,
-		"the cancelled job sits in Active (id 37) and Deleted (id 32)")
+		"the cancelled job sits in Active (id 32) and Deleted (id 37)")
 
 	// the range narrows every tab's count
 	f = tab(model.ServiceLookupActive)
-	explicitRange(&f, day(2026, 10, 22), day(2026, 10, 23))
+	f.Statuses = []model.JobStatus{model.JobCancelled}
+	explicitRange(&f, day(2026, 10, 13), day(2026, 10, 14))
 	page = e.page(t, f)
 	require.Equal(t, model.ServiceLookupTabCounts{Active: 0, WorkPool: 0, Deleted: 1}, page.Summary.Tabs)
 }

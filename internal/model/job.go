@@ -43,8 +43,8 @@ type JobSort struct {
 	Desc bool
 }
 
-// JobFilter narrows the new jobs report. An empty list means "All". Jobs cannot be deleted or archived, so there
-// is no tab.
+// JobFilter narrows the new jobs report. An empty list means "All". Deleted jobs are always left out, so there is
+// no tab.
 type JobFilter struct {
 	// CreatedFrom is the first instant included and CreatedBefore the first instant excluded. The service builds
 	// them from calendar days in the business time zone.

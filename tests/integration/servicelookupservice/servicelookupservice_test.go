@@ -53,12 +53,12 @@ func TestListWorkPoolHasAnOpenRangeByDefault(t *testing.T) {
 func TestListDeletedTabAndExplicitRange(t *testing.T) {
 	svc := newService(t, october21)
 
-	res, err := svc.List(context.Background(), service.ListServiceLookupParams{Tab: "deleted", From: "2026-10-22", To: "2026-10-22"})
+	res, err := svc.List(context.Background(), service.ListServiceLookupParams{Tab: "deleted", From: "2026-10-13", To: "2026-10-13"})
 
 	require.NoError(t, err)
 	require.Len(t, res.Items, 1)
 	require.Equal(t, model.JobCancelled, res.Items[0].Status)
-	require.Equal(t, time.Date(2026, 10, 22, 0, 0, 0, 0, time.UTC), res.From)
+	require.Equal(t, time.Date(2026, 10, 13, 0, 0, 0, 0, time.UTC), res.From)
 }
 
 func TestListPagesWithCursorsAndSummaryOnlyOnTheFirstPage(t *testing.T) {

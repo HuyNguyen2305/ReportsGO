@@ -38,9 +38,9 @@ func TestBuildJobListQueryDefault(t *testing.T) {
 	require.Contains(t, stmt.SQL, "JOIN service_types st ON st.id = j.service_type_id")
 	require.Contains(t, stmt.SQL, "LEFT JOIN lead_sources ls ON ls.id = j.lead_source_id")
 	require.Contains(t, stmt.SQL, "ORDER BY j.created_at DESC, j.id DESC")
-	for _, absent := range []string{"deleted_at", "archived_at", "WHERE"} {
-		require.NotContains(t, stmt.SQL, absent, "jobs have no tabs and an empty filter adds no condition")
-	}
+	require.Contains(t, stmt.SQL, "WHERE j.deleted_at IS NULL\nORDER BY", "deleted jobs are always left out")
+	require.NotContains(t, stmt.SQL, "archived_at", "jobs have no tabs")
+	require.NotContains(t, stmt.SQL, "AND", "an empty filter adds no other condition")
 	require.Contains(t, stmt.SQL, "LIMIT $1")
 	require.Equal(t, []any{51}, stmt.Args, "one extra row is fetched to detect another page")
 	requirePlaceholdersMatchArgs(t, stmt)

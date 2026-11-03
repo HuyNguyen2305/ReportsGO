@@ -38,8 +38,9 @@ func october() model.JobFilter {
 	return model.JobFilter{CreatedFrom: utc(2026, 10, 1, 0, 0, 0, 0), CreatedBefore: utc(2026, 11, 1, 0, 0, 0, 0)}
 }
 
-// octoberJobs is how many of the 38 seeded jobs were created in October (UTC); one is from 09-30, one from 11-01 and one from 2025-12-01.
-const octoberJobs = 35
+// octoberJobs is how many of the 38 seeded jobs were created in October (UTC) and are not deleted; one is from 09-30, one from 11-01,
+// one from 2025-12-01 and one October job is deleted.
+const octoberJobs = 34
 
 func query(f model.JobFilter, key model.JobSortKey, desc bool, limit int) model.JobQuery {
 	return model.JobQuery{Filter: f, Sort: model.JobSort{Key: key, Desc: desc}, Limit: limit}
@@ -266,14 +267,14 @@ func TestListFilters(t *testing.T) {
 		count     int
 		wantTotal model.Money
 	}{
-		{"all of october", func(f *model.JobFilter) {}, 35, 186126},
+		{"all of october", func(f *model.JobFilter) {}, 34, 179626},
 		{"unconfirmed", func(f *model.JobFilter) { f.Statuses = []model.JobStatus{model.JobUnconfirmed} }, 6, 28600},
 		{"confirmed", func(f *model.JobFilter) { f.Statuses = []model.JobStatus{model.JobConfirmed} }, 9, 21666},
 		{"completed", func(f *model.JobFilter) { f.Statuses = []model.JobStatus{model.JobCompleted} }, 18, 119860},
-		{"cancelled", func(f *model.JobFilter) { f.Statuses = []model.JobStatus{model.JobCancelled} }, 2, 16000},
+		{"cancelled", func(f *model.JobFilter) { f.Statuses = []model.JobStatus{model.JobCancelled} }, 1, 9500},
 		{"completed or cancelled", func(f *model.JobFilter) {
 			f.Statuses = []model.JobStatus{model.JobCompleted, model.JobCancelled}
-		}, 20, 135860},
+		}, 19, 129360},
 		{"one service type", func(f *model.JobFilter) { f.ServiceTypeIDs = []int64{typeID["Initial Service"]} }, 4, 38000},
 		{"two service types", func(f *model.JobFilter) {
 			f.ServiceTypeIDs = []int64{typeID["Full service"], typeID["Call Back Service"]}
@@ -297,15 +298,15 @@ func TestListFilters(t *testing.T) {
 			f.CreatedFrom, f.CreatedBefore = utc(2026, 10, 12, 6, 0, 0, 0), utc(2026, 10, 12, 6, 0, 1, 0)
 		}, 2, 0},
 		{"open start", func(f *model.JobFilter) { f.CreatedFrom, f.CreatedBefore = time.Time{}, utc(2026, 10, 6, 0, 0, 0, 0) }, 13, 47130},
-		{"open end", func(f *model.JobFilter) { f.CreatedFrom, f.CreatedBefore = utc(2026, 10, 13, 0, 0, 0, 0), time.Time{} }, 6, 42000},
+		{"open end", func(f *model.JobFilter) { f.CreatedFrom, f.CreatedBefore = utc(2026, 10, 13, 0, 0, 0, 0), time.Time{} }, 5, 35500},
 		{"september", func(f *model.JobFilter) {
 			f.CreatedFrom, f.CreatedBefore = utc(2026, 9, 1, 0, 0, 0, 0), utc(2026, 10, 1, 0, 0, 0, 0)
 		}, 1, 6500},
-		{"no date limits at all", func(f *model.JobFilter) { f.CreatedFrom, f.CreatedBefore = time.Time{}, time.Time{} }, 38, 199126},
+		{"no date limits at all", func(f *model.JobFilter) { f.CreatedFrom, f.CreatedBefore = time.Time{}, time.Time{} }, 37, 192626},
 		{"empty range", func(f *model.JobFilter) {
 			f.CreatedFrom, f.CreatedBefore = utc(2027, 1, 1, 0, 0, 0, 0), utc(2027, 2, 1, 0, 0, 0, 0)
 		}, 0, 0},
-		{"search by customer name", func(f *model.JobFilter) { f.Search = "william" }, 16, 104000},
+		{"search by customer name", func(f *model.JobFilter) { f.Search = "william" }, 15, 97500},
 		{"search by account number", func(f *model.JobFilter) { f.Search = "63706" }, 5, 15463},
 		{"search by service type", func(f *model.JobFilter) { f.Search = "call back" }, 2, 2066},
 		{"search by service type is case-insensitive", func(f *model.JobFilter) { f.Search = "INITIAL" }, 4, 38000},
@@ -343,7 +344,7 @@ func TestSummaryTotalMatchesAnIndependentQuery(t *testing.T) {
 	var count, total int64
 	require.NoError(t, e.pool.QueryRow(context.Background(), `
 		SELECT count(*), (sum(invoice_value) * 100)::bigint FROM jobs
-		WHERE created_at >= '2026-10-01 00:00:00+00' AND created_at < '2026-11-01 00:00:00+00'`).Scan(&count, &total))
+		WHERE deleted_at IS NULL AND created_at >= '2026-10-01 00:00:00+00' AND created_at < '2026-11-01 00:00:00+00'`).Scan(&count, &total))
 
 	s, err := e.repo.Summary(context.Background(), october())
 
@@ -507,4 +508,46 @@ func TestCancelledContextIsReturnedAsAnError(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	_, err = e.repo.LeadSources(ctx)
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestDeletedJobsAreNeitherListedNorCountedNorTotalled(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+
+	ids := func(rows []model.JobRow) []int64 {
+		out := make([]int64, len(rows))
+		for i, r := range rows {
+			out[i] = r.ID
+		}
+		return out
+	}
+	var seedDeleted int64
+	require.NoError(t, e.pool.QueryRow(ctx, `SELECT id FROM jobs WHERE deleted_at IS NOT NULL`).Scan(&seedDeleted))
+	require.NotContains(t, ids(e.listAll(t, october(), model.JobSortCreatedAt, true)), seedDeleted,
+		"the seed's deleted job was created in October but is not listed")
+
+	before, err := e.repo.Summary(ctx, october())
+	require.NoError(t, err)
+
+	// soft-delete the cancelled October job (95.00): it leaves the rows, the count and the total
+	var cancelled int64
+	require.NoError(t, e.pool.QueryRow(ctx, `UPDATE jobs SET deleted_at = '2026-10-23 00:00:00+00'
+		WHERE status = 'cancelled' AND deleted_at IS NULL RETURNING id`).Scan(&cancelled))
+
+	after, err := e.repo.Summary(ctx, october())
+	require.NoError(t, err)
+	require.NotContains(t, ids(e.listAll(t, october(), model.JobSortCreatedAt, true)), cancelled)
+	require.Equal(t, before.Count-1, after.Count)
+	require.Equal(t, before.Total-9500, after.Total)
+}
+
+func TestACancelledJobThatIsNotDeletedIsCountedAndTotalled(t *testing.T) {
+	e := newEnv(t)
+	f := october()
+	f.Statuses = []model.JobStatus{model.JobCancelled}
+
+	s, err := e.repo.Summary(context.Background(), f)
+
+	require.NoError(t, err)
+	require.Equal(t, model.JobSummary{Count: 1, Total: 9500}, s)
 }
