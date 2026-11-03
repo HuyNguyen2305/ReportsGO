@@ -264,7 +264,7 @@ func TestFilters(t *testing.T) {
 		{"one day", "?from=2026-10-22&to=2026-10-22", 1},
 		{"the first and last instant of a day", "?from=2026-10-10&to=2026-10-10", 2},
 		{"september", "?from=2026-09-01&to=2026-09-30", 4},
-		{"november 1", "?from=2026-11-01&to=2026-11-01", 1},
+		{"november 1", "?from=2026-11-01&to=2026-11-01", 2},
 		{"everything", "?from=2000-01-01&to=2100-01-01", 20},
 		{"open start", "?to=2026-10-05", 9},
 		{"search by name with plus as space", "?q=Ada+Lovelace", 1},

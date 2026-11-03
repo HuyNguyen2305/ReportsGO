@@ -299,11 +299,11 @@ func TestListFilters(t *testing.T) {
 			f.CreatedFrom, f.CreatedBefore = utc(2026, 10, 12, 6, 0, 0, 0), utc(2026, 10, 12, 6, 0, 1, 0)
 		}, 2, 0},
 		{"open start", func(f *model.JobFilter) { f.CreatedFrom, f.CreatedBefore = time.Time{}, utc(2026, 10, 6, 0, 0, 0, 0) }, 13, 47130},
-		{"open end", func(f *model.JobFilter) { f.CreatedFrom, f.CreatedBefore = utc(2026, 10, 13, 0, 0, 0, 0), time.Time{} }, 5, 35500},
+		{"open end", func(f *model.JobFilter) { f.CreatedFrom, f.CreatedBefore = utc(2026, 10, 13, 0, 0, 0, 0), time.Time{} }, 7, 38114},
 		{"september", func(f *model.JobFilter) {
 			f.CreatedFrom, f.CreatedBefore = utc(2026, 9, 1, 0, 0, 0, 0), utc(2026, 10, 1, 0, 0, 0, 0)
 		}, 1, 6500},
-		{"no date limits at all", func(f *model.JobFilter) { f.CreatedFrom, f.CreatedBefore = time.Time{}, time.Time{} }, 37, 192626},
+		{"no date limits at all", func(f *model.JobFilter) { f.CreatedFrom, f.CreatedBefore = time.Time{}, time.Time{} }, 39, 195240},
 		{"empty range", func(f *model.JobFilter) {
 			f.CreatedFrom, f.CreatedBefore = utc(2027, 1, 1, 0, 0, 0, 0), utc(2027, 2, 1, 0, 0, 0, 0)
 		}, 0, 0},

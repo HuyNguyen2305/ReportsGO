@@ -267,7 +267,7 @@ func TestFilters(t *testing.T) {
 		{"one day", "?from=2026-10-22&to=2026-10-22", 1, "95.00"},
 		{"september 30", "?from=2026-09-30&to=2026-09-30", 1, "65.00"},
 		{"november 1", "?from=2026-11-01&to=2026-11-01", 1, "65.00"},
-		{"everything", "?from=2000-01-01&to=2100-01-01", 37, ""},
+		{"everything", "?from=2000-01-01&to=2100-01-01", 39, ""},
 		{"search by service type", "?q=initial+serv", 4, ""},
 		{"search by account number", "?q=63733", 0, "-"},
 		{"percent is literal", "?q=%25", 0, ""},

@@ -114,9 +114,9 @@ func TestPageSeedCustomersWithoutActiveJobs(t *testing.T) {
 
 	// no job at all, or only cancelled jobs (5001, whose completed job the test cancels) - sorted by name
 	require.Equal(t, []string{
-		"63716", "63749", "70001", "5002", "70003", "70002", "70005", "70008", "63730", "70004", "70006", "70007", "5001",
+		"70001", "5002", "70003", "70002", "70005", "70008", "63730", "70004", "70006", "70007", "5001",
 	}, accounts(page.Rows))
-	require.Equal(t, model.NoActiveJobsSummary{Count: 13}, *page.Summary)
+	require.Equal(t, model.NoActiveJobsSummary{Count: 11}, *page.Summary)
 
 	t.Run("it agrees with an independent query", func(t *testing.T) {
 		var n int
@@ -143,7 +143,7 @@ func TestPageSeedCustomersWithoutActiveJobs(t *testing.T) {
 	})
 
 	t.Run("customers with an open job are left out", func(t *testing.T) {
-		for _, acct := range []string{"63706", "63701", "63689", "63714", "63717", "63702"} {
+		for _, acct := range []string{"63706", "63701", "63689", "63714", "63717", "63702", "63716", "63749"} {
 			require.False(t, e.listed(t, model.NoActiveJobsCustomers, acct), acct)
 		}
 	})
@@ -154,8 +154,8 @@ func TestPageSeedLocationsWithoutActiveJobs(t *testing.T) {
 
 	page := e.page(t, model.NoActiveJobsLocations, model.NoActiveJobsFilter{})
 
-	require.Equal(t, []string{"63716", "5002", "63730", "5001"}, accounts(page.Rows))
-	require.Equal(t, model.NoActiveJobsSummary{Count: 4}, *page.Summary)
+	require.Equal(t, []string{"5002", "63730", "5001"}, accounts(page.Rows))
+	require.Equal(t, model.NoActiveJobsSummary{Count: 3}, *page.Summary)
 	r := e.row(t, model.NoActiveJobsLocations, "5002")
 	require.Equal(t, &model.ServiceAddress{Line1: "12 Alaba Street", City: "Austin", Zip: "78701"}, r.Address)
 	require.Equal(t, r.CustomerID, e.row(t, model.NoActiveJobsCustomers, "5002").ID, "customer_id is the customer's id")
@@ -265,6 +265,10 @@ func findAddress(t *testing.T, rows []model.NoActiveJobsRow, line1 string) model
 
 func TestPageStatusFilter(t *testing.T) {
 	e := newEnv(t)
+	// # D, the inactive customer, has one unconfirmed job; cancelled, it no longer makes # D active
+	_, err := e.pool.Exec(context.Background(), `UPDATE jobs SET status = 'cancelled'
+		WHERE customer_id = (SELECT id FROM customers WHERE account_number = '63716')`)
+	require.NoError(t, err)
 
 	for _, grain := range []model.NoActiveJobsGrain{model.NoActiveJobsCustomers, model.NoActiveJobsLocations} {
 		t.Run(string(grain), func(t *testing.T) {
@@ -297,7 +301,7 @@ func TestPageSearch(t *testing.T) {
 		{"customers do not search addresses", model.NoActiveJobsCustomers, "alaba street", nil},
 		{"location address", model.NoActiveJobsLocations, "alaba street", []string{"5002"}},
 		{"location zip", model.NoActiveJobsLocations, "73301", []string{"63730"}},
-		{"location city", model.NoActiveJobsLocations, "bridgeport", []string{"63716"}},
+		{"location city", model.NoActiveJobsLocations, "san antonio", []string{"5001"}},
 		{"wildcards are literal", model.NoActiveJobsCustomers, "%", []string{"70008"}},
 	}
 	for _, tt := range tests {
@@ -327,6 +331,7 @@ func TestPageKeysetPagingReproducesTheUnpagedOrderForEverySort(t *testing.T) {
 	e := newEnv(t)
 	e.addLocation(t, "5002", "9 Another Lane", "Austin", "78701")
 	e.addJob(t, "5002", "9 Another Lane", "cancelled", "2026-09-09 09:00+00", "", false)
+	e.addLocation(t, "70002", "10 Spare Road", "Austin", "78702") // so the locations grain spans several pages
 
 	for _, grain := range []model.NoActiveJobsGrain{model.NoActiveJobsCustomers, model.NoActiveJobsLocations} {
 		for _, key := range model.NoActiveJobsSortKeysFor(grain) {

@@ -565,10 +565,29 @@ JOIN service_locations l ON l.customer_id = c.id
 JOIN service_types st    ON st.name = 'Initial Service'
 WHERE c.account_number = '63689';
 
--- The November Documents screenshot, so the report's default view (the current month) has data. Customer #1 has no
--- phone, location or job, like a customer just created. Added last, so no earlier id changes.
-INSERT INTO customers (account_number, first_name, last_name, display_name, created_at)
-VALUES ('63749', '#', '1', '#1', '2026-11-02 00:00:00+00');
+-- The November screenshots (Documents, New Jobs, New Customers), so each report's default view (the current month)
+-- has data. Customer #1 is created on 11-01, after the "November First" boundary customer; its address renders as
+-- "1 2, 3, 4 5" (line 1, city, state zip). Added last, so no earlier id changes.
+INSERT INTO customers (account_number, first_name, last_name, display_name, email, billing_email, created_at)
+VALUES ('63749', '#', '1', '#1', 'd@cm.co', 'd@cm.co', '2026-11-01 12:00:00+00');
+
+INSERT INTO customer_phones (customer_id, number, kind)
+SELECT id, '(012) 332-1211', 'mobile' FROM customers WHERE account_number = '63749';
+
+INSERT INTO service_locations (customer_id, address_line1, city, state, postal_code)
+SELECT id, '1 2', '3', '4', '5' FROM customers WHERE account_number = '63749';
+
+-- One new Blank Service job each for # D and #1, unconfirmed, without a source or an assignee.
+INSERT INTO jobs (customer_id, location_id, service_type_id, status, scheduled_at, invoice_value, created_at)
+SELECT c.id, l.id, st.id, 'unconfirmed', v.created_at::timestamptz, 13.07, v.created_at::timestamptz
+FROM (VALUES
+    ('63716', '2026-11-02 01:30:00+00'),
+    ('63749', '2026-11-02 03:42:00+00')
+) AS v(acct, created_at)
+JOIN customers c         ON c.account_number = v.acct
+JOIN service_locations l ON l.customer_id = c.id
+JOIN service_types st    ON st.name = 'Blank Service 123'
+ORDER BY v.created_at;
 
 INSERT INTO documents (document_number, document_type_id, customer_id, created_by, created_at)
 SELECT v.num, dt.id, c.id, u.id, v.created_at::timestamptz
@@ -579,3 +598,11 @@ FROM (VALUES
 JOIN document_types dt ON dt.name = v.doc_type
 JOIN customers c       ON c.account_number = v.acct
 JOIN users u           ON u.full_name = 'Thọ Nguyễn Quang';
+
+-- Like every other seeded job, the two new jobs carry a tag, so every forecast amount is tagged.
+INSERT INTO job_tag_links (job_id, tag_id)
+SELECT j.id, t.id
+FROM jobs j
+JOIN customers c ON c.id = j.customer_id
+JOIN job_tags t  ON t.name = 'Follow Up'
+WHERE c.account_number IN ('63716', '63749') AND j.created_at >= '2026-11-02 00:00:00+00';
