@@ -15,6 +15,7 @@ type JobRepository interface {
 	Page(ctx context.Context, q model.JobQuery, withSummary bool) (model.JobPage, error)
 	ServiceTypes(ctx context.Context) ([]model.ServiceType, error)
 	LeadSources(ctx context.Context) ([]model.LeadSource, error)
+	Staff(ctx context.Context) ([]model.StaffOption, error)
 }
 
 // JobService implements the New Jobs report.
@@ -77,9 +78,10 @@ func (s *JobService) List(ctx context.Context, p ListJobsParams) (*ListJobsResul
 type JobFilterOptions struct {
 	ServiceTypes []model.ServiceType
 	LeadSources  []model.LeadSource
+	Staff        []model.StaffOption
 }
 
-// FilterOptions returns the service types and lead sources that can be filtered on.
+// FilterOptions returns the service types, lead sources and staff members that can be filtered on.
 func (s *JobService) FilterOptions(ctx context.Context) (*JobFilterOptions, error) {
 	types, err := s.repo.ServiceTypes(ctx)
 	if err != nil {
@@ -89,11 +91,18 @@ func (s *JobService) FilterOptions(ctx context.Context) (*JobFilterOptions, erro
 	if err != nil {
 		return nil, fmt.Errorf("load filter options: %w", err)
 	}
+	staff, err := s.repo.Staff(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load filter options: %w", err)
+	}
 	if types == nil {
 		types = []model.ServiceType{}
 	}
 	if sources == nil {
 		sources = []model.LeadSource{}
 	}
-	return &JobFilterOptions{ServiceTypes: types, LeadSources: sources}, nil
+	if staff == nil {
+		staff = []model.StaffOption{}
+	}
+	return &JobFilterOptions{ServiceTypes: types, LeadSources: sources, Staff: staff}, nil
 }

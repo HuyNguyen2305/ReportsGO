@@ -34,6 +34,7 @@ type JobSummaryResponse struct {
 type JobFiltersResponse struct {
 	ServiceTypes []OptionResponse   `json:"service_types"`
 	LeadSources  []OptionResponse   `json:"lead_sources"`
+	Staff        []OptionResponse   `json:"staff"`
 	Statuses     []string           `json:"statuses"`
 	SortKeys     []string           `json:"sort_keys"`
 	DefaultSort  SortResponse       `json:"default_sort"`

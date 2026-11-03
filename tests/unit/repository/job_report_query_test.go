@@ -25,6 +25,7 @@ func fullJobFilter() model.JobFilter {
 		Statuses:       []model.JobStatus{model.JobCompleted, model.JobCancelled},
 		ServiceTypeIDs: []int64{1, 2},
 		LeadSourceIDs:  []int64{3},
+		AssignedToIDs:  []int64{2, 1},
 		Search:         "saliba",
 	}
 }
@@ -113,6 +114,7 @@ func TestBuildJobListQueryFiltersAddClausesAndArgsInOrder(t *testing.T) {
 		[]string{"completed", "cancelled"},
 		[]int64{1, 2},
 		[]int64{3},
+		[]int64{2, 1},
 		"%saliba%",
 		"2026-10-12T08:00:00.000000Z",
 		int64(9),
@@ -125,11 +127,12 @@ func TestBuildJobListQueryFiltersAddClausesAndArgsInOrder(t *testing.T) {
 		"j.status::text = ANY($3::text[])",
 		"j.service_type_id = ANY($4::bigint[])",
 		"j.lead_source_id = ANY($5::bigint[])",
-		"c.display_name ILIKE $6",
-		"c.account_number ILIKE $6",
-		"st.name ILIKE $6",
-		"(($7::text)::timestamptz, $8::bigint)",
-		"LIMIT $9",
+		"j.assigned_to = ANY($6::bigint[])",
+		"c.display_name ILIKE $7",
+		"c.account_number ILIKE $7",
+		"st.name ILIKE $7",
+		"(($8::text)::timestamptz, $9::bigint)",
+		"LIMIT $10",
 	} {
 		require.Contains(t, stmt.SQL, want)
 	}

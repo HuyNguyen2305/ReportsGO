@@ -117,6 +117,7 @@ func TestJobListNormalizesFilters(t *testing.T) {
 		Status:         []string{"Completed", " cancelled ", "", "completed"},
 		ServiceTypeIDs: []string{"3", " 1 ", "", "3"},
 		LeadSourceIDs:  []string{"2", "2", " 5"},
+		AssignedTo:     []string{" 7", "1", "7", ""},
 		Search:         "  Saliba  ",
 		Sort:           " Source ",
 		Order:          "ASC",
@@ -126,6 +127,7 @@ func TestJobListNormalizesFilters(t *testing.T) {
 	require.Equal(t, []model.JobStatus{model.JobCompleted, model.JobCancelled}, q.Filter.Statuses, "trimmed, lower-cased, de-duplicated, blanks dropped")
 	require.Equal(t, []int64{3, 1}, q.Filter.ServiceTypeIDs)
 	require.Equal(t, []int64{2, 5}, q.Filter.LeadSourceIDs)
+	require.Equal(t, []int64{7, 1}, q.Filter.AssignedToIDs)
 	require.Equal(t, "Saliba", q.Filter.Search, "trimmed, case kept")
 	require.Equal(t, model.JobSort{Key: model.JobSortSource}, q.Sort)
 	require.Equal(t, 25, q.Limit)
@@ -203,6 +205,10 @@ func TestJobListRejectsInvalidInputPerField(t *testing.T) {
 		{"lead source id negative", service.ListJobsParams{LeadSourceIDs: []string{"-1"}}, "lead_source_id", "positive whole numbers"},
 		{"one bad lead source among good", service.ListJobsParams{LeadSourceIDs: []string{"1", "x"}}, "lead_source_id", "positive whole numbers"},
 		{"too many lead source ids", service.ListJobsParams{LeadSourceIDs: manyIDs}, "lead_source_id", "at most 100 values"},
+		{"assigned to not a number", service.ListJobsParams{AssignedTo: []string{"tho"}}, "assigned_to", "positive whole numbers"},
+		{"assigned to zero", service.ListJobsParams{AssignedTo: []string{"0"}}, "assigned_to", "positive whole numbers"},
+		{"assigned to negative", service.ListJobsParams{AssignedTo: []string{"-2"}}, "assigned_to", "positive whole numbers"},
+		{"too many assigned to ids", service.ListJobsParams{AssignedTo: manyIDs}, "assigned_to", "at most 100 values"},
 
 		{"search with NUL", service.ListJobsParams{Search: "abc\x00def"}, "q", "NUL"},
 		{"search invalid UTF-8", service.ListJobsParams{Search: "abc\xff"}, "q", "UTF-8"},
@@ -242,10 +248,10 @@ func TestJobErrorMessagesListOnlyTheJobChoices(t *testing.T) {
 func TestJobListReportsEveryProblemTogether(t *testing.T) {
 	got := rejectsJob(t, service.ListJobsParams{
 		From: "x", To: "y", Status: []string{"paid"}, ServiceTypeIDs: []string{"q"}, LeadSourceIDs: []string{"r"},
-		Search: strings.Repeat("a", 101), Sort: "discount", Order: "up", Limit: "0",
+		AssignedTo: []string{"s"}, Search: strings.Repeat("a", 101), Sort: "discount", Order: "up", Limit: "0",
 	})
 
-	require.ElementsMatch(t, []string{"from", "to", "status", "service_type_id", "lead_source_id", "q", "sort", "order", "limit"}, keys(got))
+	require.ElementsMatch(t, []string{"from", "to", "status", "service_type_id", "lead_source_id", "assigned_to", "q", "sort", "order", "limit"}, keys(got))
 }
 
 func TestJobListChecksTheCursorAgainstTheRequestedSort(t *testing.T) {

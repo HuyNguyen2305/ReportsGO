@@ -70,7 +70,7 @@ func (h *JobHandler) Filters(c *gin.Context) {
 // Query parameters accepted by the list endpoint.
 var (
 	jobSingleValueParams = []string{"from", "to", "q", "sort", "order", "limit", "cursor"}
-	jobMultiValueParams  = []string{"status", "service_type_id", "lead_source_id"}
+	jobMultiValueParams  = []string{"status", "service_type_id", "lead_source_id", "assigned_to"}
 )
 
 // parseJobQuery turns the raw query string into service params. See parseStrictQuery for what is rejected.
@@ -91,5 +91,6 @@ func parseJobQuery(rawQuery string) (service.ListJobsParams, error) {
 		Status:         flatten(values["status"]),
 		ServiceTypeIDs: flatten(values["service_type_id"]),
 		LeadSourceIDs:  flatten(values["lead_source_id"]),
+		AssignedTo:     flatten(values["assigned_to"]),
 	}, nil
 }

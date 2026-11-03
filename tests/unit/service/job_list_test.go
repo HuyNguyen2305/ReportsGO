@@ -139,6 +139,7 @@ func TestJobListPassesTheRequestContextToTheRepository(t *testing.T) {
 	repo.EXPECT().Page(hasMarker, mock.Anything, true).Return(model.JobPage{}, nil).Once()
 	repo.EXPECT().ServiceTypes(hasMarker).Return(nil, nil).Once()
 	repo.EXPECT().LeadSources(hasMarker).Return(nil, nil).Once()
+	repo.EXPECT().Staff(hasMarker).Return(nil, nil).Once()
 
 	svc := service.NewJobService(repo, fixedClock(october21))
 	_, err := svc.List(ctx, service.ListJobsParams{})
@@ -160,22 +161,25 @@ func TestNewJobServiceDefaultsTheClock(t *testing.T) {
 }
 
 func TestJobFilterOptions(t *testing.T) {
-	t.Run("returns both lists in repository order", func(t *testing.T) {
+	t.Run("returns every list in repository order", func(t *testing.T) {
 		repo := servicemocks.NewMockJobRepository(t)
 		repo.EXPECT().ServiceTypes(mock.Anything).Return([]model.ServiceType{{ID: 2, Name: "B"}, {ID: 1, Name: "A"}}, nil).Once()
 		repo.EXPECT().LeadSources(mock.Anything).Return([]model.LeadSource{{ID: 9, Name: "Google"}}, nil).Once()
+		repo.EXPECT().Staff(mock.Anything).Return([]model.StaffOption{{ID: 2, Name: "thon nguyen"}, {ID: 1, Name: "Thọ Nguyễn Quang"}}, nil).Once()
 
 		opts, err := service.NewJobService(repo, nil).FilterOptions(context.Background())
 
 		require.NoError(t, err)
 		require.Equal(t, []model.ServiceType{{ID: 2, Name: "B"}, {ID: 1, Name: "A"}}, opts.ServiceTypes)
 		require.Equal(t, []model.LeadSource{{ID: 9, Name: "Google"}}, opts.LeadSources)
+		require.Equal(t, []model.StaffOption{{ID: 2, Name: "thon nguyen"}, {ID: 1, Name: "Thọ Nguyễn Quang"}}, opts.Staff)
 	})
 
 	t.Run("no rows are empty lists, not nil", func(t *testing.T) {
 		repo := servicemocks.NewMockJobRepository(t)
 		repo.EXPECT().ServiceTypes(mock.Anything).Return(nil, nil).Once()
 		repo.EXPECT().LeadSources(mock.Anything).Return(nil, nil).Once()
+		repo.EXPECT().Staff(mock.Anything).Return(nil, nil).Once()
 
 		opts, err := service.NewJobService(repo, nil).FilterOptions(context.Background())
 
@@ -184,6 +188,8 @@ func TestJobFilterOptions(t *testing.T) {
 		require.Empty(t, opts.ServiceTypes)
 		require.NotNil(t, opts.LeadSources)
 		require.Empty(t, opts.LeadSources)
+		require.NotNil(t, opts.Staff)
+		require.Empty(t, opts.Staff)
 	})
 
 	t.Run("a service type error is wrapped", func(t *testing.T) {
@@ -201,6 +207,19 @@ func TestJobFilterOptions(t *testing.T) {
 		repo := servicemocks.NewMockJobRepository(t)
 		repo.EXPECT().ServiceTypes(mock.Anything).Return([]model.ServiceType{{ID: 1, Name: "A"}}, nil).Once()
 		repo.EXPECT().LeadSources(mock.Anything).Return(nil, errBoom).Once()
+
+		opts, err := service.NewJobService(repo, nil).FilterOptions(context.Background())
+
+		require.Nil(t, opts)
+		require.ErrorIs(t, err, errBoom)
+		require.ErrorContains(t, err, "load filter options")
+	})
+
+	t.Run("a staff error is wrapped", func(t *testing.T) {
+		repo := servicemocks.NewMockJobRepository(t)
+		repo.EXPECT().ServiceTypes(mock.Anything).Return([]model.ServiceType{{ID: 1, Name: "A"}}, nil).Once()
+		repo.EXPECT().LeadSources(mock.Anything).Return([]model.LeadSource{{ID: 9, Name: "Google"}}, nil).Once()
+		repo.EXPECT().Staff(mock.Anything).Return(nil, errBoom).Once()
 
 		opts, err := service.NewJobService(repo, nil).FilterOptions(context.Background())
 

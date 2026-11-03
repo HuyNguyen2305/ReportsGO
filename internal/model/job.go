@@ -53,6 +53,8 @@ type JobFilter struct {
 	Statuses                   []JobStatus
 	ServiceTypeIDs             []int64
 	LeadSourceIDs              []int64
+	// AssignedToIDs are the staff members the job is assigned to; an unassigned job matches only when it is empty.
+	AssignedToIDs []int64
 	// Search matches, case-insensitively and as a substring, the customer name, account number and service
 	// type name. It is plain text: LIKE wildcards in it are matched literally.
 	Search string

@@ -27,6 +27,7 @@ of the other reports, such as `method` and `document_type_id`.
 | `status` | multi | `unconfirmed`, `confirmed`, `completed`, `cancelled` | all |
 | `service_type_id` | multi | Service type ids (from `/filters`). | all |
 | `lead_source_id` | multi | Lead source ids (from `/filters`). Jobs without a source are only matched when no source filter is sent. | all |
+| `assigned_to` | multi | Staff ids (`staff` from `/filters`), the Assigned To filter: the staff member the job is assigned to. Unassigned jobs are only matched when no `assigned_to` is sent. Same name and meaning as in [Service Lookup](service-lookup.md). | all |
 | `q` | text | Case-insensitive substring search over customer name, account number and service type name. `%`, `_` and `\` are matched literally. At most 100 characters. | none |
 | `sort` | key | `customer`, `account_number`, `service_type`, `source`, `invoice_value`, `created_at`, `status` | `created_at` |
 | `order` | `asc` \| `desc` | Sort direction. With neither `sort` nor `order`: newest first (`created_at` descending). With `sort` but no `order`: ascending. A job without a source sorts as an empty name: first when ascending. | see left |
@@ -142,7 +143,8 @@ value is validated; fix them, and any remaining value errors are reported next.
 
 ## `GET /api/v1/reports/new-jobs/filters`
 
-Everything needed to build the filter controls. Use the returned ids for `service_type_id` and `lead_source_id`;
+Everything needed to build the filter controls. Use the returned ids for `service_type_id`, `lead_source_id` and
+`assigned_to` (from `staff`);
 the static lists and limits mean the frontend never has to hard-code them.
 
 ```json
@@ -158,6 +160,10 @@ the static lists and limits mean the frontend never has to hard-code them.
     { "id": 1, "name": "Facebook" },
     { "id": 2, "name": "Google" },
     { "id": 3, "name": "Referral" }
+  ],
+  "staff": [
+    { "id": 2, "name": "thon nguyen" },
+    { "id": 1, "name": "Thọ Nguyễn Quang" }
   ],
   "statuses": ["unconfirmed", "confirmed", "completed", "cancelled"],
   "sort_keys": ["customer", "account_number", "service_type", "source", "invoice_value", "created_at", "status"],
@@ -179,6 +185,9 @@ curl.exe "http://localhost:8080/api/v1/reports/new-jobs?status=cancelled&sort=so
 
 # One service type and one lead source (ids come from /filters), highest value first
 curl.exe "http://localhost:8080/api/v1/reports/new-jobs?service_type_id=2&lead_source_id=2&sort=invoice_value&order=desc"
+
+# Jobs assigned to staff member 1 or 2 (ids come from /filters)
+curl.exe "http://localhost:8080/api/v1/reports/new-jobs?assigned_to=1,2"
 
 # Search by customer, account number or service type, two per page
 curl.exe "http://localhost:8080/api/v1/reports/new-jobs?q=saliba&limit=2"

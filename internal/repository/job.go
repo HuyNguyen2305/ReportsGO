@@ -143,3 +143,16 @@ func (r *JobRepository) LeadSources(ctx context.Context) ([]model.LeadSource, er
 	}
 	return out, nil
 }
+
+// Staff lists the options for the Assigned To filter.
+func (r *JobRepository) Staff(ctx context.Context) ([]model.StaffOption, error) {
+	rows, err := r.q.ListStaff(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list staff: %w", err)
+	}
+	out := make([]model.StaffOption, len(rows))
+	for i, row := range rows {
+		out[i] = model.StaffOption{ID: row.ID, Name: row.FullName}
+	}
+	return out, nil
+}

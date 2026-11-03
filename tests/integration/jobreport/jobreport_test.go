@@ -426,7 +426,7 @@ func TestJSONContract(t *testing.T) {
 	var filters map[string]any
 	require.NoError(t, json.Unmarshal(get(t, srv, listPath+"/filters").body, &filters))
 	require.Equal(t, []string{
-		"default_sort", "lead_sources", "limits", "service_types", "sort_keys", "statuses",
+		"default_sort", "lead_sources", "limits", "service_types", "sort_keys", "staff", "statuses",
 	}, keysOf(filters))
 
 	var errBody map[string]any
@@ -456,7 +456,8 @@ func TestFiltersEndpointMatchesWhatTheListAccepts(t *testing.T) {
 
 	require.Len(t, f.ServiceTypes, 5)
 	require.Len(t, f.LeadSources, 3)
-	for _, o := range append(append([]dto.OptionResponse{}, f.ServiceTypes...), f.LeadSources...) {
+	require.Len(t, f.Staff, 2)
+	for _, o := range append(append(append([]dto.OptionResponse{}, f.ServiceTypes...), f.LeadSources...), f.Staff...) {
 		require.NotZero(t, o.ID)
 		require.NotEmpty(t, o.Name)
 	}
@@ -478,6 +479,34 @@ func TestFiltersEndpointMatchesWhatTheListAccepts(t *testing.T) {
 	for _, o := range f.LeadSources {
 		require.Equal(t, http.StatusOK, get(t, srv, fmt.Sprintf("%s?lead_source_id=%d", listPath, o.ID)).status)
 	}
+	for _, o := range f.Staff {
+		require.Equal(t, http.StatusOK, get(t, srv, fmt.Sprintf("%s?assigned_to=%d", listPath, o.ID)).status)
+	}
+}
+
+func TestAssignedToOverHTTP(t *testing.T) {
+	srv := newServer(t)
+
+	var f dto.JobFiltersResponse
+	require.NoError(t, json.Unmarshal(get(t, srv, listPath+"/filters").body, &f))
+	require.Len(t, f.Staff, 2)
+	a, b := fmt.Sprint(f.Staff[0].ID), fmt.Sprint(f.Staff[1].ID)
+
+	one := get(t, srv, listPath+"?limit=200&assigned_to="+a).list(t)
+	other := get(t, srv, listPath+"?limit=200&assigned_to="+b).list(t)
+	both := get(t, srv, listPath+"?limit=200&assigned_to="+a+","+b).list(t)
+	repeated := get(t, srv, listPath+"?limit=200&assigned_to="+a+"&assigned_to="+b).list(t)
+	all := get(t, srv, listPath+"?limit=200").list(t)
+
+	require.Positive(t, one.Summary.Count)
+	require.Positive(t, other.Summary.Count)
+	require.Equal(t, one.Summary.Count+other.Summary.Count, both.Summary.Count, "a job has one assignee")
+	require.Equal(t, idsOf(both), idsOf(repeated), "comma-separated and repeated keys are the same filter")
+	require.Less(t, both.Summary.Count, all.Summary.Count, "unassigned jobs only match without the filter")
+
+	resp := get(t, srv, listPath+"?assigned_to=abc")
+	require.Equal(t, http.StatusUnprocessableEntity, resp.status)
+	require.Contains(t, string(resp.body), `"field":"assigned_to"`)
 }
 
 func TestCORSAndRouting(t *testing.T) {

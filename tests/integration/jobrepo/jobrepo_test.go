@@ -551,3 +551,74 @@ func TestACancelledJobThatIsNotDeletedIsCountedAndTotalled(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, model.JobSummary{Count: 1, Total: 9500}, s)
 }
+
+func TestAssignedToFilterMatchesTheAssignedStaff(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+
+	staff, err := e.repo.Staff(ctx)
+	require.NoError(t, err)
+	require.Len(t, staff, 2)
+	staffID := map[string]int64{}
+	for _, s := range staff {
+		staffID[s.Name] = s.ID
+	}
+
+	// independent counts and totals of the live October jobs assigned to any of ids
+	want := func(ids []int64) model.JobSummary {
+		var s model.JobSummary
+		require.NoError(t, e.pool.QueryRow(ctx, `
+			SELECT count(*), COALESCE(SUM(invoice_value * 100), 0)::bigint FROM jobs
+			WHERE deleted_at IS NULL AND assigned_to = ANY($1)
+			  AND created_at >= '2026-10-01 00:00:00+00' AND created_at < '2026-11-01 00:00:00+00'`, ids).Scan(&s.Count, &s.Total))
+		return s
+	}
+
+	tho, thon := staffID["Thọ Nguyễn Quang"], staffID["thon nguyen"]
+	tests := []struct {
+		name string
+		ids  []int64
+	}{
+		{"one staff member", []int64{tho}},
+		{"the other staff member", []int64{thon}},
+		{"both staff members", []int64{tho, thon}},
+		{"an unknown staff member", []int64{999999}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := october()
+			f.AssignedToIDs = tt.ids
+
+			rows := e.listAll(t, f, model.JobSortCreatedAt, true)
+			s, err := e.repo.Summary(ctx, f)
+
+			require.NoError(t, err)
+			require.Equal(t, want(tt.ids), s)
+			require.Len(t, rows, int(s.Count))
+		})
+	}
+
+	t.Run("unassigned jobs only match without the filter", func(t *testing.T) {
+		f := october()
+		f.AssignedToIDs = []int64{tho, thon}
+		assigned, err := e.repo.Summary(ctx, f)
+		require.NoError(t, err)
+
+		require.Positive(t, assigned.Count)
+		require.Less(t, assigned.Count, int64(octoberJobs), "the seed has unassigned October jobs")
+	})
+}
+
+func TestStaffListsEveryUser(t *testing.T) {
+	e := newEnv(t)
+
+	staff, err := e.repo.Staff(context.Background())
+
+	require.NoError(t, err)
+	names := make([]string, len(staff))
+	for i, s := range staff {
+		require.Positive(t, s.ID)
+		names[i] = s.Name
+	}
+	require.ElementsMatch(t, []string{"thon nguyen", "Thọ Nguyễn Quang"}, names, "the order follows the database collation")
+}

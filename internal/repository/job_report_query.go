@@ -53,6 +53,9 @@ func applyJobFilter(w *whereBuilder, f model.JobFilter) {
 	if len(f.LeadSourceIDs) > 0 {
 		w.add("j.lead_source_id = ANY(" + w.arg(f.LeadSourceIDs) + "::bigint[])")
 	}
+	if len(f.AssignedToIDs) > 0 {
+		w.add("j.assigned_to = ANY(" + w.arg(f.AssignedToIDs) + "::bigint[])")
+	}
 	applySearchOn(w, f.Search, "c.display_name", "c.account_number", "st.name")
 }
 

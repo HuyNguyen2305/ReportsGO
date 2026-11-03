@@ -184,6 +184,27 @@ func TestFilterOptionsListTheSeededLookups(t *testing.T) {
 		require.NotZero(t, s.ID)
 		require.NotEmpty(t, s.Name)
 	}
+	require.Len(t, opts.Staff, 2)
+}
+
+func TestAssignedToFlowsThroughToTheReport(t *testing.T) {
+	svc := newService(t)
+	ctx := context.Background()
+
+	opts, err := svc.FilterOptions(ctx)
+	require.NoError(t, err)
+	all, err := svc.List(ctx, service.ListJobsParams{Limit: "200"})
+	require.NoError(t, err)
+
+	var assigned int64
+	for _, s := range opts.Staff {
+		res, err := svc.List(ctx, service.ListJobsParams{AssignedTo: []string{fmt.Sprint(s.ID)}, Limit: "200"})
+		require.NoError(t, err)
+		require.Len(t, res.Items, int(res.Summary.Count))
+		require.Positive(t, res.Summary.Count, "%s has October jobs", s.Name)
+		assigned += res.Summary.Count
+	}
+	require.Less(t, assigned, all.Summary.Count, "the unassigned jobs are left out once a staff member is chosen")
 }
 
 func TestInvalidInputIsReportedPerFieldWithoutHittingTheData(t *testing.T) {

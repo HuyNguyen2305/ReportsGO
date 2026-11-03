@@ -48,6 +48,7 @@ func toJobFiltersResponse(opts *service.JobFilterOptions) dto.JobFiltersResponse
 	out := dto.JobFiltersResponse{
 		ServiceTypes: make([]dto.OptionResponse, len(opts.ServiceTypes)),
 		LeadSources:  make([]dto.OptionResponse, len(opts.LeadSources)),
+		Staff:        make([]dto.OptionResponse, len(opts.Staff)),
 		Statuses:     toStrings(model.JobStatuses),
 		SortKeys:     toStrings(model.JobSortKeys),
 		DefaultSort:  dto.SortResponse{Key: string(model.JobSortCreatedAt), Order: "desc"},
@@ -58,6 +59,9 @@ func toJobFiltersResponse(opts *service.JobFilterOptions) dto.JobFiltersResponse
 	}
 	for i, s := range opts.LeadSources {
 		out.LeadSources[i] = dto.OptionResponse{ID: s.ID, Name: s.Name}
+	}
+	for i, s := range opts.Staff {
+		out.Staff[i] = dto.OptionResponse{ID: s.ID, Name: s.Name}
 	}
 	return out
 }
