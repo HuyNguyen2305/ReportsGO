@@ -284,7 +284,7 @@ func TestFilters(t *testing.T) {
 		{"one day", "?from=2026-10-21&to=2026-10-21", 2},
 		{"the last day is included", "?from=2026-10-22&to=2026-10-22", 1},
 		{"open start", "?to=2026-10-05", 3},
-		{"open end", "?from=2026-10-21", 3},
+		{"open end", "?from=2026-10-21", 5},
 		{"september is empty", "?from=2026-09-01&to=2026-09-30", 0},
 		{"search by number", "?q=598", 3},
 		{"search by account number", "?q=63733", 4},

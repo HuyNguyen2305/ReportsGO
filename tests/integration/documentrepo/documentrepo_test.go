@@ -300,7 +300,7 @@ func TestListFilters(t *testing.T) {
 		}, []string{"5751", "5746", "5743"}, 3},
 		{"open end", func(f *model.DocumentFilter) {
 			f.CreatedFrom, f.CreatedBefore = utc(2026, 10, 21, 0, 0, 0, 0), time.Time{}
-		}, []string{"5980", "5981", "5982"}, 3},
+		}, []string{"5980", "5981", "5982", "6150", "6155"}, 5},
 		{"empty range", func(f *model.DocumentFilter) {
 			f.CreatedFrom, f.CreatedBefore = utc(2027, 1, 1, 0, 0, 0, 0), utc(2027, 2, 1, 0, 0, 0, 0)
 		}, []string{}, 0},
@@ -339,7 +339,7 @@ func TestListFilters(t *testing.T) {
 	// the database is still intact after the hostile search above
 	var n int
 	require.NoError(t, e.pool.QueryRow(ctx, "SELECT count(*) FROM documents").Scan(&n))
-	require.Equal(t, 19, n)
+	require.Equal(t, 21, n)
 }
 
 func TestTheCreatedRangeBoundariesAreHalfOpenInUTC(t *testing.T) {

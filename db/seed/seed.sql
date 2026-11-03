@@ -1,4 +1,4 @@
--- Development sample data mirroring the report screenshots (October 2026).
+-- Development sample data mirroring the report screenshots (October 2026, plus the November Documents screenshot).
 -- WARNING: truncates every data table first. Never run against production.
 -- Rows reference each other by natural keys (account/invoice/estimate numbers),
 -- so the script does not depend on identity values.
@@ -561,3 +561,18 @@ FROM customers c
 JOIN service_locations l ON l.customer_id = c.id
 JOIN service_types st    ON st.name = 'Initial Service'
 WHERE c.account_number = '63689';
+
+-- The November Documents screenshot, so the report's default view (the current month) has data. Customer #1 has no
+-- phone, location or job, like a customer just created. Added last, so no earlier id changes.
+INSERT INTO customers (account_number, first_name, last_name, display_name, created_at)
+VALUES ('63749', '#', '1', '#1', '2026-11-02 00:00:00+00');
+
+INSERT INTO documents (document_number, document_type_id, customer_id, created_by, created_at)
+SELECT v.num, dt.id, c.id, u.id, v.created_at::timestamptz
+FROM (VALUES
+    ('6150', '1-Time Treatment (PestPros of MI)', '63716', '2026-11-02 01:30:51+00'),
+    ('6155', '1-Time Treatment (PestPros of MI)', '63749', '2026-11-02 03:42:52+00')
+) AS v(num, doc_type, acct, created_at)
+JOIN document_types dt ON dt.name = v.doc_type
+JOIN customers c       ON c.account_number = v.acct
+JOIN users u           ON u.full_name = 'Thọ Nguyễn Quang';

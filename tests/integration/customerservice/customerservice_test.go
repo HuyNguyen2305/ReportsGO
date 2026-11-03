@@ -130,7 +130,7 @@ func TestFiltersAgreeWithTheCount(t *testing.T) {
 		{"september", service.ListCustomersParams{From: "2026-09-01", To: "2026-09-30"}, 4},
 		{"september 30 only", service.ListCustomersParams{From: "2026-09-30", To: "2026-09-30"}, 1},
 		{"november 1 only", service.ListCustomersParams{From: "2026-11-01", To: "2026-11-01"}, 1},
-		{"everything", service.ListCustomersParams{From: "2000-01-01", To: "2100-01-01"}, 19},
+		{"everything", service.ListCustomersParams{From: "2000-01-01", To: "2100-01-01"}, 20},
 		{"search by name", service.ListCustomersParams{Search: "lovelace"}, 1},
 		{"search by email", service.ListCustomersParams{Search: "EXAMPLE.com"}, 4},
 		{"search by phone", service.ListCustomersParams{Search: "0606"}, 1},

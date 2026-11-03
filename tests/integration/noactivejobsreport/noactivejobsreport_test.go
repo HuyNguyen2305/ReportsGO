@@ -77,7 +77,7 @@ func TestCustomersReport(t *testing.T) {
 	require.Len(t, out.Data, 2)
 	require.True(t, out.Page.HasMore)
 	require.NotNil(t, out.Page.NextCursor)
-	require.Equal(t, &dto.NoActiveJobsSummaryResponse{Count: 12}, out.Summary)
+	require.Equal(t, &dto.NoActiveJobsSummaryResponse{Count: 13}, out.Summary)
 	require.Equal(t, dto.NoActiveJobsCustomerResponse{
 		ID: out.Data[0].ID, Status: "inactive", AccountNumber: "63716", Customer: "# D",
 	}, out.Data[0])

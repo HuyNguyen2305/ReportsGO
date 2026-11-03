@@ -31,9 +31,9 @@ func TestListCustomersDefaultsToNameAscendingWithTheCount(t *testing.T) {
 	res, err := svc.List(context.Background(), model.NoActiveJobsCustomers, service.ListNoActiveJobsParams{})
 
 	require.NoError(t, err)
-	require.Len(t, res.Items, 12)
+	require.Len(t, res.Items, 13)
 	require.Equal(t, "# D", res.Items[0].CustomerName)
-	require.Equal(t, &model.NoActiveJobsSummary{Count: 12}, res.Summary)
+	require.Equal(t, &model.NoActiveJobsSummary{Count: 13}, res.Summary)
 	require.False(t, res.HasMore)
 }
 
@@ -56,15 +56,15 @@ func TestListPagesWithCursorsAndSummaryOnlyOnTheFirstPage(t *testing.T) {
 	require.Len(t, first.Items, 5)
 	require.True(t, first.HasMore)
 	require.NotNil(t, first.Summary)
-	require.Equal(t, int64(12), first.Summary.Count, "the summary covers all pages")
+	require.Equal(t, int64(13), first.Summary.Count, "the summary covers all pages")
 
 	second, err := svc.List(ctx, model.NoActiveJobsCustomers, service.ListNoActiveJobsParams{
 		Limit: "50", Sort: "last_service_date", Cursor: first.NextCursor,
 	})
 	require.NoError(t, err)
-	require.Len(t, second.Items, 7)
+	require.Len(t, second.Items, 8)
 	require.Nil(t, second.Summary)
-	require.Equal(t, "5001", second.Items[6].AccountNumber, "the one customer with a job is last")
+	require.Equal(t, "5001", second.Items[7].AccountNumber, "the one customer with a job is last")
 }
 
 func TestListReturnsTheLastServiceInTheClocksTimeZone(t *testing.T) {

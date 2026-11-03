@@ -58,7 +58,7 @@ Customers list:
     { "id": 10, "status": "active", "account_number": "5002", "customer": "Alaba David", "phone": null, "last_service": null }
   ],
   "page": { "limit": 50, "has_more": false, "next_cursor": null },
-  "summary": { "count": 12 }
+  "summary": { "count": 13 }
 }
 ```
 

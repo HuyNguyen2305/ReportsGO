@@ -67,6 +67,31 @@ func TestListDefault(t *testing.T) {
 	require.Equal(t, "5982", res.Items[0].DocumentNumber, "newest first")
 }
 
+func TestListDefaultInNovemberShowsTheScreenshotDocuments(t *testing.T) {
+	pool := testdb.SeededPool(t)
+	november3 := time.Date(2026, 11, 3, 9, 0, 0, 0, time.UTC)
+	svc := service.NewDocumentService(repository.NewDocumentRepository(pool), func() time.Time { return november3 })
+
+	res, err := svc.List(context.Background(), service.ListDocumentsParams{})
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"6155", "6150"}, numbers(res.Items), "newest first")
+	require.Equal(t, time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC), res.From)
+	require.Equal(t, time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC), res.To)
+	require.NotNil(t, res.Summary)
+	require.EqualValues(t, 2, res.Summary.Count)
+	for _, row := range res.Items {
+		require.Equal(t, model.DocumentDraft, row.Status)
+		require.Equal(t, "1-Time Treatment (PestPros of MI)", row.TypeName)
+		require.NotNil(t, row.CreatedBy)
+		require.Equal(t, "Thọ Nguyễn Quang", *row.CreatedBy)
+	}
+	require.Equal(t, "#1", res.Items[0].CustomerName)
+	require.Equal(t, "63749", res.Items[0].AccountNumber)
+	require.Equal(t, "# D", res.Items[1].CustomerName)
+	require.Equal(t, "63716", res.Items[1].AccountNumber)
+}
+
 func TestFollowingNextCursorWalksEveryKeyAndDirectionExactly(t *testing.T) {
 	e := newEnv(t, true)
 	ctx := context.Background()
@@ -149,7 +174,7 @@ func TestFiltersAgreeWithTheCount(t *testing.T) {
 		{"one day", service.ListDocumentsParams{From: "2026-10-21", To: "2026-10-21"}, 2},
 		{"the last day is included", service.ListDocumentsParams{From: "2026-10-22", To: "2026-10-22"}, 1},
 		{"open start", service.ListDocumentsParams{To: "2026-10-05"}, 3},
-		{"open end", service.ListDocumentsParams{From: "2026-10-21"}, 3},
+		{"open end", service.ListDocumentsParams{From: "2026-10-21"}, 5},
 		{"september is empty", service.ListDocumentsParams{From: "2026-09-01", To: "2026-09-30"}, 0},
 		{"search by number", service.ListDocumentsParams{Search: "598"}, 3},
 		{"search by customer", service.ListDocumentsParams{Search: "customer 1"}, 4},
@@ -249,7 +274,7 @@ func TestExtremeDatesNeverCauseAServerError(t *testing.T) {
 		if err != nil {
 			t.Skipf("rejected as invalid input: %v", errors.Unwrap(err))
 		}
-		require.EqualValues(t, 18, res.Summary.Count)
+		require.EqualValues(t, 20, res.Summary.Count)
 	})
 }
 

@@ -308,11 +308,11 @@ func TestListFilters(t *testing.T) {
 		}, 9},
 		{"open end", func(f *model.CustomerFilter) {
 			f.CreatedFrom, f.CreatedBefore = utc(2026, 10, 13, 0, 0, 0, 0), time.Time{}
-		}, 4},
+		}, 5},
 		{"september", func(f *model.CustomerFilter) {
 			f.CreatedFrom, f.CreatedBefore = utc(2026, 9, 1, 0, 0, 0, 0), utc(2026, 10, 1, 0, 0, 0, 0)
 		}, 4},
-		{"no date limits at all", func(f *model.CustomerFilter) { f.CreatedFrom, f.CreatedBefore = time.Time{}, time.Time{} }, 19},
+		{"no date limits at all", func(f *model.CustomerFilter) { f.CreatedFrom, f.CreatedBefore = time.Time{}, time.Time{} }, 20},
 		{"empty range", func(f *model.CustomerFilter) {
 			f.CreatedFrom, f.CreatedBefore = utc(2027, 1, 1, 0, 0, 0, 0), utc(2027, 2, 1, 0, 0, 0, 0)
 		}, 0},

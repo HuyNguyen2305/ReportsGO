@@ -114,9 +114,9 @@ func TestPageSeedCustomersWithoutActiveJobs(t *testing.T) {
 
 	// no job at all, or only cancelled jobs (5001, whose completed job the test cancels) - sorted by name
 	require.Equal(t, []string{
-		"63716", "70001", "5002", "70003", "70002", "70005", "70008", "63730", "70004", "70006", "70007", "5001",
+		"63716", "63749", "70001", "5002", "70003", "70002", "70005", "70008", "63730", "70004", "70006", "70007", "5001",
 	}, accounts(page.Rows))
-	require.Equal(t, model.NoActiveJobsSummary{Count: 12}, *page.Summary)
+	require.Equal(t, model.NoActiveJobsSummary{Count: 13}, *page.Summary)
 
 	t.Run("it agrees with an independent query", func(t *testing.T) {
 		var n int
