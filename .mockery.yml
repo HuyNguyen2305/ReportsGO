@@ -28,6 +28,7 @@ packages:
       SalesBreakdownRepository:
       MaterialUseRepository:
       SystemEmailRepository:
+      InboundLeadRepository:
   reportsgo/internal/handler:
     interfaces:
       Pinger:
@@ -48,6 +49,7 @@ packages:
       SalesBreakdownService:
       MaterialUseService:
       SystemEmailService:
+      InboundLeadService:
   github.com/jackc/pgx/v5:
     interfaces:
       Tx:

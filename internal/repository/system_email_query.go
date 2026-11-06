@@ -24,9 +24,10 @@ var systemEmailSorts = map[model.SystemEmailSortKey]sortSpec{
 	model.SystemEmailSortStatus:    {expr: `e.status::text`, cast: "text"},
 }
 
-// systemEmailNames is the SQL that shows the customer's name in each format. A customer with no first (or last) name
-// shows the full display name instead. The fragments are constants chosen here, never caller input.
-var systemEmailNames = map[model.NameFormat]string{
+// customerNameSQL is the SQL that shows a customer's name (joined as "c") in each format. A customer with no first (or
+// last) name shows the full display name instead. The fragments are constants chosen here, never caller input. Reports
+// that offer a name format share it.
+var customerNameSQL = map[model.NameFormat]string{
 	model.NameFirst: `COALESCE(NULLIF(c.first_name, ''), c.display_name)`,
 	model.NameLast:  `COALESCE(NULLIF(c.last_name, ''), c.display_name)`,
 	model.NameFull:  `c.display_name`,
@@ -68,7 +69,7 @@ func BuildSystemEmailListQuery(q model.SystemEmailQuery) (Statement, error) {
 	if format == "" {
 		format = model.NameFirst
 	}
-	name, ok := systemEmailNames[format]
+	name, ok := customerNameSQL[format]
 	if !ok {
 		return Statement{}, fmt.Errorf("%w: unknown name format %q", ErrInvalidQuery, q.NameFormat)
 	}
