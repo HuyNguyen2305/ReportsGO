@@ -668,3 +668,8 @@ JOIN (
     SELECT id, email, account_number, row_number() OVER (ORDER BY id) AS n FROM customers
 ) c ON (v.who > 0 AND c.n = v.who) OR (v.who < 0 AND c.account_number = (-v.who)::text)
 ORDER BY v.sent_at::timestamptz, v.who, v.status;
+
+-- Online Bookings ------------------------------------------------------------
+-- Customers who came from an online booking: 63714 (source Facebook, one October job), 63689 (five October jobs) and
+-- 63716 and 63749 (one November job each, no source). Only the flag is set, no row is added, so no other report changes.
+UPDATE customers SET booked_online = true WHERE account_number IN ('63714', '63689', '63716', '63749');

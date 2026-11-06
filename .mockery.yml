@@ -29,6 +29,7 @@ packages:
       MaterialUseRepository:
       SystemEmailRepository:
       InboundLeadRepository:
+      OnlineBookingRepository:
   reportsgo/internal/handler:
     interfaces:
       Pinger:
@@ -50,6 +51,7 @@ packages:
       MaterialUseService:
       SystemEmailService:
       InboundLeadService:
+      OnlineBookingService:
   github.com/jackc/pgx/v5:
     interfaces:
       Tx:
