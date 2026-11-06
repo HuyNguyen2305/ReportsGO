@@ -4,7 +4,7 @@
 -- so the script does not depend on identity values.
 
 TRUNCATE payments, credit_applications, credits, documents, invoice_tag_links, invoice_tax_lines, invoice_items,
-         job_materials, materials,
+         job_materials, materials, system_emails,
          recurring_invoices, billing_documents, job_tag_links, jobs, service_locations, customer_payment_methods,
          customer_phones, customers, tax_rates, items, job_tags,
          document_types, invoice_tags, payment_terms, service_types, lead_sources, users
@@ -611,7 +611,7 @@ WHERE c.account_number IN ('63716', '63749') AND j.created_at >= '2026-11-02 00:
 -- Material Use ---------------------------------------------------------------
 -- A small catalog (one material has no EPA number) and the materials added to a handful of jobs, each job adding its
 -- own rows. Added last, so no earlier id changes. The report's date is the job's scheduled date, so the picks cover
--- every edge: four live jobs in November, one deleted job, one live job before November and one never scheduled.
+-- every edge: the three live jobs in November, one deleted job, one live job before November and one never scheduled.
 INSERT INTO materials (name, epa_reg_no, unit) VALUES
     ('Demand CS',   '100-1066',  'fl oz'),
     ('Temprid SC',  '432-1363',  'fl oz'),
@@ -625,8 +625,8 @@ FROM (VALUES
     ('nov', 1, 'Glue Boards', 4.000, NULL),
     ('nov', 2, 'Demand CS',   1.250, NULL),
     ('nov', 3, 'Temprid SC',  3.000, NULL),
-    ('nov', 4, 'Temprid SC',  0.750, 'Fogger'),
-    ('nov', 4, 'Demand CS',   0.500, 'Fogger'),
+    ('nov', 3, 'Temprid SC',  0.750, 'Fogger'),
+    ('nov', 3, 'Demand CS',   0.500, 'Fogger'),
     ('deleted',     1, 'Gentrol IGR', 9.000, NULL),
     ('before',      1, 'Gentrol IGR', 1.000, NULL),
     ('unscheduled', 1, 'Temprid SC',  5.000, NULL)
@@ -643,3 +643,28 @@ JOIN (
     SELECT 'unscheduled', 1, (SELECT min(id) FROM jobs WHERE deleted_at IS NULL AND scheduled_at IS NULL)
 ) p ON p.pick = v.pick AND p.n = v.n
 JOIN materials m ON m.name = v.material;
+
+-- System Email History -------------------------------------------------------
+-- Ten emails sent to customers: most in October, four in November (the screen range), one just before October, and
+-- two at the very same instant so paging has a tie to break. Customer 63701 has no first name (the display name is
+-- shown instead), and one email went to an address other than the customer own one. Added last, so no earlier id
+-- changes.
+INSERT INTO system_emails (customer_id, email, email_type, status, sent_at)
+SELECT c.id, COALESCE(v.email, c.email, 'no-reply@example.com'), v.email_type::email_type, v.status::email_status,
+       v.sent_at::timestamptz
+FROM (VALUES
+    (1,       NULL,                      'welcome',                  'confirmed',   '2026-10-03 09:00:00+00'),
+    (1,       NULL,                      'invoice',                  'confirmed',   '2026-10-15 14:30:15.123456+00'),
+    (1,       NULL,                      'invoice',                  'unconfirmed', '2026-10-15 14:30:15.123456+00'),
+    (2,       NULL,                      'estimate',                 'unconfirmed', '2026-10-20 10:00:00+00'),
+    (3,       NULL,                      'appointment_reminder',     'cancelled',   '2026-10-31 23:59:59.999999+00'),
+    (4,       NULL,                      'review_request',           'cancelled',   '2026-09-30 23:59:59.999999+00'),
+    (2,       'billing.alt@example.com', 'payment_receipt',          'confirmed',   '2026-11-03 12:00:00+00'),
+    (-63716,  NULL,                      'appointment_confirmation', 'confirmed',   '2026-11-02 01:30:00+00'),
+    (-63749,  NULL,                      'welcome',                  'unconfirmed', '2026-11-02 03:42:00+00'),
+    (-63701,  NULL,                      'estimate',                 'confirmed',   '2026-11-04 08:00:00+00')
+) AS v(who, email, email_type, status, sent_at)
+JOIN (
+    SELECT id, email, account_number, row_number() OVER (ORDER BY id) AS n FROM customers
+) c ON (v.who > 0 AND c.n = v.who) OR (v.who < 0 AND c.account_number = (-v.who)::text)
+ORDER BY v.sent_at::timestamptz, v.who, v.status;

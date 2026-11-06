@@ -136,7 +136,7 @@ func TestFiltersOverHTTP(t *testing.T) {
 	require.Equal(t, []string{"Temprid SC"}, names(list(t, srv, "?material_id=2")))
 	require.Equal(t, []string{"Demand CS", "Temprid SC"}, names(list(t, srv, "?q=1")), "EPA numbers 100-1066 and 432-1363 contain a 1")
 	require.Equal(t, []string{"Demand CS", "Gentrol IGR", "Glue Boards", "Temprid SC"}, names(list(t, srv, "?from=2026-01-01&to=2026-12-31")))
-	require.Empty(t, list(t, srv, "?client_id=-5").Data)
+	require.Empty(t, list(t, srv, "?client_id=999999").Data, "a client with no jobs")
 }
 
 func TestPagingOverHTTPWalksEveryRowOnce(t *testing.T) {

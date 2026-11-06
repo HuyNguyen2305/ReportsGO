@@ -309,9 +309,23 @@ func TestFilterLookups(t *testing.T) {
 	clients, err := e.repo.Clients(ctx)
 	require.NoError(t, err)
 	require.Len(t, clients, 20, "every seeded customer")
-	for i := 1; i < len(clients); i++ {
-		require.LessOrEqual(t, clients[i-1].Name, clients[i].Name)
+
+	// ordered by name in the database's own collation, which is not Go's byte order
+	var want []string
+	dbRows, err := e.pool.Query(ctx, `SELECT display_name FROM customers ORDER BY display_name, id`)
+	require.NoError(t, err)
+	defer dbRows.Close()
+	for dbRows.Next() {
+		var name string
+		require.NoError(t, dbRows.Scan(&name))
+		want = append(want, name)
 	}
+	require.NoError(t, dbRows.Err())
+	got := make([]string, len(clients))
+	for i, c := range clients {
+		got[i] = c.Name
+	}
+	require.Equal(t, want, got)
 }
 
 func lower(s string) string {

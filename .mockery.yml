@@ -27,6 +27,7 @@ packages:
       ServiceLookupRepository:
       SalesBreakdownRepository:
       MaterialUseRepository:
+      SystemEmailRepository:
   reportsgo/internal/handler:
     interfaces:
       Pinger:
@@ -46,6 +47,7 @@ packages:
       ServiceLookupService:
       SalesBreakdownService:
       MaterialUseService:
+      SystemEmailService:
   github.com/jackc/pgx/v5:
     interfaces:
       Tx:

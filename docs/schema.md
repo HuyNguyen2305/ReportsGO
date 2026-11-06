@@ -42,6 +42,7 @@ generated `invoice_parent_type` column and a composite foreign key, so only invo
 | 000015 | `customers.status` (`active`, `inactive`, `lead`, `archived`); `customer_payment_methods` (Stripe / Square cards, at most one default per customer); `credit_applications` (credit used against an invoice, with the date) |
 | 000016 | `jobs.assigned_to`, `jobs.deleted_at`, `jobs.in_work_pool`, `jobs.tax_amount`; `service_locations.county`; `job_tags` and `job_tag_links` |
 | 000018 | `materials` (catalog: name, EPA registration number, unit); `job_materials` (the materials added to a job, one row per addition: quantity and an optional device) |
+| 000019 | `system_emails` (one row per email sent to a customer: the address, `email_type`, `email_status`, and when it was sent) |
 
 **Derived, not stored**
 
@@ -120,6 +121,10 @@ generated `invoice_parent_type` column and a composite foreign key, so only invo
 | | Date range | `jobs.scheduled_at` (the date the job occurs) |
 | | All / Jobs / Devices tabs | `job_materials.device` is NULL (Jobs) or set (Devices) |
 | | Clients / Materials filters | `jobs.customer_id` / `job_materials.material_id` |
+| System Email History | Customer | `customers.first_name` / `last_name` / `display_name`, by the "First name" dropdown |
+| | Email / Email Type / Status | `system_emails.email` / `email_type` / `status` |
+| | Time Stamp / date range | `system_emails.sent_at` |
+| | All Statuses / All customers filters | `system_emails.status` / `system_emails.customer_id` |
 
 ## Assumptions to confirm
 - Enum values not visible in the screenshots (e.g. estimate statuses `accepted`/`declined`, `document_status`, `recurring_status.paused`).
@@ -133,3 +138,4 @@ generated `invoice_parent_type` column and a composite foreign key, so only invo
 - `jobs.tax_amount` is stored on the job because a job may have no invoice yet; invoice tax comes from `invoice_tax_lines`.
 - By Tags in Sales Forecast / Revenue counts a fact under the tags of its job (`job_tags`) and of its invoice (`invoice_tags`), matched by name; an invoice tag with no same-named job tag is identified by its negated id. By Staff in Revenue is the staff member who took the payment (`payments.received_by`); in the Forecast it is the job's assignee.
 - Material Use: every job adds its own `job_materials` rows, so Qty is summed and # Of Applications counts those rows per material. The date is the job's scheduled date (`jobs.scheduled_at`); a job that was never scheduled is left out as soon as a date range is applied, and a deleted job is always left out. Cancelled jobs still count. `job_materials.device` is free text for the equipment lent to the customer on request (there is no devices table); the Jobs tab is the rows without a device and the Devices tab the rows with one. Confirm these rules, and the EPA registration numbers and quantities in the seed (plausible, not from a screenshot), against the real screen.
+- System Email History: the statuses (`unconfirmed`, `confirmed`, `cancelled`) come from the user description, like the confirmed / unconfirmed / cancelled states elsewhere, and the email types (`welcome`, `invoice`, `estimate`, `appointment_confirmation`, `appointment_reminder`, `payment_receipt`, `review_request`) are the general ones a field-service system sends; the screen was empty, so confirm both. The date range is the time the email was sent. The "First name" dropdown only changes how the Customer column is shown (`name_format`): a customer with no first (or last) name shows the full display name. The `customer` sort always uses the full display name. `system_emails.email` is the address the email was sent to, which can differ from the customer address. The seed adds four November emails so the report is not empty here, although the real screen showed none.
