@@ -53,6 +53,8 @@ func TestSeedIsIdempotentAndPopulatesEveryTable(t *testing.T) {
 	require.Equal(t, 8, first["customer_payment_methods"])
 	require.Equal(t, 2, first["credit_applications"])
 	require.Equal(t, 4, first["job_tags"])
+	require.Equal(t, 4, first["materials"], "one without an EPA number")
+	require.Equal(t, 9, first["job_materials"], "6 on November jobs + deleted + before November + never scheduled")
 }
 
 func TestSeededTaxAndCreditDataIsConsistent(t *testing.T) {

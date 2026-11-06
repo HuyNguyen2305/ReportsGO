@@ -41,6 +41,7 @@ generated `invoice_parent_type` column and a composite foreign key, so only invo
 | 000014 | `items` (catalog); `invoice_items` (invoice line items: item, quantity, unit price, line total, taxable) |
 | 000015 | `customers.status` (`active`, `inactive`, `lead`, `archived`); `customer_payment_methods` (Stripe / Square cards, at most one default per customer); `credit_applications` (credit used against an invoice, with the date) |
 | 000016 | `jobs.assigned_to`, `jobs.deleted_at`, `jobs.in_work_pool`, `jobs.tax_amount`; `service_locations.county`; `job_tags` and `job_tag_links` |
+| 000018 | `materials` (catalog: name, EPA registration number, unit); `job_materials` (the materials added to a job, one row per addition: quantity and an optional device) |
 
 **Derived, not stored**
 
@@ -114,6 +115,11 @@ generated `invoice_parent_type` column and a composite foreign key, so only invo
 | | Taxable Sales / Tax Collected / Surcharge Tax | `invoice_tax_lines.taxable_amount` / `tax_amount` / `surcharge_amount` |
 | Sales Forecast, Revenue | By Client / Service / Staff / Source / Tags | `customers`, `service_types`, `users`, `lead_sources`, `job_tags` / `invoice_tags` |
 | | By Item | `invoice_items` → `items.name` |
+| Material Use | Material / EPA | `materials.name` / `materials.epa_reg_no` |
+| | Qty / # Of Applications | `SUM(job_materials.qty)` / `COUNT(job_materials)` per material, over the jobs in the date range |
+| | Date range | `jobs.scheduled_at` (the date the job occurs) |
+| | All / Jobs / Devices tabs | `job_materials.device` is NULL (Jobs) or set (Devices) |
+| | Clients / Materials filters | `jobs.customer_id` / `job_materials.material_id` |
 
 ## Assumptions to confirm
 - Enum values not visible in the screenshots (e.g. estimate statuses `accepted`/`declined`, `document_status`, `recurring_status.paused`).
@@ -126,3 +132,4 @@ generated `invoice_parent_type` column and a composite foreign key, so only invo
 - The seed figures for tax, items, cards and credit use are plausible October 2026 data, not the exact screenshot numbers.
 - `jobs.tax_amount` is stored on the job because a job may have no invoice yet; invoice tax comes from `invoice_tax_lines`.
 - By Tags in Sales Forecast / Revenue counts a fact under the tags of its job (`job_tags`) and of its invoice (`invoice_tags`), matched by name; an invoice tag with no same-named job tag is identified by its negated id. By Staff in Revenue is the staff member who took the payment (`payments.received_by`); in the Forecast it is the job's assignee.
+- Material Use: every job adds its own `job_materials` rows, so Qty is summed and # Of Applications counts those rows per material. The date is the job's scheduled date (`jobs.scheduled_at`); a job that was never scheduled is left out as soon as a date range is applied, and a deleted job is always left out. Cancelled jobs still count. `job_materials.device` is free text for the equipment lent to the customer on request (there is no devices table); the Jobs tab is the rows without a device and the Devices tab the rows with one. Confirm these rules, and the EPA registration numbers and quantities in the seed (plausible, not from a screenshot), against the real screen.

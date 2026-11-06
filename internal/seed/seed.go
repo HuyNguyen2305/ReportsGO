@@ -20,6 +20,7 @@ var Tables = []string{
 	"documents", "credits", "payments",
 	"tax_rates", "invoice_tax_lines", "items", "invoice_items",
 	"customer_payment_methods", "credit_applications", "job_tags", "job_tag_links",
+	"materials", "job_materials",
 }
 
 const runTimeout = 60 * time.Second

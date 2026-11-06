@@ -4,6 +4,7 @@
 -- so the script does not depend on identity values.
 
 TRUNCATE payments, credit_applications, credits, documents, invoice_tag_links, invoice_tax_lines, invoice_items,
+         job_materials, materials,
          recurring_invoices, billing_documents, job_tag_links, jobs, service_locations, customer_payment_methods,
          customer_phones, customers, tax_rates, items, job_tags,
          document_types, invoice_tags, payment_terms, service_types, lead_sources, users
@@ -606,3 +607,39 @@ FROM jobs j
 JOIN customers c ON c.id = j.customer_id
 JOIN job_tags t  ON t.name = 'Follow Up'
 WHERE c.account_number IN ('63716', '63749') AND j.created_at >= '2026-11-02 00:00:00+00';
+
+-- Material Use ---------------------------------------------------------------
+-- A small catalog (one material has no EPA number) and the materials added to a handful of jobs, each job adding its
+-- own rows. Added last, so no earlier id changes. The report's date is the job's scheduled date, so the picks cover
+-- every edge: four live jobs in November, one deleted job, one live job before November and one never scheduled.
+INSERT INTO materials (name, epa_reg_no, unit) VALUES
+    ('Demand CS',   '100-1066',  'fl oz'),
+    ('Temprid SC',  '432-1363',  'fl oz'),
+    ('Gentrol IGR', '2724-469',  'ml'),
+    ('Glue Boards', NULL,        'each');
+
+INSERT INTO job_materials (job_id, material_id, qty, device)
+SELECT p.job_id, m.id, v.qty, v.device
+FROM (VALUES
+    ('nov', 1, 'Demand CS',   2.500, NULL),
+    ('nov', 1, 'Glue Boards', 4.000, NULL),
+    ('nov', 2, 'Demand CS',   1.250, NULL),
+    ('nov', 3, 'Temprid SC',  3.000, NULL),
+    ('nov', 4, 'Temprid SC',  0.750, 'Fogger'),
+    ('nov', 4, 'Demand CS',   0.500, 'Fogger'),
+    ('deleted',     1, 'Gentrol IGR', 9.000, NULL),
+    ('before',      1, 'Gentrol IGR', 1.000, NULL),
+    ('unscheduled', 1, 'Temprid SC',  5.000, NULL)
+) AS v(pick, n, material, qty, device)
+JOIN (
+    SELECT 'nov' AS pick, row_number() OVER (ORDER BY id) AS n, id AS job_id
+    FROM jobs
+    WHERE deleted_at IS NULL AND scheduled_at >= '2026-11-01 00:00:00+00' AND scheduled_at < '2026-12-01 00:00:00+00'
+    UNION ALL
+    SELECT 'deleted', 1, (SELECT min(id) FROM jobs WHERE deleted_at IS NOT NULL)
+    UNION ALL
+    SELECT 'before', 1, (SELECT min(id) FROM jobs WHERE deleted_at IS NULL AND scheduled_at < '2026-11-01 00:00:00+00')
+    UNION ALL
+    SELECT 'unscheduled', 1, (SELECT min(id) FROM jobs WHERE deleted_at IS NULL AND scheduled_at IS NULL)
+) p ON p.pick = v.pick AND p.n = v.n
+JOIN materials m ON m.name = v.material;

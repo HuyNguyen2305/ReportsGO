@@ -26,6 +26,7 @@ packages:
       NoActiveJobsRepository:
       ServiceLookupRepository:
       SalesBreakdownRepository:
+      MaterialUseRepository:
   reportsgo/internal/handler:
     interfaces:
       Pinger:
@@ -44,6 +45,7 @@ packages:
       NoActiveJobsService:
       ServiceLookupService:
       SalesBreakdownService:
+      MaterialUseService:
   github.com/jackc/pgx/v5:
     interfaces:
       Tx:

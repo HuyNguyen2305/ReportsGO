@@ -9,11 +9,13 @@ import (
 )
 
 type Querier interface {
+	ListClients(ctx context.Context) ([]ListClientsRow, error)
 	ListDocumentTypes(ctx context.Context) ([]DocumentType, error)
 	ListInvoiceTags(ctx context.Context) ([]InvoiceTag, error)
 	ListItems(ctx context.Context) ([]ListItemsRow, error)
 	ListJobTags(ctx context.Context) ([]JobTag, error)
 	ListLeadSources(ctx context.Context) ([]LeadSource, error)
+	ListMaterials(ctx context.Context) ([]ListMaterialsRow, error)
 	ListPaymentTerms(ctx context.Context) ([]PaymentTerm, error)
 	ListServiceTypes(ctx context.Context) ([]ServiceType, error)
 	ListStaff(ctx context.Context) ([]ListStaffRow, error)
