@@ -30,6 +30,7 @@ packages:
       SystemEmailRepository:
       InboundLeadRepository:
       OnlineBookingRepository:
+      DeviceTrackingRepository:
   reportsgo/internal/handler:
     interfaces:
       Pinger:
@@ -52,6 +53,7 @@ packages:
       SystemEmailService:
       InboundLeadService:
       OnlineBookingService:
+      DeviceTrackingService:
   github.com/jackc/pgx/v5:
     interfaces:
       Tx:

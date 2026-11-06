@@ -4,7 +4,7 @@
 -- so the script does not depend on identity values.
 
 TRUNCATE payments, credit_applications, credits, documents, invoice_tag_links, invoice_tax_lines, invoice_items,
-         job_materials, materials, system_emails,
+         job_materials, materials, system_emails, job_device_checks, devices,
          recurring_invoices, billing_documents, job_tag_links, jobs, service_locations, customer_payment_methods,
          customer_phones, customers, tax_rates, items, job_tags,
          document_types, invoice_tags, payment_terms, service_types, lead_sources, users
@@ -673,3 +673,41 @@ ORDER BY v.sent_at::timestamptz, v.who, v.status;
 -- Customers who came from an online booking: 63714 (source Facebook, one October job), 63689 (five October jobs) and
 -- 63716 and 63749 (one November job each, no source). Only the flag is set, no row is added, so no other report changes.
 UPDATE customers SET booked_online = true WHERE account_number IN ('63714', '63689', '63716', '63749');
+
+-- Device Tracking ------------------------------------------------------------
+-- Six devices at the locations of customers 63706, 63716 and 63749 (some without a name or a coordinate) and eight
+-- checks on their existing jobs: two October jobs of 63706 and the November 2 job of 63716 and of 63749, so the screen
+-- range has data. No customer, location or job is added, so no other report changes.
+INSERT INTO devices (location_id, name, barcode, device_type, area, latitude, longitude)
+SELECT l.id, v.name, v.barcode, v.device_type, v.area, v.lat, v.lng
+FROM (VALUES
+    (1, '63706', '',                   'BC-1001', 'Bait Box', 'Area 1',           25.774266::numeric, -80.130045::numeric),
+    (2, '63706', 'Roof Laptop',        'BC-1002', 'Laptop',   'Area 1',           NULL::numeric,      NULL::numeric),
+    (3, '63706', 'Dock Trap',          '',        'Bait Box', 'Area 2',           25.774300::numeric, -80.130100::numeric),
+    (4, '63716', 'QA device 32d92e23', 'BC-2001', 'Bait Box', 'QA area bf9a99b2', 37.421998::numeric, -122.084000::numeric),
+    (5, '63716', 'QA device a93f0c11', 'BC-2002', 'Laptop',   'QA area 32d92e23', 37.421998::numeric, -122.084000::numeric),
+    (6, '63749', '',                   'BC-3001', 'Bait Box', 'A1',               37.330372::numeric, -122.030000::numeric)
+) AS v(ord, acct, name, barcode, device_type, area, lat, lng)
+JOIN customers c         ON c.account_number = v.acct
+JOIN service_locations l ON l.customer_id = c.id
+ORDER BY v.ord;
+
+-- A device is found by its customer, area and type, which are unique among these.
+INSERT INTO job_device_checks (job_id, device_id, checked_in_at, checked_out_at, status, activity, notes, assigned_to)
+SELECT j.id, d.id, v.check_in::timestamptz, v.check_out::timestamptz, v.status, v.activity, v.notes, u.id
+FROM (VALUES
+    (1, '63706', '2026-10-07 07:31+00', 'Area 1',           'Bait Box', '2026-10-07 07:40+00', '2026-10-07 07:55+00', 'Good', 'Inspected', 'Bait taken, refilled', 'tho.nguyen.quang@example.com'),
+    (2, '63706', '2026-10-07 07:31+00', 'Area 1',           'Laptop',   NULL,                  NULL,                  'Good', '',          '',                     NULL),
+    (3, '63706', '2026-10-07 07:31+00', 'Area 2',           'Bait Box', NULL,                  NULL,                  '40',   '',          '',                     'thon.nguyen@example.com'),
+    (4, '63706', '2026-10-05 06:21+00', 'Area 1',           'Bait Box', NULL,                  NULL,                  '10',   '',          '',                     'tho.nguyen.quang@example.com'),
+    (5, '63716', '2026-11-02 01:30+00', 'QA area bf9a99b2', 'Bait Box', NULL,                  NULL,                  'Good', '',          '',                     'tho.nguyen.quang@example.com'),
+    (6, '63716', '2026-11-02 01:30+00', 'QA area 32d92e23', 'Laptop',   NULL,                  NULL,                  '40',   '',          '',                     'tho.nguyen.quang@example.com'),
+    (7, '63749', '2026-11-02 03:42+00', 'A1',               'Bait Box', NULL,                  NULL,                  'Good', '',          '',                     'thon.nguyen@example.com'),
+    (8, '63749', '2026-11-02 03:42+00', 'A1',               'Bait Box', '2026-11-02 04:10+00', '2026-11-02 04:20+00', 'Good', 'Re-check',  'Second pass',          NULL)
+) AS v(ord, acct, scheduled_at, area, device_type, check_in, check_out, status, activity, notes, assignee)
+JOIN customers c ON c.account_number = v.acct
+JOIN jobs j      ON j.customer_id = c.id AND j.scheduled_at = v.scheduled_at::timestamptz
+JOIN service_locations l ON l.customer_id = c.id
+JOIN devices d   ON d.location_id = l.id AND d.area = v.area AND d.device_type = v.device_type
+LEFT JOIN users u ON u.email = v.assignee
+ORDER BY v.ord;
