@@ -42,3 +42,13 @@ ORDER BY name, id;
 SELECT id, name
 FROM items
 ORDER BY name, id;
+
+-- name: ListMaterials :many
+SELECT id, name
+FROM materials
+ORDER BY name, id;
+
+-- name: ListClients :many
+SELECT id, display_name
+FROM customers
+ORDER BY display_name, id;

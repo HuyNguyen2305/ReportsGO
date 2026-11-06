@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -49,7 +50,11 @@ const (
 	kindDate                       // YYYY-MM-DD
 	kindTimestamp                  // UTC instant in the repository's fixed form, 2006-01-02T15:04:05.000000Z
 	kindMoney                      // decimal amount with two places
+	kindNumber                     // non-negative whole number or decimal with up to three places
 )
+
+// numberValue matches a kindNumber sort value: digits with an optional fraction of up to three places.
+var numberValue = regexp.MustCompile(`^\d{1,15}(\.\d{1,3})?$`)
 
 // encodeCursor returns the opaque cursor that resumes after the row with the given sort value and id.
 // Cursors are not signed: a forged one can only point at another position of the same result set, and its
@@ -113,6 +118,10 @@ func validateSortValue(kind valueKind, v string) error {
 				return invalidCursor("is not a valid cursor")
 			}
 			return fmt.Errorf("validate cursor amount: %w", err)
+		}
+	case kindNumber:
+		if !numberValue.MatchString(v) {
+			return invalidCursor("is not a valid cursor")
 		}
 	default:
 		if !utf8.ValidString(v) || strings.ContainsRune(v, 0) || utf8.RuneCountInString(v) > model.MaxSortTextLength {

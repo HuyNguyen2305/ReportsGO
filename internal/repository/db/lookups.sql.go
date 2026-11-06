@@ -9,6 +9,37 @@ import (
 	"context"
 )
 
+const listClients = `-- name: ListClients :many
+SELECT id, display_name
+FROM customers
+ORDER BY display_name, id
+`
+
+type ListClientsRow struct {
+	ID          int64
+	DisplayName string
+}
+
+func (q *Queries) ListClients(ctx context.Context) ([]ListClientsRow, error) {
+	rows, err := q.db.Query(ctx, listClients)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListClientsRow{}
+	for rows.Next() {
+		var i ListClientsRow
+		if err := rows.Scan(&i.ID, &i.DisplayName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDocumentTypes = `-- name: ListDocumentTypes :many
 SELECT id, name
 FROM document_types
@@ -133,6 +164,37 @@ func (q *Queries) ListLeadSources(ctx context.Context) ([]LeadSource, error) {
 	items := []LeadSource{}
 	for rows.Next() {
 		var i LeadSource
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMaterials = `-- name: ListMaterials :many
+SELECT id, name
+FROM materials
+ORDER BY name, id
+`
+
+type ListMaterialsRow struct {
+	ID   int64
+	Name string
+}
+
+func (q *Queries) ListMaterials(ctx context.Context) ([]ListMaterialsRow, error) {
+	rows, err := q.db.Query(ctx, listMaterials)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMaterialsRow{}
+	for rows.Next() {
+		var i ListMaterialsRow
 		if err := rows.Scan(&i.ID, &i.Name); err != nil {
 			return nil, err
 		}

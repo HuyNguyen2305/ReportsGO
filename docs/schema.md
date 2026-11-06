@@ -41,6 +41,10 @@ generated `invoice_parent_type` column and a composite foreign key, so only invo
 | 000014 | `items` (catalog); `invoice_items` (invoice line items: item, quantity, unit price, line total, taxable) |
 | 000015 | `customers.status` (`active`, `inactive`, `lead`, `archived`); `customer_payment_methods` (Stripe / Square cards, at most one default per customer); `credit_applications` (credit used against an invoice, with the date) |
 | 000016 | `jobs.assigned_to`, `jobs.deleted_at`, `jobs.in_work_pool`, `jobs.tax_amount`; `service_locations.county`; `job_tags` and `job_tag_links` |
+| 000018 | `materials` (catalog: name, EPA registration number, unit); `job_materials` (the materials added to a job, one row per addition: quantity and an optional device) |
+| 000019 | `system_emails` (one row per email sent to a customer: the address, `email_type`, `email_status`, and when it was sent) |
+| 000020 | `customers.booked_online` (whether the customer came from an online booking), with a partial index on the flagged customers |
+| 000021 | `devices` (installed at a service location: name, barcode, type, area, optional coordinate); `job_device_checks` (one row per device checked during a job: check in and out, status, activity, notes, assignee) |
 
 **Derived, not stored**
 
@@ -114,6 +118,28 @@ generated `invoice_parent_type` column and a composite foreign key, so only invo
 | | Taxable Sales / Tax Collected / Surcharge Tax | `invoice_tax_lines.taxable_amount` / `tax_amount` / `surcharge_amount` |
 | Sales Forecast, Revenue | By Client / Service / Staff / Source / Tags | `customers`, `service_types`, `users`, `lead_sources`, `job_tags` / `invoice_tags` |
 | | By Item | `invoice_items` → `items.name` |
+| Material Use | Material / EPA | `materials.name` / `materials.epa_reg_no` |
+| | Qty / # Of Applications | `SUM(job_materials.qty)` / `COUNT(job_materials)` per material, over the jobs in the date range |
+| | Date range | `jobs.scheduled_at` (the date the job occurs) |
+| | All / Jobs / Devices tabs | `job_materials.device` is NULL (Jobs) or set (Devices) |
+| | Clients / Materials filters | `jobs.customer_id` / `job_materials.material_id` |
+| System Email History | Customer | `customers.first_name` / `last_name` / `display_name`, by the "First name" dropdown |
+| | Email / Email Type / Status | `system_emails.email` / `email_type` / `status` |
+| | Time Stamp / date range | `system_emails.sent_at` |
+| | All Statuses / All customers filters | `system_emails.status` / `system_emails.customer_id` |
+| Inbound Leads | Customer / Email / Notes | `customers` with `status = 'lead'`: `first_name` / `last_name` / `display_name` (by the "First name" dropdown), `email`, `top_note` |
+| | Source / Phone | `lead_sources.name` (NA when none) / first `customer_phones.number` (lowest id) |
+| | Date Added / Time Added | `customers.created_at` (one column) |
+| | Active Jobs Schedule | earliest `jobs.scheduled_at` of the customer's open (`unconfirmed` / `confirmed`), not deleted jobs, with `service_types.name` |
+| Online Bookings | Customer / Email / Notes | `customers` with `booked_online`: `first_name` / `last_name` / `display_name` (by the "First name" dropdown), `email`, `top_note` |
+| | Date / Time / Service / Status | `jobs.scheduled_at` (one column) / `service_types.name` / `jobs.status` |
+| | Phone / Address | first `customer_phones.number` (lowest id) / the job's `service_locations` |
+| | All Sources filter | the customer's `lead_sources.name` (`customers.lead_source_id`), not the job's |
+| Device Tracking | Customer Name / Service Type / Date | `customers.display_name` / `service_types.name` / `jobs.scheduled_at`, of the job a check belongs to |
+| | Address Line 1 / 2, City, State, Zip | the job's own `service_locations` |
+| | Device Name / Barcode / Coordinate / Area / Device Type | `devices.name` / `barcode` / `latitude`, `longitude` / `area` / `device_type` |
+| | Check In / Check Out / Status / Activity / Finding/Notes | `job_device_checks.checked_in_at` / `checked_out_at` / `status` / `activity` / `notes` |
+| | Assigned To / Clients filter | `job_device_checks.assigned_to` → `users.full_name` / `jobs.customer_id` |
 
 ## Assumptions to confirm
 - Enum values not visible in the screenshots (e.g. estimate statuses `accepted`/`declined`, `document_status`, `recurring_status.paused`).
@@ -126,3 +152,8 @@ generated `invoice_parent_type` column and a composite foreign key, so only invo
 - The seed figures for tax, items, cards and credit use are plausible October 2026 data, not the exact screenshot numbers.
 - `jobs.tax_amount` is stored on the job because a job may have no invoice yet; invoice tax comes from `invoice_tax_lines`.
 - By Tags in Sales Forecast / Revenue counts a fact under the tags of its job (`job_tags`) and of its invoice (`invoice_tags`), matched by name; an invoice tag with no same-named job tag is identified by its negated id. By Staff in Revenue is the staff member who took the payment (`payments.received_by`); in the Forecast it is the job's assignee.
+- Material Use: every job adds its own `job_materials` rows, so Qty is summed and # Of Applications counts those rows per material. The date is the job's scheduled date (`jobs.scheduled_at`); a job that was never scheduled is left out as soon as a date range is applied, and a deleted job is always left out. Cancelled jobs still count. `job_materials.device` is free text for the equipment lent to the customer on request (there is no devices table); the Jobs tab is the rows without a device and the Devices tab the rows with one. Confirm these rules, and the EPA registration numbers and quantities in the seed (plausible, not from a screenshot), against the real screen.
+- System Email History: the statuses (`unconfirmed`, `confirmed`, `cancelled`) come from the user description, like the confirmed / unconfirmed / cancelled states elsewhere, and the email types (`welcome`, `invoice`, `estimate`, `appointment_confirmation`, `appointment_reminder`, `payment_receipt`, `review_request`) are the general ones a field-service system sends; the screen was empty, so confirm both. The date range is the time the email was sent. The "First name" dropdown only changes how the Customer column is shown (`name_format`): a customer with no first (or last) name shows the full display name. The `customer` sort always uses the full display name. `system_emails.email` is the address the email was sent to, which can differ from the customer address. The seed adds four November emails so the report is not empty here, although the real screen showed none.
+- Inbound Leads: a lead is a customer whose `status` is `lead`, so there is no leads table. The screen's year chart and source pie are not built yet (no endpoint). Date Added and Time Added are one column, `date_added`, the creation instant (UTC); the screen splits it into a date and a time. The date range is the day the lead was added. "NA" in the source filter is `source_id=none`. Active Jobs Schedule is the earliest scheduled job that is not deleted and still open (unconfirmed or confirmed), not the next one after today; cancelled, completed and never-scheduled jobs do not count. The "Columns (8)" picker is screen-side, so the API always returns every column. The seed has one lead (customer 63730, added on October 8 with no source, as in the screenshot); the tests add the others themselves so the other reports' totals do not move.
+- Online Bookings: a booking is a job of a customer whose `customers.booked_online` is true. The flag is set per customer and nothing derives it from the lead source yet, so setting it when a customer is created online is a later feature; the seed flags 63714 (source Facebook), 63689, 63716 and 63749. The source shown and filtered is the customer's own (`customers.lead_source_id`), not the job's (`jobs.lead_source_id`), and `source_id=none` is the customers without one. Date and Time are one column, the appointment (`jobs.scheduled_at`); a job that was never scheduled is not a booking row, and a deleted job never is. Cancelled jobs are listed with their status. Notes are the customer's top note, since jobs have none. The screen's bookings-per-month chart is not built.
+- Device Tracking: a device is installed once at a service location and checked on many jobs, so what stays the same is in `devices` and each visit is a `job_device_checks` row; the report has one row per check. This is not `job_materials.device`, the free-text equipment lent to a customer. The address shown is the job's own location, not the device's, so a device checked on a job at another location still shows the job's address. `status`, `activity` and `notes` are free text (the screen shows values such as Good, 40 and 10). Check In and Check Out are timestamps, null until the device is checked. The Date is the job's appointment, so a job with none is not listed, and neither is a deleted job; cancelled jobs are. The screen's Columns picker and its "Export 21 records" label are screen-side, so the API has neither. The seed adds six devices and eight checks on existing jobs of customers 63706, 63716 and 63749 (no customer, location or job is added); the tests add the other cases themselves. The screen's coordinates and names (QA device ...) are sample values, not the screenshot's exact rows.

@@ -637,6 +637,15 @@ type Job struct {
 	TaxAmount     pgtype.Numeric
 }
 
+type JobMaterial struct {
+	ID         int64
+	JobID      int64
+	MaterialID int64
+	Qty        pgtype.Numeric
+	Device     pgtype.Text
+	CreatedAt  pgtype.Timestamptz
+}
+
 type JobTag struct {
 	ID   int64
 	Name string
@@ -650,6 +659,13 @@ type JobTagLink struct {
 type LeadSource struct {
 	ID   int64
 	Name string
+}
+
+type Material struct {
+	ID       int64
+	Name     string
+	EpaRegNo pgtype.Text
+	Unit     string
 }
 
 type Payment struct {

@@ -26,6 +26,11 @@ packages:
       NoActiveJobsRepository:
       ServiceLookupRepository:
       SalesBreakdownRepository:
+      MaterialUseRepository:
+      SystemEmailRepository:
+      InboundLeadRepository:
+      OnlineBookingRepository:
+      DeviceTrackingRepository:
   reportsgo/internal/handler:
     interfaces:
       Pinger:
@@ -44,6 +49,11 @@ packages:
       NoActiveJobsService:
       ServiceLookupService:
       SalesBreakdownService:
+      MaterialUseService:
+      SystemEmailService:
+      InboundLeadService:
+      OnlineBookingService:
+      DeviceTrackingService:
   github.com/jackc/pgx/v5:
     interfaces:
       Tx:

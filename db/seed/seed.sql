@@ -4,6 +4,7 @@
 -- so the script does not depend on identity values.
 
 TRUNCATE payments, credit_applications, credits, documents, invoice_tag_links, invoice_tax_lines, invoice_items,
+         job_materials, materials, system_emails, job_device_checks, devices,
          recurring_invoices, billing_documents, job_tag_links, jobs, service_locations, customer_payment_methods,
          customer_phones, customers, tax_rates, items, job_tags,
          document_types, invoice_tags, payment_terms, service_types, lead_sources, users
@@ -606,3 +607,107 @@ FROM jobs j
 JOIN customers c ON c.id = j.customer_id
 JOIN job_tags t  ON t.name = 'Follow Up'
 WHERE c.account_number IN ('63716', '63749') AND j.created_at >= '2026-11-02 00:00:00+00';
+
+-- Material Use ---------------------------------------------------------------
+-- A small catalog (one material has no EPA number) and the materials added to a handful of jobs, each job adding its
+-- own rows. Added last, so no earlier id changes. The report's date is the job's scheduled date, so the picks cover
+-- every edge: the three live jobs in November, one deleted job, one live job before November and one never scheduled.
+INSERT INTO materials (name, epa_reg_no, unit) VALUES
+    ('Demand CS',   '100-1066',  'fl oz'),
+    ('Temprid SC',  '432-1363',  'fl oz'),
+    ('Gentrol IGR', '2724-469',  'ml'),
+    ('Glue Boards', NULL,        'each');
+
+INSERT INTO job_materials (job_id, material_id, qty, device)
+SELECT p.job_id, m.id, v.qty, v.device
+FROM (VALUES
+    ('nov', 1, 'Demand CS',   2.500, NULL),
+    ('nov', 1, 'Glue Boards', 4.000, NULL),
+    ('nov', 2, 'Demand CS',   1.250, NULL),
+    ('nov', 3, 'Temprid SC',  3.000, NULL),
+    ('nov', 3, 'Temprid SC',  0.750, 'Fogger'),
+    ('nov', 3, 'Demand CS',   0.500, 'Fogger'),
+    ('deleted',     1, 'Gentrol IGR', 9.000, NULL),
+    ('before',      1, 'Gentrol IGR', 1.000, NULL),
+    ('unscheduled', 1, 'Temprid SC',  5.000, NULL)
+) AS v(pick, n, material, qty, device)
+JOIN (
+    SELECT 'nov' AS pick, row_number() OVER (ORDER BY id) AS n, id AS job_id
+    FROM jobs
+    WHERE deleted_at IS NULL AND scheduled_at >= '2026-11-01 00:00:00+00' AND scheduled_at < '2026-12-01 00:00:00+00'
+    UNION ALL
+    SELECT 'deleted', 1, (SELECT min(id) FROM jobs WHERE deleted_at IS NOT NULL)
+    UNION ALL
+    SELECT 'before', 1, (SELECT min(id) FROM jobs WHERE deleted_at IS NULL AND scheduled_at < '2026-11-01 00:00:00+00')
+    UNION ALL
+    SELECT 'unscheduled', 1, (SELECT min(id) FROM jobs WHERE deleted_at IS NULL AND scheduled_at IS NULL)
+) p ON p.pick = v.pick AND p.n = v.n
+JOIN materials m ON m.name = v.material;
+
+-- System Email History -------------------------------------------------------
+-- Ten emails sent to customers: most in October, four in November (the screen range), one just before October, and
+-- two at the very same instant so paging has a tie to break. Customer 63701 has no first name (the display name is
+-- shown instead), and one email went to an address other than the customer own one. Added last, so no earlier id
+-- changes.
+INSERT INTO system_emails (customer_id, email, email_type, status, sent_at)
+SELECT c.id, COALESCE(v.email, c.email, 'no-reply@example.com'), v.email_type::email_type, v.status::email_status,
+       v.sent_at::timestamptz
+FROM (VALUES
+    (1,       NULL,                      'welcome',                  'confirmed',   '2026-10-03 09:00:00+00'),
+    (1,       NULL,                      'invoice',                  'confirmed',   '2026-10-15 14:30:15.123456+00'),
+    (1,       NULL,                      'invoice',                  'unconfirmed', '2026-10-15 14:30:15.123456+00'),
+    (2,       NULL,                      'estimate',                 'unconfirmed', '2026-10-20 10:00:00+00'),
+    (3,       NULL,                      'appointment_reminder',     'cancelled',   '2026-10-31 23:59:59.999999+00'),
+    (4,       NULL,                      'review_request',           'cancelled',   '2026-09-30 23:59:59.999999+00'),
+    (2,       'billing.alt@example.com', 'payment_receipt',          'confirmed',   '2026-11-03 12:00:00+00'),
+    (-63716,  NULL,                      'appointment_confirmation', 'confirmed',   '2026-11-02 01:30:00+00'),
+    (-63749,  NULL,                      'welcome',                  'unconfirmed', '2026-11-02 03:42:00+00'),
+    (-63701,  NULL,                      'estimate',                 'confirmed',   '2026-11-04 08:00:00+00')
+) AS v(who, email, email_type, status, sent_at)
+JOIN (
+    SELECT id, email, account_number, row_number() OVER (ORDER BY id) AS n FROM customers
+) c ON (v.who > 0 AND c.n = v.who) OR (v.who < 0 AND c.account_number = (-v.who)::text)
+ORDER BY v.sent_at::timestamptz, v.who, v.status;
+
+-- Online Bookings ------------------------------------------------------------
+-- Customers who came from an online booking: 63714 (source Facebook, one October job), 63689 (five October jobs) and
+-- 63716 and 63749 (one November job each, no source). Only the flag is set, no row is added, so no other report changes.
+UPDATE customers SET booked_online = true WHERE account_number IN ('63714', '63689', '63716', '63749');
+
+-- Device Tracking ------------------------------------------------------------
+-- Six devices at the locations of customers 63706, 63716 and 63749 (some without a name or a coordinate) and eight
+-- checks on their existing jobs: two October jobs of 63706 and the November 2 job of 63716 and of 63749, so the screen
+-- range has data. No customer, location or job is added, so no other report changes.
+INSERT INTO devices (location_id, name, barcode, device_type, area, latitude, longitude)
+SELECT l.id, v.name, v.barcode, v.device_type, v.area, v.lat, v.lng
+FROM (VALUES
+    (1, '63706', '',                   'BC-1001', 'Bait Box', 'Area 1',           25.774266::numeric, -80.130045::numeric),
+    (2, '63706', 'Roof Laptop',        'BC-1002', 'Laptop',   'Area 1',           NULL::numeric,      NULL::numeric),
+    (3, '63706', 'Dock Trap',          '',        'Bait Box', 'Area 2',           25.774300::numeric, -80.130100::numeric),
+    (4, '63716', 'QA device 32d92e23', 'BC-2001', 'Bait Box', 'QA area bf9a99b2', 37.421998::numeric, -122.084000::numeric),
+    (5, '63716', 'QA device a93f0c11', 'BC-2002', 'Laptop',   'QA area 32d92e23', 37.421998::numeric, -122.084000::numeric),
+    (6, '63749', '',                   'BC-3001', 'Bait Box', 'A1',               37.330372::numeric, -122.030000::numeric)
+) AS v(ord, acct, name, barcode, device_type, area, lat, lng)
+JOIN customers c         ON c.account_number = v.acct
+JOIN service_locations l ON l.customer_id = c.id
+ORDER BY v.ord;
+
+-- A device is found by its customer, area and type, which are unique among these.
+INSERT INTO job_device_checks (job_id, device_id, checked_in_at, checked_out_at, status, activity, notes, assigned_to)
+SELECT j.id, d.id, v.check_in::timestamptz, v.check_out::timestamptz, v.status, v.activity, v.notes, u.id
+FROM (VALUES
+    (1, '63706', '2026-10-07 07:31+00', 'Area 1',           'Bait Box', '2026-10-07 07:40+00', '2026-10-07 07:55+00', 'Good', 'Inspected', 'Bait taken, refilled', 'tho.nguyen.quang@example.com'),
+    (2, '63706', '2026-10-07 07:31+00', 'Area 1',           'Laptop',   NULL,                  NULL,                  'Good', '',          '',                     NULL),
+    (3, '63706', '2026-10-07 07:31+00', 'Area 2',           'Bait Box', NULL,                  NULL,                  '40',   '',          '',                     'thon.nguyen@example.com'),
+    (4, '63706', '2026-10-05 06:21+00', 'Area 1',           'Bait Box', NULL,                  NULL,                  '10',   '',          '',                     'tho.nguyen.quang@example.com'),
+    (5, '63716', '2026-11-02 01:30+00', 'QA area bf9a99b2', 'Bait Box', NULL,                  NULL,                  'Good', '',          '',                     'tho.nguyen.quang@example.com'),
+    (6, '63716', '2026-11-02 01:30+00', 'QA area 32d92e23', 'Laptop',   NULL,                  NULL,                  '40',   '',          '',                     'tho.nguyen.quang@example.com'),
+    (7, '63749', '2026-11-02 03:42+00', 'A1',               'Bait Box', NULL,                  NULL,                  'Good', '',          '',                     'thon.nguyen@example.com'),
+    (8, '63749', '2026-11-02 03:42+00', 'A1',               'Bait Box', '2026-11-02 04:10+00', '2026-11-02 04:20+00', 'Good', 'Re-check',  'Second pass',          NULL)
+) AS v(ord, acct, scheduled_at, area, device_type, check_in, check_out, status, activity, notes, assignee)
+JOIN customers c ON c.account_number = v.acct
+JOIN jobs j      ON j.customer_id = c.id AND j.scheduled_at = v.scheduled_at::timestamptz
+JOIN service_locations l ON l.customer_id = c.id
+JOIN devices d   ON d.location_id = l.id AND d.area = v.area AND d.device_type = v.device_type
+LEFT JOIN users u ON u.email = v.assignee
+ORDER BY v.ord;
