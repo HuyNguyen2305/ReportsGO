@@ -44,11 +44,6 @@ tasks:
     cmds:
       - go tool mockery
 
-  sqlc:
-    desc: Generate type-safe query code (sqlc)
-    cmds:
-      - sqlc generate
-
   test:
     desc: Run unit tests
     cmds:

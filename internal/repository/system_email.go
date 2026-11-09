@@ -11,12 +11,11 @@ import (
 // SystemEmailRepository reads the System Email History report. It works on a pool or inside a transaction.
 type SystemEmailRepository struct {
 	conn db.DBTX
-	q    *db.Queries
 }
 
 // NewSystemEmailRepository returns a repository using conn, typically the shared pool.
 func NewSystemEmailRepository(conn db.DBTX) *SystemEmailRepository {
-	return &SystemEmailRepository{conn: conn, q: db.New(conn)}
+	return &SystemEmailRepository{conn: conn}
 }
 
 // List returns one page of the report: up to q.Limit+1 rows, so the caller can tell whether more follow.
@@ -57,13 +56,5 @@ func (r *SystemEmailRepository) List(ctx context.Context, q model.SystemEmailQue
 
 // Clients lists the options for the Clients filter.
 func (r *SystemEmailRepository) Clients(ctx context.Context) ([]model.ClientOption, error) {
-	rows, err := r.q.ListClients(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list clients: %w", err)
-	}
-	out := make([]model.ClientOption, len(rows))
-	for i, row := range rows {
-		out[i] = model.ClientOption{ID: row.ID, Name: row.DisplayName}
-	}
-	return out, nil
+	return lookup[model.ClientOption](ctx, r.conn, "clients", listClientsSQL)
 }

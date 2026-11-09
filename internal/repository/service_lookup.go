@@ -14,12 +14,11 @@ import (
 // ServiceLookupRepository reads the Service Lookup report. It works on a pool or inside a transaction.
 type ServiceLookupRepository struct {
 	conn db.DBTX
-	q    *db.Queries
 }
 
 // NewServiceLookupRepository returns a repository using conn, typically the shared pool.
 func NewServiceLookupRepository(conn db.DBTX) *ServiceLookupRepository {
-	return &ServiceLookupRepository{conn: conn, q: db.New(conn)}
+	return &ServiceLookupRepository{conn: conn}
 }
 
 // Page returns one page of the report (up to q.Limit+1 rows, so the caller can tell whether more follow) and,
@@ -124,39 +123,15 @@ func summarizeServiceLookup(ctx context.Context, conn db.DBTX, f model.ServiceLo
 
 // ServiceTypes lists the options for the Service Type filter.
 func (r *ServiceLookupRepository) ServiceTypes(ctx context.Context) ([]model.ServiceType, error) {
-	rows, err := r.q.ListServiceTypes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list service types: %w", err)
-	}
-	out := make([]model.ServiceType, len(rows))
-	for i, row := range rows {
-		out[i] = model.ServiceType{ID: row.ID, Name: row.Name}
-	}
-	return out, nil
+	return lookup[model.ServiceType](ctx, r.conn, "service types", listServiceTypesSQL)
 }
 
 // Staff lists the options for the Assigned To filter.
 func (r *ServiceLookupRepository) Staff(ctx context.Context) ([]model.StaffOption, error) {
-	rows, err := r.q.ListStaff(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list staff: %w", err)
-	}
-	out := make([]model.StaffOption, len(rows))
-	for i, row := range rows {
-		out[i] = model.StaffOption{ID: row.ID, Name: row.FullName}
-	}
-	return out, nil
+	return lookup[model.StaffOption](ctx, r.conn, "staff", listStaffSQL)
 }
 
 // Tags lists the options for the Tags filter.
 func (r *ServiceLookupRepository) Tags(ctx context.Context) ([]model.JobTag, error) {
-	rows, err := r.q.ListJobTags(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list job tags: %w", err)
-	}
-	out := make([]model.JobTag, len(rows))
-	for i, row := range rows {
-		out[i] = model.JobTag{ID: row.ID, Name: row.Name}
-	}
-	return out, nil
+	return lookup[model.JobTag](ctx, r.conn, "job tags", listJobTagsSQL)
 }

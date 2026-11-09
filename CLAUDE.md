@@ -14,14 +14,14 @@
 - The workflow above still applies: ask first, plan mode, then change.
 
 ## Stack
-- Go 1.26+, Gin, PostgreSQL 18 via `pgx/v5` + `pgxpool`, `sqlc` for type-safe queries, `golang-migrate` for migrations.
+- Go 1.26+, Gin, PostgreSQL 18 via `pgx/v5` + `pgxpool` with hand-written parameterized SQL, `golang-migrate` for migrations.
 - `log/slog` for logging, env-based config, Gin binding tags (`validator/v10`) for input validation.
 
 ## Architecture (handler → service → repository; dependencies point inward)
 - `cmd/api/main.go`: wiring and graceful shutdown (`http.Server` + `signal.NotifyContext`) only.
 - `internal/handler`: bind/validate requests, call services, map to DTOs and HTTP codes. No SQL here.
 - `internal/service`: business logic. Depends on repository interfaces, never on Gin.
-- `internal/repository`: Postgres access; sqlc output in `internal/repository/db`.
+- `internal/repository`: Postgres access; `internal/repository/db` holds only the `DBTX` interface; filter-dropdown lookups live in `lookups.go`.
 - `internal/model` (domain), `internal/dto` (request/response), `internal/middleware` (auth, logging, recovery, CORS).
 - `migrations/`: numbered `up`/`down` SQL files. Never edit an applied migration.
 

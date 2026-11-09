@@ -13,12 +13,11 @@ import (
 // InvoiceRepository reads the invoice report. It works on a pool or inside a transaction.
 type InvoiceRepository struct {
 	conn db.DBTX
-	q    *db.Queries
 }
 
 // NewInvoiceRepository returns a repository using conn, typically the shared pool.
 func NewInvoiceRepository(conn db.DBTX) *InvoiceRepository {
-	return &InvoiceRepository{conn: conn, q: db.New(conn)}
+	return &InvoiceRepository{conn: conn}
 }
 
 // Page returns one page of the report and, when withSummary is set, the totals of the whole filtered set. The
@@ -115,39 +114,15 @@ func summarizeInvoices(ctx context.Context, conn db.DBTX, f model.InvoiceFilter)
 
 // ServiceTypes lists the options for the Service filter.
 func (r *InvoiceRepository) ServiceTypes(ctx context.Context) ([]model.ServiceType, error) {
-	rows, err := r.q.ListServiceTypes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list service types: %w", err)
-	}
-	out := make([]model.ServiceType, len(rows))
-	for i, row := range rows {
-		out[i] = model.ServiceType{ID: row.ID, Name: row.Name}
-	}
-	return out, nil
+	return lookup[model.ServiceType](ctx, r.conn, "service types", listServiceTypesSQL)
 }
 
 // Tags lists the options for the Invoice Tags filter.
 func (r *InvoiceRepository) Tags(ctx context.Context) ([]model.InvoiceTag, error) {
-	rows, err := r.q.ListInvoiceTags(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list invoice tags: %w", err)
-	}
-	out := make([]model.InvoiceTag, len(rows))
-	for i, row := range rows {
-		out[i] = model.InvoiceTag{ID: row.ID, Name: row.Name}
-	}
-	return out, nil
+	return lookup[model.InvoiceTag](ctx, r.conn, "invoice tags", listInvoiceTagsSQL)
 }
 
 // PaymentTerms lists the options for the Payment Terms filter.
 func (r *InvoiceRepository) PaymentTerms(ctx context.Context) ([]model.PaymentTerm, error) {
-	rows, err := r.q.ListPaymentTerms(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list payment terms: %w", err)
-	}
-	out := make([]model.PaymentTerm, len(rows))
-	for i, row := range rows {
-		out[i] = model.PaymentTerm{ID: row.ID, Name: row.Name, Description: row.Description}
-	}
-	return out, nil
+	return lookup[model.PaymentTerm](ctx, r.conn, "payment terms", listPaymentTermsSQL)
 }

@@ -13,12 +13,11 @@ import (
 // PaymentsCollectedRepository reads the Payments Collected report. It works on a pool or inside a transaction.
 type PaymentsCollectedRepository struct {
 	conn db.DBTX
-	q    *db.Queries
 }
 
 // NewPaymentsCollectedRepository returns a repository using conn, typically the shared pool.
 func NewPaymentsCollectedRepository(conn db.DBTX) *PaymentsCollectedRepository {
-	return &PaymentsCollectedRepository{conn: conn, q: db.New(conn)}
+	return &PaymentsCollectedRepository{conn: conn}
 }
 
 // Page returns one page of the report (up to q.Limit+1 rows, so the caller can tell whether more follow) and,
@@ -113,13 +112,5 @@ func summarizePaymentsCollected(ctx context.Context, conn db.DBTX, f model.Payme
 
 // Staff lists the options for the Staff filter.
 func (r *PaymentsCollectedRepository) Staff(ctx context.Context) ([]model.StaffOption, error) {
-	rows, err := r.q.ListStaff(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list staff: %w", err)
-	}
-	out := make([]model.StaffOption, len(rows))
-	for i, row := range rows {
-		out[i] = model.StaffOption{ID: row.ID, Name: row.FullName}
-	}
-	return out, nil
+	return lookup[model.StaffOption](ctx, r.conn, "staff", listStaffSQL)
 }

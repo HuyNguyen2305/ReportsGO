@@ -12,12 +12,11 @@ import (
 // InboundLeadRepository reads the Inbound Leads report. It works on a pool or inside a transaction.
 type InboundLeadRepository struct {
 	conn db.DBTX
-	q    *db.Queries
 }
 
 // NewInboundLeadRepository returns a repository using conn, typically the shared pool.
 func NewInboundLeadRepository(conn db.DBTX) *InboundLeadRepository {
-	return &InboundLeadRepository{conn: conn, q: db.New(conn)}
+	return &InboundLeadRepository{conn: conn}
 }
 
 // List returns one page of the report: up to q.Limit+1 rows, so the caller can tell whether more follow.
@@ -63,13 +62,5 @@ func (r *InboundLeadRepository) List(ctx context.Context, q model.InboundLeadQue
 
 // LeadSources lists the options for the Source filter.
 func (r *InboundLeadRepository) LeadSources(ctx context.Context) ([]model.LeadSource, error) {
-	rows, err := r.q.ListLeadSources(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list lead sources: %w", err)
-	}
-	out := make([]model.LeadSource, len(rows))
-	for i, row := range rows {
-		out[i] = model.LeadSource{ID: row.ID, Name: row.Name}
-	}
-	return out, nil
+	return lookup[model.LeadSource](ctx, r.conn, "lead sources", listLeadSourcesSQL)
 }

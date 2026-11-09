@@ -11,12 +11,11 @@ import (
 // SalesTaxRepository reads the Sales Tax Summary. It works on a pool or inside a transaction.
 type SalesTaxRepository struct {
 	conn db.DBTX
-	q    *db.Queries
 }
 
 // NewSalesTaxRepository returns a repository using conn, typically the shared pool.
 func NewSalesTaxRepository(conn db.DBTX) *SalesTaxRepository {
-	return &SalesTaxRepository{conn: conn, q: db.New(conn)}
+	return &SalesTaxRepository{conn: conn}
 }
 
 // Summary returns one row per tax rate with its totals for the filter's basis.
@@ -54,13 +53,5 @@ func (r *SalesTaxRepository) Summary(ctx context.Context, f model.SalesTaxFilter
 
 // Rates lists every tax rate, for the Tax Rate tab.
 func (r *SalesTaxRepository) Rates(ctx context.Context) ([]model.TaxRateOption, error) {
-	rows, err := r.q.ListTaxRates(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list tax rates: %w", err)
-	}
-	out := make([]model.TaxRateOption, len(rows))
-	for i, row := range rows {
-		out[i] = model.TaxRateOption{ID: row.ID, Name: row.Name, Rate: row.Rate, Active: row.Active}
-	}
-	return out, nil
+	return lookup[model.TaxRateOption](ctx, r.conn, "tax rates", listTaxRatesSQL)
 }

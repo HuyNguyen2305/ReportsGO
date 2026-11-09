@@ -13,12 +13,11 @@ import (
 // JobRepository reads the new jobs report. It works on a pool or inside a transaction.
 type JobRepository struct {
 	conn db.DBTX
-	q    *db.Queries
 }
 
 // NewJobRepository returns a repository using conn, typically the shared pool.
 func NewJobRepository(conn db.DBTX) *JobRepository {
-	return &JobRepository{conn: conn, q: db.New(conn)}
+	return &JobRepository{conn: conn}
 }
 
 // Page returns one page of the report and, when withSummary is set, the count and total of the whole filtered
@@ -112,39 +111,15 @@ func summarizeJobs(ctx context.Context, conn db.DBTX, f model.JobFilter) (model.
 
 // ServiceTypes lists the options for the Service Type filter.
 func (r *JobRepository) ServiceTypes(ctx context.Context) ([]model.ServiceType, error) {
-	rows, err := r.q.ListServiceTypes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list service types: %w", err)
-	}
-	out := make([]model.ServiceType, len(rows))
-	for i, row := range rows {
-		out[i] = model.ServiceType{ID: row.ID, Name: row.Name}
-	}
-	return out, nil
+	return lookup[model.ServiceType](ctx, r.conn, "service types", listServiceTypesSQL)
 }
 
 // LeadSources lists the options for the Source filter.
 func (r *JobRepository) LeadSources(ctx context.Context) ([]model.LeadSource, error) {
-	rows, err := r.q.ListLeadSources(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list lead sources: %w", err)
-	}
-	out := make([]model.LeadSource, len(rows))
-	for i, row := range rows {
-		out[i] = model.LeadSource{ID: row.ID, Name: row.Name}
-	}
-	return out, nil
+	return lookup[model.LeadSource](ctx, r.conn, "lead sources", listLeadSourcesSQL)
 }
 
 // Staff lists the options for the Assigned To filter.
 func (r *JobRepository) Staff(ctx context.Context) ([]model.StaffOption, error) {
-	rows, err := r.q.ListStaff(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list staff: %w", err)
-	}
-	out := make([]model.StaffOption, len(rows))
-	for i, row := range rows {
-		out[i] = model.StaffOption{ID: row.ID, Name: row.FullName}
-	}
-	return out, nil
+	return lookup[model.StaffOption](ctx, r.conn, "staff", listStaffSQL)
 }
