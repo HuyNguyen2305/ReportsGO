@@ -22,16 +22,6 @@ func NewCustomerRepository(conn db.DBTX) *CustomerRepository {
 	return &CustomerRepository{conn: conn, q: db.New(conn)}
 }
 
-// List returns one page of the report: up to q.Limit+1 rows, so the caller can tell whether more follow.
-func (r *CustomerRepository) List(ctx context.Context, q model.CustomerQuery) ([]model.CustomerRow, error) {
-	return listCustomers(ctx, r.conn, q)
-}
-
-// Summary counts the whole filtered set (not just one page).
-func (r *CustomerRepository) Summary(ctx context.Context, f model.CustomerFilter) (model.CustomerSummary, error) {
-	return summarizeCustomers(ctx, r.conn, f)
-}
-
 // Page returns one page of the report and, when withSummary is set, the count of the whole filtered set. The
 // rows and the count come from one snapshot, so the summary always describes the rows' set even while other
 // connections commit. On a pool that is a read-only REPEATABLE READ transaction; a repository already bound to

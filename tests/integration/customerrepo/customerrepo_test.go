@@ -48,7 +48,7 @@ func query(f model.CustomerFilter, key model.CustomerSortKey, desc bool, limit i
 
 func listAll(t *testing.T, repo *repository.CustomerRepository, f model.CustomerFilter, key model.CustomerSortKey, desc bool) []model.CustomerRow {
 	t.Helper()
-	rows, err := repo.List(context.Background(), query(f, key, desc, 1000))
+	rows, err := pageRows(context.Background(), repo, query(f, key, desc, 1000))
 	require.NoError(t, err)
 	return rows
 }
@@ -129,7 +129,7 @@ func TestACustomerWithSeveralPhonesIsOneRow(t *testing.T) {
 	f.Search = "70001"
 
 	require.Len(t, e.listAll(t, f, model.CustomerSortCreatedAt, true), 1)
-	s, err := e.repo.Summary(context.Background(), f)
+	s, err := pageSummary(context.Background(), e.repo, f)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, s.Count)
 }
@@ -212,7 +212,7 @@ func walk(t *testing.T, repo *repository.CustomerRepository, key model.CustomerS
 	for pages := 0; ; pages++ {
 		require.Less(t, pages, 100, "paging must terminate")
 
-		rows, err := repo.List(context.Background(), q)
+		rows, err := pageRows(context.Background(), repo, q)
 		require.NoError(t, err)
 		page := rows
 		hasMore := len(rows) > limit
@@ -345,7 +345,7 @@ func TestListFilters(t *testing.T) {
 			rows := e.listAll(t, f, model.CustomerSortCreatedAt, false)
 			require.Len(t, rows, tt.count, "got %v", accounts(rows))
 
-			summary, err := e.repo.Summary(ctx, f)
+			summary, err := pageSummary(ctx, e.repo, f)
 			require.NoError(t, err)
 			require.Equal(t, model.CustomerSummary{Count: int64(tt.count)}, summary, "the summary follows the same filter")
 		})
@@ -359,7 +359,7 @@ func TestSummaryCountMatchesAnIndependentQuery(t *testing.T) {
 		SELECT count(*) FROM customers
 		WHERE created_at >= '2026-10-01 00:00:00+00' AND created_at < '2026-11-01 00:00:00+00'`).Scan(&count))
 
-	s, err := e.repo.Summary(context.Background(), october())
+	s, err := pageSummary(context.Background(), e.repo, october())
 
 	require.NoError(t, err)
 	require.EqualValues(t, count, s.Count)
@@ -371,7 +371,7 @@ func TestSummaryOfNothingIsZero(t *testing.T) {
 	f := october()
 	f.Search = "zzz-nothing"
 
-	s, err := e.repo.Summary(context.Background(), f)
+	s, err := pageSummary(context.Background(), e.repo, f)
 
 	require.NoError(t, err)
 	require.Equal(t, model.CustomerSummary{}, s)
@@ -395,9 +395,9 @@ func TestRepositoryRejectsInvalidQueries(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 
-	_, err := e.repo.List(ctx, query(october(), "bogus", false, 5))
+	_, err := pageRows(ctx, e.repo, query(october(), "bogus", false, 5))
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
-	_, err = e.repo.List(ctx, query(october(), model.CustomerSortCreatedAt, false, 0))
+	_, err = pageRows(ctx, e.repo, query(october(), model.CustomerSortCreatedAt, false, 0))
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
 }
 
@@ -420,9 +420,9 @@ func TestPage(t *testing.T) {
 		page, err := e.repo.Page(ctx, q, true)
 		require.NoError(t, err)
 
-		rows, err := e.repo.List(ctx, q)
+		rows, err := pageRows(ctx, e.repo, q)
 		require.NoError(t, err)
-		summary, err := e.repo.Summary(ctx, q.Filter)
+		summary, err := pageSummary(ctx, e.repo, q.Filter)
 		require.NoError(t, err)
 
 		require.Equal(t, rows, page.Rows)
@@ -436,7 +436,7 @@ func TestPage(t *testing.T) {
 		page, err := e.repo.Page(ctx, q, false)
 		require.NoError(t, err)
 
-		rows, err := e.repo.List(ctx, q)
+		rows, err := pageRows(ctx, e.repo, q)
 		require.NoError(t, err)
 		require.Equal(t, rows, page.Rows)
 		require.Nil(t, page.Summary)
@@ -488,7 +488,7 @@ func TestPageReadsRowsAndSummaryFromOneSnapshot(t *testing.T) {
 	require.Len(t, page.Rows, octoberCustomers)
 	require.EqualValues(t, octoberCustomers, page.Summary.Count, "the count ignores the customer committed after the rows were read")
 
-	after, err := e.repo.Summary(ctx, q.Filter)
+	after, err := pageSummary(ctx, e.repo, q.Filter)
 	require.NoError(t, err)
 	require.EqualValues(t, octoberCustomers+1, after.Count, "the committed customer is real and visible to a later read")
 }
@@ -498,9 +498,9 @@ func TestCancelledContextIsReturnedAsAnError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := e.repo.List(ctx, query(october(), model.CustomerSortCreatedAt, false, 5))
+	_, err := pageRows(ctx, e.repo, query(october(), model.CustomerSortCreatedAt, false, 5))
 	require.ErrorIs(t, err, context.Canceled)
-	_, err = e.repo.Summary(ctx, october())
+	_, err = pageSummary(ctx, e.repo, october())
 	require.ErrorIs(t, err, context.Canceled)
 	_, err = e.repo.LeadSources(ctx)
 	require.ErrorIs(t, err, context.Canceled)
@@ -591,4 +591,19 @@ func TestRowsCarryTheTopNoteAddressFirstJobAndCompletedJobs(t *testing.T) {
 		}
 		require.Zero(t, after.CompletedJobs)
 	})
+}
+
+// pageRows reads one page of rows through Page, the repository's only public read path.
+func pageRows(ctx context.Context, r *repository.CustomerRepository, q model.CustomerQuery) ([]model.CustomerRow, error) {
+	page, err := r.Page(ctx, q, false)
+	return page.Rows, err
+}
+
+// pageSummary reads the totals of a filtered set through Page.
+func pageSummary(ctx context.Context, r *repository.CustomerRepository, f model.CustomerFilter) (model.CustomerSummary, error) {
+	page, err := r.Page(ctx, model.CustomerQuery{Filter: f, Sort: model.CustomerSort{Key: model.CustomerSortCreatedAt}, Limit: 1}, true)
+	if err != nil {
+		return model.CustomerSummary{}, err
+	}
+	return *page.Summary, nil
 }
