@@ -155,9 +155,11 @@ func TestEverySortKeyOrdersCorrectlyInBothDirections(t *testing.T) {
 	e := newEnv(t)
 	require.Len(t, sortCast, len(model.CustomerSortKeys), "every sort key must be covered")
 
-	// The customer name and the account number are unique, so those keys never tie.
+	// The customer name and the account number are unique, so those keys never tie. Address ties too: customers
+	// without a service location all sort as an empty address.
 	tied := map[model.CustomerSortKey]bool{
 		model.CustomerSortEmail: true, model.CustomerSortPhone: true, model.CustomerSortSource: true, model.CustomerSortCreatedAt: true,
+		model.CustomerSortAddress: true,
 	}
 
 	for _, key := range model.CustomerSortKeys {
