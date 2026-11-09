@@ -58,7 +58,7 @@ func query(f model.DocumentFilter, key model.DocumentSortKey, desc bool, limit i
 
 func listAll(t *testing.T, repo *repository.DocumentRepository, f model.DocumentFilter, key model.DocumentSortKey, desc bool) []model.DocumentRow {
 	t.Helper()
-	rows, err := repo.List(context.Background(), query(f, key, desc, 1000))
+	rows, err := pageRows(context.Background(), repo, query(f, key, desc, 1000))
 	require.NoError(t, err)
 	return rows
 }
@@ -197,7 +197,7 @@ func walk(t *testing.T, repo *repository.DocumentRepository, key model.DocumentS
 	for pages := 0; ; pages++ {
 		require.Less(t, pages, 100, "paging must terminate")
 
-		rows, err := repo.List(context.Background(), q)
+		rows, err := pageRows(context.Background(), repo, q)
 		require.NoError(t, err)
 		page := rows
 		hasMore := len(rows) > limit
@@ -330,7 +330,7 @@ func TestListFilters(t *testing.T) {
 				require.ElementsMatch(t, tt.want, numbers(rows))
 			}
 
-			summary, err := e.repo.Summary(ctx, f)
+			summary, err := pageSummary(ctx, e.repo, f)
 			require.NoError(t, err)
 			require.EqualValues(t, tt.count, summary.Count, "the summary follows the same filter")
 		})
@@ -371,7 +371,7 @@ func TestSummary(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("counts the whole filtered set", func(t *testing.T) {
-		s, err := e.repo.Summary(ctx, october())
+		s, err := pageSummary(ctx, e.repo, october())
 		require.NoError(t, err)
 		require.EqualValues(t, 18, s.Count)
 		require.EqualValues(t, len(e.listAll(t, october(), model.DocumentSortNumber, false)), s.Count)
@@ -380,7 +380,7 @@ func TestSummary(t *testing.T) {
 	t.Run("deleted tab", func(t *testing.T) {
 		f := october()
 		f.Lifecycle = model.LifecycleDeleted
-		s, err := e.repo.Summary(ctx, f)
+		s, err := pageSummary(ctx, e.repo, f)
 		require.NoError(t, err)
 		require.EqualValues(t, 1, s.Count)
 	})
@@ -388,7 +388,7 @@ func TestSummary(t *testing.T) {
 	t.Run("an empty set counts zero", func(t *testing.T) {
 		f := october()
 		f.Search = "zzz-nothing"
-		s, err := e.repo.Summary(ctx, f)
+		s, err := pageSummary(ctx, e.repo, f)
 		require.NoError(t, err)
 		require.Equal(t, model.DocumentSummary{}, s)
 	})
@@ -433,15 +433,15 @@ func TestRepositoryWorksInsideATransaction(t *testing.T) {
 		FROM document_types dt, customers c WHERE c.account_number = '5001' LIMIT 1`)
 	require.NoError(t, err)
 
-	inTx, err := repository.NewDocumentRepository(tx).Summary(ctx, october())
+	inTx, err := pageSummary(ctx, repository.NewDocumentRepository(tx), october())
 	require.NoError(t, err)
-	outside, err := e.repo.Summary(ctx, october())
+	outside, err := pageSummary(ctx, e.repo, october())
 	require.NoError(t, err)
 
 	require.EqualValues(t, 19, inTx.Count, "the transaction sees its own uncommitted row")
 	require.EqualValues(t, 18, outside.Count, "other connections do not")
 
-	rows, err := repository.NewDocumentRepository(tx).List(ctx, query(october(), model.DocumentSortNumber, false, 100))
+	rows, err := pageRows(ctx, repository.NewDocumentRepository(tx), query(october(), model.DocumentSortNumber, false, 100))
 	require.NoError(t, err)
 	require.Contains(t, numbers(rows), "TX1")
 }
@@ -455,9 +455,9 @@ func TestPage(t *testing.T) {
 		page, err := e.repo.Page(ctx, q, true)
 		require.NoError(t, err)
 
-		rows, err := e.repo.List(ctx, q)
+		rows, err := pageRows(ctx, e.repo, q)
 		require.NoError(t, err)
-		summary, err := e.repo.Summary(ctx, q.Filter)
+		summary, err := pageSummary(ctx, e.repo, q.Filter)
 		require.NoError(t, err)
 
 		require.Equal(t, rows, page.Rows)
@@ -471,7 +471,7 @@ func TestPage(t *testing.T) {
 		page, err := e.repo.Page(ctx, q, false)
 		require.NoError(t, err)
 
-		rows, err := e.repo.List(ctx, q)
+		rows, err := pageRows(ctx, e.repo, q)
 		require.NoError(t, err)
 		require.Equal(t, rows, page.Rows)
 		require.Nil(t, page.Summary)
@@ -530,7 +530,7 @@ func TestPageReadsRowsAndSummaryFromOneSnapshot(t *testing.T) {
 	require.Len(t, page.Rows, 18)
 	require.EqualValues(t, 18, page.Summary.Count, "the count ignores the document committed after the rows were read")
 
-	after, err := e.repo.Summary(ctx, q.Filter)
+	after, err := pageSummary(ctx, e.repo, q.Filter)
 	require.NoError(t, err)
 	require.EqualValues(t, 19, after.Count, "the committed document is real and visible to a later read")
 }
@@ -540,10 +540,10 @@ func TestQueriesHonorContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := e.repo.List(ctx, query(october(), model.DocumentSortCreatedAt, true, 10))
+	_, err := pageRows(ctx, e.repo, query(october(), model.DocumentSortCreatedAt, true, 10))
 	require.ErrorIs(t, err, context.Canceled)
 
-	_, err = e.repo.Summary(ctx, october())
+	_, err = pageSummary(ctx, e.repo, october())
 	require.ErrorIs(t, err, context.Canceled)
 
 	_, err = e.repo.DocumentTypes(ctx)
@@ -554,15 +554,15 @@ func TestInvalidQueriesAreRejectedBeforeReachingTheDatabase(t *testing.T) {
 	e := newEnv(t, false)
 	ctx := context.Background()
 
-	_, err := e.repo.List(ctx, query(october(), "nope", false, 10))
+	_, err := pageRows(ctx, e.repo, query(october(), "nope", false, 10))
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
 
-	_, err = e.repo.List(ctx, query(october(), model.DocumentSortCreatedAt, false, 0))
+	_, err = pageRows(ctx, e.repo, query(october(), model.DocumentSortCreatedAt, false, 0))
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
 
 	bad := october()
 	bad.Lifecycle = model.LifecycleArchived
-	_, err = e.repo.Summary(ctx, bad)
+	_, err = pageSummary(ctx, e.repo, bad)
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
 }
 
@@ -576,7 +576,7 @@ func TestConcurrentCallsAgree(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			s, err := e.repo.Summary(context.Background(), october())
+			s, err := pageSummary(context.Background(), e.repo, october())
 			counts[i], errs[i] = s.Count, err
 		}()
 	}
@@ -586,4 +586,19 @@ func TestConcurrentCallsAgree(t *testing.T) {
 		require.NoError(t, errs[i])
 		require.EqualValues(t, 18, counts[i])
 	}
+}
+
+// pageRows reads one page of rows through Page, the repository's only public read path.
+func pageRows(ctx context.Context, r *repository.DocumentRepository, q model.DocumentQuery) ([]model.DocumentRow, error) {
+	page, err := r.Page(ctx, q, false)
+	return page.Rows, err
+}
+
+// pageSummary reads the totals of a filtered set through Page.
+func pageSummary(ctx context.Context, r *repository.DocumentRepository, f model.DocumentFilter) (model.DocumentSummary, error) {
+	page, err := r.Page(ctx, model.DocumentQuery{Filter: f, Sort: model.DocumentSort{Key: model.DocumentSortCreatedAt}, Limit: 1}, true)
+	if err != nil {
+		return model.DocumentSummary{}, err
+	}
+	return *page.Summary, nil
 }

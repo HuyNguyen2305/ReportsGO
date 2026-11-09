@@ -21,16 +21,6 @@ func NewDocumentRepository(conn db.DBTX) *DocumentRepository {
 	return &DocumentRepository{conn: conn, q: db.New(conn)}
 }
 
-// List returns one page of the report: up to q.Limit+1 rows, so the caller can tell whether more follow.
-func (r *DocumentRepository) List(ctx context.Context, q model.DocumentQuery) ([]model.DocumentRow, error) {
-	return listDocuments(ctx, r.conn, q)
-}
-
-// Summary counts the whole filtered set (not just one page).
-func (r *DocumentRepository) Summary(ctx context.Context, f model.DocumentFilter) (model.DocumentSummary, error) {
-	return summarizeDocuments(ctx, r.conn, f)
-}
-
 // Page returns one page of the report and, when withSummary is set, the count of the whole filtered set. The
 // rows and the count come from one snapshot, so the summary always describes the rows' set even while other
 // connections commit. On a pool that is a read-only REPEATABLE READ transaction; a repository already bound to
