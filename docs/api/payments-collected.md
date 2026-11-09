@@ -87,8 +87,10 @@ as text.
 - `service_state` is the state of the service location of the invoice's job. It is `null` when the invoice has no
   job, the location has no state, or the payment is for a credit.
 - `staff` is the staff member who took the payment, or `null` when nobody did (online card payments, credits).
-- `without_tax` is the part of the payment that is not tax: the amount times the invoice's total without tax, divided
-  by the invoice total, rounded to the cent per row. A payment for a credit, or for an invoice with a zero total or
+- `without_tax` is the part of the payment that is not tax: the amount less its share of each of the invoice's tax
+  lines (the amount divided by the invoice total, rounded to the cent per tax line, as in the
+  [Sales Tax Summary](sales-tax-summary.md)), so `amount - without_tax` equals the tax that report shows for the
+  payment. A payment for a credit, or for an invoice with a zero total or
   no tax lines, has `without_tax` equal to `amount`. Surcharges are not tax and stay in both figures.
 - `summary` totals the **whole filtered set**, not just this page, and is only present on the **first page** (when no
   `cursor` is sent); it is `null` on later pages. Its `without_tax` adds up the rounded row values, so the footer
