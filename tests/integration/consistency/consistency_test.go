@@ -206,3 +206,40 @@ func TestNewJobsAndServiceLookupSplitTheJobsIntoLiveAndDeleted(t *testing.T) {
 	require.Equal(t, scalar(t, pool, `SELECT count(*) FROM jobs`), newJobs.Count+deleted.Summary.Tabs.Deleted,
 		"every job is either a new job or in the Service Lookup Deleted tab")
 }
+
+// A part payment of an invoice with several tax lines: the tax is rounded per line, so Sales Tax and Payments
+// Collected must report the same cents (here 3 lines of 0.015 share = 0.06, where one rounded total would give 0.05).
+func TestPaymentsCollectedTaxMatchesSalesTax(t *testing.T) {
+	pool := testdb.SeededPool(t)
+	ctx := context.Background()
+	for _, sql := range []string{
+		`INSERT INTO billing_documents (document_number, customer_id, document_date, total, status)
+			SELECT '99001', customer_id, '2026-12-30', 1.00, 'sent' FROM billing_documents WHERE document_number = '85031'`,
+		`INSERT INTO invoice_tax_lines (invoice_id, tax_rate_id, taxable_amount, tax_amount)
+			SELECT b.id, tr.id, 0.50, 0.05 FROM billing_documents b, tax_rates tr
+			WHERE b.document_number = '99001' AND tr.name IN ('VAT', 'VN', 'd12')`,
+		`INSERT INTO payments (customer_id, invoice_id, method_type, amount, payment_date)
+			SELECT customer_id, id, 'cash', 0.30, '2026-12-30' FROM billing_documents WHERE document_number = '99001'`,
+	} {
+		_, err := pool.Exec(ctx, sql)
+		require.NoError(t, err)
+	}
+	d := day(2026, 12, 30)
+
+	page, err := repository.NewPaymentsCollectedRepository(pool).Page(ctx, model.PaymentCollectedQuery{
+		Filter: model.PaymentCollectedFilter{DateFrom: d, DateTo: d, PaymentFor: model.PaymentForInvoices},
+		Sort:   model.PaymentCollectedSort{Key: model.PaymentCollectedSortDate}, Limit: 1,
+	}, true)
+	require.NoError(t, err)
+	rows, err := repository.NewSalesTaxRepository(pool).Summary(ctx,
+		model.SalesTaxFilter{DateFrom: d, DateTo: d, Basis: model.SalesTaxCollected},
+		model.SalesTaxSort{Key: model.SalesTaxSortName})
+	require.NoError(t, err)
+	var tax model.Money
+	for _, r := range rows {
+		tax += r.TaxCollected
+	}
+
+	require.Equal(t, model.Money(6), tax)
+	require.Equal(t, tax, page.Summary.Amount-page.Summary.WithoutTax)
+}
