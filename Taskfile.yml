@@ -42,7 +42,7 @@ tasks:
   mocks:
     desc: Generate mocks (mockery) into tests/mocks
     cmds:
-      - go tool mockery
+      - go tool -modfile=tools/go.mod mockery
 
   test:
     desc: Run unit tests
@@ -59,4 +59,4 @@ tasks:
     cmds:
       - gofmt -l .
       - go vet -tags integration ./...
-      - go tool golangci-lint run --build-tags integration ./...
+      - go tool -modfile=tools/go.mod golangci-lint run --build-tags integration ./...

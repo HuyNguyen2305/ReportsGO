@@ -36,8 +36,8 @@
 - `tests/unit/<package>/`: table-driven tests with `testify` and repositories mocked with `mockery`.
 - `tests/integration/<feature>/`: real Postgres via `TEST_POSTGRES_URL` (throwaway database per test), endpoints via `httptest`, tagged `//go:build integration`.
 - Each new function gets a unit test; each new endpoint or feature gets an integration test.
-- Run: `go tool task test`, `go tool task test:integration`, `go tool task check` before done.
+- Run: `go tool -modfile=tools/go.mod task test`, `go tool -modfile=tools/go.mod task test:integration`, `go tool -modfile=tools/go.mod task check` before done.
 
 ## Formatting hooks (`.claude/settings.json`, PostToolUse on Edit|Write)
-- `*.go` → `gofmt -w` then `golangci-lint run` on the file's package, reporting only the edited file's issues (no `--fix`, so other files are never rewritten; `go tool task check` covers the rest).
+- `*.go` → `gofmt -w` then `golangci-lint run` on the file's package, reporting only the edited file's issues (no `--fix`, so other files are never rewritten; `go tool -modfile=tools/go.mod task check` covers the rest).
 - Fix lint errors at the source; don't disable rules to silence them.
