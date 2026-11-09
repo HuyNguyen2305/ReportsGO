@@ -47,7 +47,7 @@ func query(f model.PaymentFilter, key model.PaymentSortKey, desc bool, limit int
 
 func (e env) listAll(t *testing.T, f model.PaymentFilter, key model.PaymentSortKey, desc bool) []model.PaymentRow {
 	t.Helper()
-	rows, err := e.repo.List(context.Background(), query(f, key, desc, 1000))
+	rows, err := pageRows(context.Background(), e.repo, query(f, key, desc, 1000))
 	require.NoError(t, err)
 	return rows
 }
@@ -244,7 +244,7 @@ func walk(t *testing.T, repo *repository.PaymentRepository, key model.PaymentSor
 	for pages := 0; ; pages++ {
 		require.Less(t, pages, 100, "paging must terminate")
 
-		rows, err := repo.List(context.Background(), q)
+		rows, err := pageRows(context.Background(), repo, q)
 		require.NoError(t, err)
 		page := rows
 		hasMore := len(rows) > limit
@@ -338,7 +338,7 @@ func TestListFilters(t *testing.T) {
 			rows := e.listAll(t, f, model.PaymentSortDate, false)
 			require.Len(t, rows, tt.count)
 
-			summary, err := e.repo.Summary(ctx, f)
+			summary, err := pageSummary(ctx, e.repo, f)
 			require.NoError(t, err)
 			require.EqualValues(t, tt.count, summary.Count, "the summary follows the same filter")
 
@@ -381,7 +381,7 @@ func TestSummaryTotalMatchesAnIndependentQuery(t *testing.T) {
 		SELECT count(*), (sum(amount) * 100)::bigint FROM payments
 		WHERE deleted_at IS NULL AND payment_date BETWEEN '2026-10-01' AND '2026-10-31'`).Scan(&count, &total))
 
-	s, err := e.repo.Summary(context.Background(), october())
+	s, err := pageSummary(context.Background(), e.repo, october())
 
 	require.NoError(t, err)
 	require.EqualValues(t, count, s.Count)
@@ -394,7 +394,7 @@ func TestSummaryOfNothingIsZero(t *testing.T) {
 	f := october()
 	f.Search = "zzz-nothing"
 
-	s, err := e.repo.Summary(context.Background(), f)
+	s, err := pageSummary(context.Background(), e.repo, f)
 
 	require.NoError(t, err)
 	require.Equal(t, model.PaymentSummary{}, s)
@@ -404,11 +404,11 @@ func TestRepositoryRejectsInvalidQueries(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 
-	_, err := e.repo.List(ctx, query(october(), "bogus", false, 5))
+	_, err := pageRows(ctx, e.repo, query(october(), "bogus", false, 5))
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
-	_, err = e.repo.List(ctx, query(october(), model.PaymentSortDate, false, 0))
+	_, err = pageRows(ctx, e.repo, query(october(), model.PaymentSortDate, false, 0))
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
-	_, err = e.repo.Summary(ctx, model.PaymentFilter{Lifecycle: model.LifecycleArchived})
+	_, err = pageSummary(ctx, e.repo, model.PaymentFilter{Lifecycle: model.LifecycleArchived})
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
 }
 
@@ -432,9 +432,9 @@ func TestPage(t *testing.T) {
 		page, err := e.repo.Page(ctx, q, true)
 		require.NoError(t, err)
 
-		rows, err := e.repo.List(ctx, q)
+		rows, err := pageRows(ctx, e.repo, q)
 		require.NoError(t, err)
-		summary, err := e.repo.Summary(ctx, q.Filter)
+		summary, err := pageSummary(ctx, e.repo, q.Filter)
 		require.NoError(t, err)
 
 		require.Equal(t, rows, page.Rows)
@@ -448,7 +448,7 @@ func TestPage(t *testing.T) {
 		page, err := e.repo.Page(ctx, q, false)
 		require.NoError(t, err)
 
-		rows, err := e.repo.List(ctx, q)
+		rows, err := pageRows(ctx, e.repo, q)
 		require.NoError(t, err)
 		require.Equal(t, rows, page.Rows)
 		require.Nil(t, page.Summary)
@@ -505,7 +505,7 @@ func TestPageReadsRowsAndSummaryFromOneSnapshot(t *testing.T) {
 	}
 	require.Equal(t, rowsTotal, page.Summary.Total, "the total is the sum of the rows it describes")
 
-	after, err := e.repo.Summary(ctx, q.Filter)
+	after, err := pageSummary(ctx, e.repo, q.Filter)
 	require.NoError(t, err)
 	require.EqualValues(t, octoberActive+1, after.Count, "the committed payment is real and visible to a later read")
 }
@@ -515,8 +515,23 @@ func TestCancelledContextIsReturnedAsAnError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := e.repo.List(ctx, query(october(), model.PaymentSortDate, false, 5))
+	_, err := pageRows(ctx, e.repo, query(october(), model.PaymentSortDate, false, 5))
 	require.ErrorIs(t, err, context.Canceled)
-	_, err = e.repo.Summary(ctx, october())
+	_, err = pageSummary(ctx, e.repo, october())
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+// pageRows reads one page of rows through Page, the repository's only public read path.
+func pageRows(ctx context.Context, r *repository.PaymentRepository, q model.PaymentQuery) ([]model.PaymentRow, error) {
+	page, err := r.Page(ctx, q, false)
+	return page.Rows, err
+}
+
+// pageSummary reads the totals of a filtered set through Page.
+func pageSummary(ctx context.Context, r *repository.PaymentRepository, f model.PaymentFilter) (model.PaymentSummary, error) {
+	page, err := r.Page(ctx, model.PaymentQuery{Filter: f, Sort: model.PaymentSort{Key: model.PaymentSortDate}, Limit: 1}, true)
+	if err != nil {
+		return model.PaymentSummary{}, err
+	}
+	return *page.Summary, nil
 }

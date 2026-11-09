@@ -20,16 +20,6 @@ func NewPaymentRepository(conn db.DBTX) *PaymentRepository {
 	return &PaymentRepository{conn: conn}
 }
 
-// List returns one page of the report: up to q.Limit+1 rows, so the caller can tell whether more follow.
-func (r *PaymentRepository) List(ctx context.Context, q model.PaymentQuery) ([]model.PaymentRow, error) {
-	return listPayments(ctx, r.conn, q)
-}
-
-// Summary counts and totals the whole filtered set (not just one page).
-func (r *PaymentRepository) Summary(ctx context.Context, f model.PaymentFilter) (model.PaymentSummary, error) {
-	return summarizePayments(ctx, r.conn, f)
-}
-
 // Page returns one page of the report and, when withSummary is set, the count and total of the whole filtered
 // set. The rows and the summary come from one snapshot, so the summary always describes the rows' set even while
 // other connections commit. On a pool that is a read-only REPEATABLE READ transaction; a repository already
