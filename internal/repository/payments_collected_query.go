@@ -16,12 +16,12 @@ const paymentCollectedAlias = "p"
 func invoiceTaxShare(pay string) string {
 	return fmt.Sprintf(`
 LEFT JOIN LATERAL (
-    SELECT COALESCE(SUM(round(l.tax_amount * LEAST(%[1]s.amount, i.total) / NULLIF(i.total, 0), 2)), 0) AS tax
+    SELECT COALESCE(SUM(round(l.tax_amount * %[1]s.amount / NULLIF(i.total, 0), 2)), 0) AS tax
     FROM invoice_tax_lines l WHERE l.invoice_id = %[1]s.invoice_id) tx ON true`, pay)
 }
 
 // withoutTax is the amount of the paying row "pay" less its tax share (see invoiceTaxShare). The list and the summary
-// both use this one expression, so the footer always adds up the rounded row values. A payment above the invoice total shares at most the whole tax.
+// both use this one expression, so the footer always adds up the rounded row values.
 func withoutTax(pay string) string {
 	return fmt.Sprintf(`(CASE WHEN i.id IS NULL OR i.total = 0 THEN %[1]s.amount
     ELSE %[1]s.amount - tx.tax END)`, pay)
@@ -64,8 +64,7 @@ LEFT JOIN users u ON u.id = p.received_by` + paymentInvoiceTax
 // applyPaymentCollectedFilter adds the filter's conditions. List and Summary share it. Only payments that were
 // paid and not deleted are collected; pending, failed, refunded and deleted payments never appear.
 func applyPaymentCollectedFilter(w *whereBuilder, f model.PaymentCollectedFilter) error {
-	// A payment on a void invoice is not collected; a credit payment has no invoice.
-	w.add("p.status = 'paid' AND p.deleted_at IS NULL AND (i.id IS NULL OR i.status <> 'void')")
+	w.add("p.status = 'paid' AND p.deleted_at IS NULL")
 
 	switch f.PaymentFor {
 	case model.PaymentForInvoices, "":

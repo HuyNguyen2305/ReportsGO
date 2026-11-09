@@ -183,7 +183,7 @@ func salesBreakdownFacts(w *whereBuilder, f model.SalesBreakdownFilter) (string,
         extract(month FROM p.payment_date)::int AS month, ` + amount + ` AS amount
     FROM payments p
     JOIN billing_documents i ON i.id = p.invoice_id` + paymentInvoiceTax + `
-    WHERE p.status = 'paid' AND p.deleted_at IS NULL AND i.status <> 'void'
+    WHERE p.status = 'paid' AND p.deleted_at IS NULL
       AND p.payment_date >= ` + from + ` AND p.payment_date <= ` + to + method + `
     UNION ALL
     SELECT 4, ca.id, i.customer_id, i.job_id, i.id, NULL::bigint, extract(month FROM ca.applied_on)::int, ` + creditAmount + `
