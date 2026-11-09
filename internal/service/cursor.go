@@ -24,6 +24,14 @@ const (
 	timestampLayout = "2006-01-02T15:04:05.000000Z"
 )
 
+// Clock returns the current time; it is injected so the default date range is testable. The zone of the
+// returned time decides which calendar month the default range covers (see validator.dateRange).
+type Clock func() time.Time
+
+// utcNow is the default Clock: the current time in UTC. Without it a nil clock would read time.Now in the host's
+// local zone, making the default month depend on the machine instead of on configuration.
+func utcNow() time.Time { return time.Now().UTC() }
+
 // InvalidCursorError explains why a cursor was rejected. Reason is safe to show to API clients.
 type InvalidCursorError struct {
 	Reason string
