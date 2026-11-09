@@ -35,8 +35,8 @@ INSERT INTO document_types (name) VALUES
 
 -- Customers, phones, locations -------------------------------------------
 
-INSERT INTO customers (account_number, first_name, last_name, display_name, email, billing_email, lead_source_id, top_note, created_at)
-SELECT v.acct, v.first_name, v.last_name, v.display_name, v.email, v.email, ls.id, v.top_note, v.created_at::timestamp AT TIME ZONE 'UTC'
+INSERT INTO customers (account_number, first_name, last_name, display_name, email, lead_source_id, top_note, created_at)
+SELECT v.acct, v.first_name, v.last_name, v.display_name, v.email, ls.id, v.top_note, v.created_at::timestamp AT TIME ZONE 'UTC'
 FROM (VALUES
     ('5001',  'William', 'Saliba',  'William Saliba',  'williamsaliba@yopmail.com', NULL,                    '',                       '2026-09-01'),
     ('5002',  'Alaba',   'David',   'Alaba David',     'alaba123@yopmail.com',      NULL,                    '',                       '2026-09-01'),
@@ -52,8 +52,8 @@ FROM (VALUES
 ) AS v(acct, first_name, last_name, display_name, email, source, top_note, created_at)
 LEFT JOIN lead_sources ls ON ls.name = v.source;
 
-INSERT INTO customer_phones (customer_id, number, kind)
-SELECT c.id, v.number, 'mobile'
+INSERT INTO customer_phones (customer_id, number)
+SELECT c.id, v.number
 FROM (VALUES
     ('63714', '012222222'),
     ('63706', '(098) 765-4321'),
@@ -130,7 +130,7 @@ INSERT INTO billing_documents (parent_type, document_number, customer_id, job_id
                                created_by)
 SELECT 'invoice', v.num, c.id,
        (SELECT j.id FROM jobs j WHERE j.customer_id = c.id ORDER BY j.created_at DESC, j.id DESC LIMIT 1),
-       c.billing_email, v.inv_date::date, v.total, v.discount,
+       c.email, v.inv_date::date, v.total, v.discount,
        v.status::billing_status, 'draft', pt.id, v.freq, u.id
 FROM (VALUES
     ('84936', '5001',  '2026-10-26', 65.00,  0.00, 'draft', 'Due on receipt', 'Weekly',        'thon nguyen'),
@@ -174,7 +174,7 @@ INSERT INTO billing_documents (parent_type, document_number, customer_id, job_id
                                created_by, archived_at, deleted_at)
 SELECT 'invoice', v.num, c.id,
        (SELECT j.id FROM jobs j WHERE j.customer_id = c.id ORDER BY j.created_at DESC, j.id DESC LIMIT 1),
-       c.billing_email, v.inv_date::date, v.total, 0.00,
+       c.email, v.inv_date::date, v.total, 0.00,
        v.status::billing_status, v.sig::signature_status, pt.id, 'With each job', u.id,
        v.archived_at::timestamptz, v.deleted_at::timestamptz
 FROM (VALUES
@@ -203,15 +203,11 @@ FROM customers c
 JOIN billing_documents i ON i.parent_type = 'invoice' AND i.document_number = '84890'
 WHERE c.account_number = '63689';
 
-UPDATE billing_documents
-SET recurring_invoice_id = (SELECT id FROM recurring_invoices ORDER BY id LIMIT 1)
-WHERE parent_type = 'invoice' AND document_number = '84890';
-
 -- Estimates ----------------------------------------------------------------
 
 INSERT INTO billing_documents (parent_type, document_number, customer_id, billing_email, created_by,
                                document_date, total)
-SELECT 'estimate', v.num, c.id, c.billing_email, u.id, v.est_date::date, v.total
+SELECT 'estimate', v.num, c.id, c.email, u.id, v.est_date::date, v.total
 FROM (VALUES
     ('123187', '63733', '2026-10-20', 24.40, 'thon nguyen'),
     ('123184', '63717', '2026-10-20', 24.40, 'thon nguyen'),
@@ -237,7 +233,7 @@ JOIN users u     ON u.full_name = v.creator;
 -- Estimates in other states, so every status and tab of the Estimates report has data.
 INSERT INTO billing_documents (parent_type, document_number, customer_id, billing_email, created_by,
                                document_date, total, status, signature_status, archived_at, deleted_at)
-SELECT 'estimate', v.num, c.id, c.billing_email, u.id, v.est_date::date, v.total,
+SELECT 'estimate', v.num, c.id, c.email, u.id, v.est_date::date, v.total,
        v.status::billing_status, v.sig::signature_status, v.archived_at::timestamptz, v.deleted_at::timestamptz
 FROM (VALUES
     ('123188', '63733', '2026-10-21', 150.00, 'accepted', 'signed',   NULL,         NULL),
@@ -401,8 +397,8 @@ LEFT JOIN lead_sources ls ON ls.name = v.source;
 -- every lead source, and customers with and without an email and a phone (one has two phones: the report shows
 -- the first). Timestamps are explicit UTC so the data does not depend on the database's time zone. They are
 -- added last, so nothing above changes.
-INSERT INTO customers (account_number, first_name, last_name, display_name, email, billing_email, lead_source_id, created_at)
-SELECT v.acct, '', v.display_name, v.display_name, v.email, v.email, ls.id, v.created_at::timestamptz
+INSERT INTO customers (account_number, first_name, last_name, display_name, email, lead_source_id, created_at)
+SELECT v.acct, '', v.display_name, v.display_name, v.email, ls.id, v.created_at::timestamptz
 FROM (VALUES
     ('70001', 'Ada Lovelace',     'ada@example.com',    'Google',   '2026-10-22 08:15:30.123456+00'),
     ('70002', 'Boundary Start',   NULL,                 NULL,       '2026-10-10 00:00:00+00'),
@@ -415,8 +411,8 @@ FROM (VALUES
 ) AS v(acct, display_name, email, source, created_at)
 LEFT JOIN lead_sources ls ON ls.name = v.source;
 
-INSERT INTO customer_phones (customer_id, number, kind)
-SELECT c.id, v.number, 'mobile'
+INSERT INTO customer_phones (customer_id, number)
+SELECT c.id, v.number
 FROM (VALUES
     (1, '70001', '555-0101'),
     (2, '70001', '555-0102'),
@@ -457,32 +453,29 @@ FROM (VALUES
 JOIN billing_documents i ON i.parent_type = 'invoice' AND i.document_number = v.num
 JOIN tax_rates tr        ON tr.name = v.tax;
 
--- One catalog item per service type, priced at the highest job value of that service.
-INSERT INTO items (name, unit_price)
-SELECT st.name, coalesce(max(j.invoice_value), 0)
-FROM service_types st
-LEFT JOIN jobs j ON j.service_type_id = st.id
-GROUP BY st.name;
-INSERT INTO items (name, unit_price) VALUES ('Chemical Treatment', 25.00), ('Travel Fee', 10.00);
+-- One catalog item per service type.
+INSERT INTO items (name)
+SELECT name FROM service_types;
+INSERT INTO items (name) VALUES ('Chemical Treatment'), ('Travel Fee');
 
 -- Every invoice gets one line for the service of its job (Bi-Monthly Service when it has no job), and the two
 -- extra items are added to a few paid invoices, so By Item has more than one row per invoice.
-INSERT INTO invoice_items (invoice_id, item_id, description, quantity, unit_price, line_total, taxable)
-SELECT i.id, it.id, it.name, 1, i.total, i.total, true
+INSERT INTO invoice_items (invoice_id, item_id, line_total)
+SELECT i.id, it.id, i.total
 FROM billing_documents i
 LEFT JOIN jobs j          ON j.id = i.job_id
 LEFT JOIN service_types st ON st.id = j.service_type_id
 JOIN items it             ON it.name = coalesce(st.name, 'Bi-Monthly Service')
 WHERE i.parent_type = 'invoice';
 
-INSERT INTO invoice_items (invoice_id, item_id, description, quantity, unit_price, line_total, taxable)
-SELECT i.id, it.id, it.name, v.qty, it.unit_price, round(v.qty * it.unit_price, 2), v.taxable
+INSERT INTO invoice_items (invoice_id, item_id, line_total)
+SELECT i.id, it.id, round(v.qty * v.price, 2)
 FROM (VALUES
-    ('85009', 'Chemical Treatment', 2, true),
-    ('85004', 'Chemical Treatment', 1, true),
-    ('85005', 'Travel Fee',         1, false),
-    ('85000', 'Travel Fee',         2, false)
-) AS v(num, item, qty, taxable)
+    ('85009', 'Chemical Treatment', 2, 25.00),
+    ('85004', 'Chemical Treatment', 1, 25.00),
+    ('85005', 'Travel Fee',         1, 10.00),
+    ('85000', 'Travel Fee',         2, 10.00)
+) AS v(num, item, qty, price)
 JOIN billing_documents i ON i.parent_type = 'invoice' AND i.document_number = v.num
 JOIN items it            ON it.name = v.item;
 
@@ -492,18 +485,18 @@ UPDATE customers SET status = 'lead'     WHERE account_number = '63730';
 UPDATE customers SET status = 'archived' WHERE account_number = '63702';
 
 -- Saved cards for the Accounts Aging report; the same last four may appear twice with different expiries.
-INSERT INTO customer_payment_methods (customer_id, processor, brand, last4, exp_month, exp_year, is_default)
-SELECT c.id, v.processor, v.brand, v.last4, v.exp_month, v.exp_year, v.is_default
+INSERT INTO customer_payment_methods (customer_id, processor, last4, exp_month, exp_year, is_default)
+SELECT c.id, v.processor, v.last4, v.exp_month, v.exp_year, v.is_default
 FROM (VALUES
-    ('63706', 'stripe', 'Visa',       '3222', 12, 2032, true),
-    ('63706', 'stripe', 'Visa',       '4242', 12, 2032, false),
-    ('63706', 'stripe', 'Visa',       '3222',  2, 2034, false),
-    ('5002',  'stripe', 'Visa',       '4242',  4, 2043, true),
-    ('5002',  'stripe', 'Mastercard', '0005', 12, 2032, false),
-    ('5002',  'stripe', 'Visa',       '5556',  2, 2034, false),
-    ('63714', 'stripe', 'Visa',       '4242', 12, 2033, true),
-    ('63733', 'square', 'Visa',       '0009', 12, 2032, true)
-) AS v(acct, processor, brand, last4, exp_month, exp_year, is_default)
+    ('63706', 'stripe', '3222', 12, 2032, true),
+    ('63706', 'stripe', '4242', 12, 2032, false),
+    ('63706', 'stripe', '3222',  2, 2034, false),
+    ('5002',  'stripe', '4242',  4, 2043, true),
+    ('5002',  'stripe', '0005', 12, 2032, false),
+    ('5002',  'stripe', '5556',  2, 2034, false),
+    ('63714', 'stripe', '4242', 12, 2033, true),
+    ('63733', 'square', '0009', 12, 2032, true)
+) AS v(acct, processor, last4, exp_month, exp_year, is_default)
 JOIN customers c ON c.account_number = v.acct;
 
 -- Credits used against invoices: 63706's 100.00 and 200.00 credits pay 30.00 and 20.00 of invoice 85032, so their
@@ -569,11 +562,11 @@ WHERE c.account_number = '63689';
 -- The November screenshots (Documents, New Jobs, New Customers), so each report's default view (the current month)
 -- has data. Customer #1 is created on 11-01, after the "November First" boundary customer; its address renders as
 -- "1 2, 3, 4 5" (line 1, city, state zip). Added last, so no earlier id changes.
-INSERT INTO customers (account_number, first_name, last_name, display_name, email, billing_email, created_at)
-VALUES ('63749', '#', '1', '#1', 'd@cm.co', 'd@cm.co', '2026-11-01 12:00:00+00');
+INSERT INTO customers (account_number, first_name, last_name, display_name, email, created_at)
+VALUES ('63749', '#', '1', '#1', 'd@cm.co', '2026-11-01 12:00:00+00');
 
-INSERT INTO customer_phones (customer_id, number, kind)
-SELECT id, '(012) 332-1211', 'mobile' FROM customers WHERE account_number = '63749';
+INSERT INTO customer_phones (customer_id, number)
+SELECT id, '(012) 332-1211' FROM customers WHERE account_number = '63749';
 
 INSERT INTO service_locations (customer_id, address_line1, city, state, postal_code)
 SELECT id, '1 2', '3', '4', '5' FROM customers WHERE account_number = '63749';
@@ -612,11 +605,11 @@ WHERE c.account_number IN ('63716', '63749') AND j.created_at >= '2026-11-02 00:
 -- A small catalog (one material has no EPA number) and the materials added to a handful of jobs, each job adding its
 -- own rows. Added last, so no earlier id changes. The report's date is the job's scheduled date, so the picks cover
 -- every edge: the three live jobs in November, one deleted job, one live job before November and one never scheduled.
-INSERT INTO materials (name, epa_reg_no, unit) VALUES
-    ('Demand CS',   '100-1066',  'fl oz'),
-    ('Temprid SC',  '432-1363',  'fl oz'),
-    ('Gentrol IGR', '2724-469',  'ml'),
-    ('Glue Boards', NULL,        'each');
+INSERT INTO materials (name, epa_reg_no) VALUES
+    ('Demand CS',   '100-1066'),
+    ('Temprid SC',  '432-1363'),
+    ('Gentrol IGR', '2724-469'),
+    ('Glue Boards', NULL);
 
 INSERT INTO job_materials (job_id, material_id, qty, device)
 SELECT p.job_id, m.id, v.qty, v.device

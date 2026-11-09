@@ -186,6 +186,96 @@ func (ns NullDocumentStatus) Value() (driver.Value, error) {
 	return string(ns.DocumentStatus), nil
 }
 
+type EmailStatus string
+
+const (
+	EmailStatusUnconfirmed EmailStatus = "unconfirmed"
+	EmailStatusConfirmed   EmailStatus = "confirmed"
+	EmailStatusCancelled   EmailStatus = "cancelled"
+)
+
+func (e *EmailStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = EmailStatus(s)
+	case string:
+		*e = EmailStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for EmailStatus: %T", src)
+	}
+	return nil
+}
+
+type NullEmailStatus struct {
+	EmailStatus EmailStatus
+	Valid       bool // Valid is true if EmailStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullEmailStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.EmailStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.EmailStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullEmailStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.EmailStatus), nil
+}
+
+type EmailType string
+
+const (
+	EmailTypeWelcome                 EmailType = "welcome"
+	EmailTypeInvoice                 EmailType = "invoice"
+	EmailTypeEstimate                EmailType = "estimate"
+	EmailTypeAppointmentConfirmation EmailType = "appointment_confirmation"
+	EmailTypeAppointmentReminder     EmailType = "appointment_reminder"
+	EmailTypePaymentReceipt          EmailType = "payment_receipt"
+	EmailTypeReviewRequest           EmailType = "review_request"
+)
+
+func (e *EmailType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = EmailType(s)
+	case string:
+		*e = EmailType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for EmailType: %T", src)
+	}
+	return nil
+}
+
+type NullEmailType struct {
+	EmailType EmailType
+	Valid     bool // Valid is true if EmailType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullEmailType) Scan(value interface{}) error {
+	if value == nil {
+		ns.EmailType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.EmailType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullEmailType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.EmailType), nil
+}
+
 type FrequencyUnit string
 
 const (
@@ -493,24 +583,23 @@ func (ns NullSignatureStatus) Value() (driver.Value, error) {
 }
 
 type BillingDocument struct {
-	ID                 int64
-	DocumentNumber     string
-	CustomerID         int64
-	JobID              pgtype.Int8
-	RecurringInvoiceID pgtype.Int8
-	BillingEmail       pgtype.Text
-	DocumentDate       pgtype.Date
-	Total              pgtype.Numeric
-	Discount           pgtype.Numeric
-	Status             BillingStatus
-	SignatureStatus    SignatureStatus
-	PaymentTermsID     pgtype.Int8
-	FrequencyLabel     string
-	CreatedBy          pgtype.Int8
-	CreatedAt          pgtype.Timestamptz
-	ArchivedAt         pgtype.Timestamptz
-	DeletedAt          pgtype.Timestamptz
-	ParentType         DocumentParentType
+	ID              int64
+	DocumentNumber  string
+	CustomerID      int64
+	JobID           pgtype.Int8
+	BillingEmail    pgtype.Text
+	DocumentDate    pgtype.Date
+	Total           pgtype.Numeric
+	Discount        pgtype.Numeric
+	Status          BillingStatus
+	SignatureStatus SignatureStatus
+	PaymentTermsID  pgtype.Int8
+	FrequencyLabel  string
+	CreatedBy       pgtype.Int8
+	CreatedAt       pgtype.Timestamptz
+	ArchivedAt      pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	ParentType      DocumentParentType
 }
 
 type Credit struct {
@@ -541,18 +630,17 @@ type Customer struct {
 	LastName      string
 	DisplayName   string
 	Email         pgtype.Text
-	BillingEmail  pgtype.Text
 	LeadSourceID  pgtype.Int8
 	TopNote       string
 	CreatedAt     pgtype.Timestamptz
 	Status        CustomerStatus
+	BookedOnline  bool
 }
 
 type CustomerPaymentMethod struct {
 	ID         int64
 	CustomerID int64
 	Processor  string
-	Brand      string
 	Last4      string
 	ExpMonth   int16
 	ExpYear    int16
@@ -563,7 +651,18 @@ type CustomerPhone struct {
 	ID         int64
 	CustomerID int64
 	Number     string
-	Kind       string
+}
+
+type Device struct {
+	ID         int64
+	LocationID int64
+	Name       string
+	Barcode    string
+	DeviceType string
+	Area       string
+	Latitude   pgtype.Numeric
+	Longitude  pgtype.Numeric
+	CreatedAt  pgtype.Timestamptz
 }
 
 type Document struct {
@@ -587,11 +686,7 @@ type InvoiceItem struct {
 	InvoiceID         int64
 	InvoiceParentType DocumentParentType
 	ItemID            int64
-	Description       string
-	Quantity          pgtype.Numeric
-	UnitPrice         pgtype.Numeric
 	LineTotal         pgtype.Numeric
-	Taxable           bool
 }
 
 type InvoiceTag struct {
@@ -615,10 +710,8 @@ type InvoiceTaxLine struct {
 }
 
 type Item struct {
-	ID        int64
-	Name      string
-	UnitPrice pgtype.Numeric
-	Active    bool
+	ID   int64
+	Name string
 }
 
 type Job struct {
@@ -637,13 +730,24 @@ type Job struct {
 	TaxAmount     pgtype.Numeric
 }
 
+type JobDeviceCheck struct {
+	ID           int64
+	JobID        int64
+	DeviceID     int64
+	CheckedInAt  pgtype.Timestamptz
+	CheckedOutAt pgtype.Timestamptz
+	Status       string
+	Activity     string
+	Notes        string
+	AssignedTo   pgtype.Int8
+}
+
 type JobMaterial struct {
 	ID         int64
 	JobID      int64
 	MaterialID int64
 	Qty        pgtype.Numeric
 	Device     pgtype.Text
-	CreatedAt  pgtype.Timestamptz
 }
 
 type JobTag struct {
@@ -665,7 +769,6 @@ type Material struct {
 	ID       int64
 	Name     string
 	EpaRegNo pgtype.Text
-	Unit     string
 }
 
 type Payment struct {
@@ -725,6 +828,15 @@ type ServiceLocation struct {
 type ServiceType struct {
 	ID   int64
 	Name string
+}
+
+type SystemEmail struct {
+	ID         int64
+	CustomerID int64
+	Email      string
+	EmailType  EmailType
+	Status     EmailStatus
+	SentAt     pgtype.Timestamptz
 }
 
 type TaxRate struct {

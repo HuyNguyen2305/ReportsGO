@@ -73,15 +73,13 @@ func TestEstimatesCannotCarryInvoiceOnlyData(t *testing.T) {
 	s := seed(t, pool)
 	ctx := context.Background()
 
-	var jobID, termsID, recurringID int64
+	var jobID, termsID int64
 	require.NoError(t, pool.QueryRow(ctx, `SELECT id FROM jobs LIMIT 1`).Scan(&jobID))
 	require.NoError(t, pool.QueryRow(ctx, `SELECT id FROM payment_terms LIMIT 1`).Scan(&termsID))
-	require.NoError(t, pool.QueryRow(ctx, `SELECT id FROM recurring_invoices LIMIT 1`).Scan(&recurringID))
 
 	tests := []struct{ name, column, value string }{
 		{"job", "job_id", fmt.Sprint(jobID)},
 		{"payment terms", "payment_terms_id", fmt.Sprint(termsID)},
-		{"recurring invoice", "recurring_invoice_id", fmt.Sprint(recurringID)},
 		{"discount", "discount", "5"},
 	}
 	for _, tt := range tests {

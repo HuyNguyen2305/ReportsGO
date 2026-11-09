@@ -629,8 +629,8 @@ func TestRowsCarryTheJobsAddressAndTheCustomersFirstPhone(t *testing.T) {
 	ctx := context.Background()
 
 	// a second, later phone for AAA1 ccc1: the report keeps showing the first one
-	_, err := e.pool.Exec(ctx, `INSERT INTO customer_phones (customer_id, number, kind)
-		SELECT id, '555-9999', 'home' FROM customers WHERE account_number = '63706'`)
+	_, err := e.pool.Exec(ctx, `INSERT INTO customer_phones (customer_id, number)
+		SELECT id, '555-9999' FROM customers WHERE account_number = '63706'`)
 	require.NoError(t, err)
 
 	byAccount := func(account string) model.JobRow {

@@ -98,20 +98,15 @@ FROM items
 ORDER BY name, id
 `
 
-type ListItemsRow struct {
-	ID   int64
-	Name string
-}
-
-func (q *Queries) ListItems(ctx context.Context) ([]ListItemsRow, error) {
+func (q *Queries) ListItems(ctx context.Context) ([]Item, error) {
 	rows, err := q.db.Query(ctx, listItems)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListItemsRow{}
+	items := []Item{}
 	for rows.Next() {
-		var i ListItemsRow
+		var i Item
 		if err := rows.Scan(&i.ID, &i.Name); err != nil {
 			return nil, err
 		}

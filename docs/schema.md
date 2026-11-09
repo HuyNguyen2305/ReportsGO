@@ -12,7 +12,7 @@ lead_sources ─┐
 service_types ─┼──────────────┼─< jobs >─────────────┘
               │              ├─< billing_documents >─< invoice_tag_links >─ invoice_tags
 payment_terms ─┼──────────────┤      ▲  │   (parent_type = invoice | estimate)
-users ────────┤              │      │  └─ recurring_invoice_id ─> recurring_invoices (next_invoice_id ─> invoices)
+users ────────┤              │      │  └─ recurring_invoices (next_invoice_id ─> invoices)
 document_types ┘              ├─< documents
                               ├─< credits
                               └─< payments ─> invoice_id XOR credit_id
@@ -22,12 +22,12 @@ document_types ┘              ├─< documents
 
 - `UNIQUE (parent_type, document_number)`: an invoice and an estimate may share a number.
 - Statuses depend on the type (`billing_documents_status_chk`): invoices `draft/sent/paid/void`, estimates `draft/sent/accepted/declined`.
-- Estimates have no job, recurring invoice, payment terms or discount (`billing_documents_estimate_chk`).
+- Estimates have no job, payment terms or discount (`billing_documents_estimate_chk`).
 - `payments.invoice_id`, `recurring_invoices.next_invoice_id` and `invoice_tag_links.invoice_id` can only reference invoices; a generated `*_parent_type` column plus a composite foreign key enforce it.
 
 **Estimate ids change in migration 000009.** The migration re-inserts the former `estimates` rows into `billing_documents`, so each estimate gets a new id from the shared sequence (rolling back gives them new ids again). Numbers, dates, statuses, signature states, totals and archive/delete flags are preserved; ids are not, because invoice ids and estimate ids overlapped and cannot be kept. This only matters to an environment that already holds estimates which clients reference by id.
 
-`billing_documents.recurring_invoice_id` and `recurring_invoices.next_invoice_id` reference each other; the first FK is added in migration 000007.
+Migration 000022 drops `billing_documents.recurring_invoice_id`; an invoice is linked to its recurring schedule only through `recurring_invoices.next_invoice_id`.
 
 ## Tax, items, cards, credit use and job fields (migrations 000013 - 000016)
 
@@ -45,6 +45,7 @@ generated `invoice_parent_type` column and a composite foreign key, so only invo
 | 000019 | `system_emails` (one row per email sent to a customer: the address, `email_type`, `email_status`, and when it was sent) |
 | 000020 | `customers.booked_online` (whether the customer came from an online booking), with a partial index on the flagged customers |
 | 000021 | `devices` (installed at a service location: name, barcode, type, area, optional coordinate); `job_device_checks` (one row per device checked during a job: check in and out, status, activity, notes, assignee) |
+| 000022 | Drops columns no report reads: `customers.billing_email`, `customer_phones.kind`, `materials.unit`, `job_materials.created_at`, `customer_payment_methods.brand`, `billing_documents.recurring_invoice_id`, `items.unit_price` / `active`, and `invoice_items.description` / `quantity` / `unit_price` / `taxable` (`invoice_items` keeps the item and the line total). The down migration restores the columns, not their data |
 
 **Derived, not stored**
 

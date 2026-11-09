@@ -16,7 +16,7 @@ func insertItem(t *testing.T, pool *pgxpool.Pool, name string) int64 {
 	t.Helper()
 	var id int64
 	require.NoError(t, pool.QueryRow(context.Background(),
-		`INSERT INTO items (name, unit_price) VALUES ($1, 65) RETURNING id`, name).Scan(&id))
+		`INSERT INTO items (name) VALUES ($1) RETURNING id`, name).Scan(&id))
 	return id
 }
 
@@ -34,24 +34,12 @@ func TestLineItemsBelongToInvoicesOnly(t *testing.T) {
 	ctx := context.Background()
 	item := insertItem(t, pool, "Bi-Monthly Service")
 
-	_, err := pool.Exec(ctx, `INSERT INTO invoice_items (invoice_id, item_id, quantity, unit_price, line_total)
-		VALUES ($1, $2, 2, 32.50, 65)`, s.invoiceID, item)
+	_, err := pool.Exec(ctx, `INSERT INTO invoice_items (invoice_id, item_id, line_total)
+		VALUES ($1, $2, 65)`, s.invoiceID, item)
 	require.NoError(t, err, "an invoice may have line items")
 
 	_, err = pool.Exec(ctx, `INSERT INTO invoice_items (invoice_id, item_id, line_total) VALUES ($1, $2, 24.40)`, s.estimateID, item)
 	requireViolation(t, err, "23503", "invoice_items_invoice_id_fkey")
-}
-
-func TestLineItemQuantityMustBePositive(t *testing.T) {
-	pool := testdb.MigratedPool(t)
-	s := seed(t, pool)
-	item := insertItem(t, pool, "Bi-Monthly Service")
-
-	for _, qty := range []float64{0, -1} {
-		_, err := pool.Exec(context.Background(),
-			`INSERT INTO invoice_items (invoice_id, item_id, quantity) VALUES ($1, $2, $3)`, s.invoiceID, item, qty)
-		requireViolation(t, err, "23514", "invoice_items_quantity_chk")
-	}
 }
 
 func TestUsedItemsCannotBeDeleted(t *testing.T) {
