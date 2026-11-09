@@ -48,7 +48,7 @@ func query(f model.JobFilter, key model.JobSortKey, desc bool, limit int) model.
 
 func listAll(t *testing.T, repo *repository.JobRepository, f model.JobFilter, key model.JobSortKey, desc bool) []model.JobRow {
 	t.Helper()
-	rows, err := repo.List(context.Background(), query(f, key, desc, 1000))
+	rows, err := pageRows(context.Background(), repo, query(f, key, desc, 1000))
 	require.NoError(t, err)
 	return rows
 }
@@ -184,7 +184,7 @@ func walk(t *testing.T, repo *repository.JobRepository, key model.JobSortKey, de
 	for pages := 0; ; pages++ {
 		require.Less(t, pages, 100, "paging must terminate")
 
-		rows, err := repo.List(context.Background(), q)
+		rows, err := pageRows(context.Background(), repo, q)
 		require.NoError(t, err)
 		page := rows
 		hasMore := len(rows) > limit
@@ -326,7 +326,7 @@ func TestListFilters(t *testing.T) {
 			rows := e.listAll(t, f, model.JobSortCreatedAt, false)
 			require.Len(t, rows, tt.count)
 
-			summary, err := e.repo.Summary(ctx, f)
+			summary, err := pageSummary(ctx, e.repo, f)
 			require.NoError(t, err)
 			require.Equal(t, model.JobSummary{Count: int64(tt.count), Total: tt.wantTotal}, summary,
 				"the summary follows the same filter")
@@ -347,7 +347,7 @@ func TestSummaryTotalMatchesAnIndependentQuery(t *testing.T) {
 		SELECT count(*), (sum(invoice_value) * 100)::bigint FROM jobs
 		WHERE deleted_at IS NULL AND created_at >= '2026-10-01 00:00:00+00' AND created_at < '2026-11-01 00:00:00+00'`).Scan(&count, &total))
 
-	s, err := e.repo.Summary(context.Background(), october())
+	s, err := pageSummary(context.Background(), e.repo, october())
 
 	require.NoError(t, err)
 	require.EqualValues(t, count, s.Count)
@@ -359,7 +359,7 @@ func TestSummaryOfNothingIsZero(t *testing.T) {
 	f := october()
 	f.Search = "zzz-nothing"
 
-	s, err := e.repo.Summary(context.Background(), f)
+	s, err := pageSummary(context.Background(), e.repo, f)
 
 	require.NoError(t, err)
 	require.Equal(t, model.JobSummary{}, s)
@@ -391,9 +391,9 @@ func TestRepositoryRejectsInvalidQueries(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 
-	_, err := e.repo.List(ctx, query(october(), "bogus", false, 5))
+	_, err := pageRows(ctx, e.repo, query(october(), "bogus", false, 5))
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
-	_, err = e.repo.List(ctx, query(october(), model.JobSortCreatedAt, false, 0))
+	_, err = pageRows(ctx, e.repo, query(october(), model.JobSortCreatedAt, false, 0))
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
 }
 
@@ -418,9 +418,9 @@ func TestPage(t *testing.T) {
 		page, err := e.repo.Page(ctx, q, true)
 		require.NoError(t, err)
 
-		rows, err := e.repo.List(ctx, q)
+		rows, err := pageRows(ctx, e.repo, q)
 		require.NoError(t, err)
-		summary, err := e.repo.Summary(ctx, q.Filter)
+		summary, err := pageSummary(ctx, e.repo, q.Filter)
 		require.NoError(t, err)
 
 		require.Equal(t, rows, page.Rows)
@@ -434,7 +434,7 @@ func TestPage(t *testing.T) {
 		page, err := e.repo.Page(ctx, q, false)
 		require.NoError(t, err)
 
-		rows, err := e.repo.List(ctx, q)
+		rows, err := pageRows(ctx, e.repo, q)
 		require.NoError(t, err)
 		require.Equal(t, rows, page.Rows)
 		require.Nil(t, page.Summary)
@@ -491,7 +491,7 @@ func TestPageReadsRowsAndSummaryFromOneSnapshot(t *testing.T) {
 	}
 	require.Equal(t, rowsTotal, page.Summary.Total, "the total is the sum of the rows it describes")
 
-	after, err := e.repo.Summary(ctx, q.Filter)
+	after, err := pageSummary(ctx, e.repo, q.Filter)
 	require.NoError(t, err)
 	require.EqualValues(t, octoberJobs+1, after.Count, "the committed job is real and visible to a later read")
 }
@@ -501,9 +501,9 @@ func TestCancelledContextIsReturnedAsAnError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := e.repo.List(ctx, query(october(), model.JobSortCreatedAt, false, 5))
+	_, err := pageRows(ctx, e.repo, query(october(), model.JobSortCreatedAt, false, 5))
 	require.ErrorIs(t, err, context.Canceled)
-	_, err = e.repo.Summary(ctx, october())
+	_, err = pageSummary(ctx, e.repo, october())
 	require.ErrorIs(t, err, context.Canceled)
 	_, err = e.repo.ServiceTypes(ctx)
 	require.ErrorIs(t, err, context.Canceled)
@@ -527,7 +527,7 @@ func TestDeletedJobsAreNeitherListedNorCountedNorTotalled(t *testing.T) {
 	require.NotContains(t, ids(e.listAll(t, october(), model.JobSortCreatedAt, true)), seedDeleted,
 		"the seed's deleted job was created in October but is not listed")
 
-	before, err := e.repo.Summary(ctx, october())
+	before, err := pageSummary(ctx, e.repo, october())
 	require.NoError(t, err)
 
 	// soft-delete the cancelled October job (95.00): it leaves the rows, the count and the total
@@ -535,7 +535,7 @@ func TestDeletedJobsAreNeitherListedNorCountedNorTotalled(t *testing.T) {
 	require.NoError(t, e.pool.QueryRow(ctx, `UPDATE jobs SET deleted_at = '2026-10-23 00:00:00+00'
 		WHERE status = 'cancelled' AND deleted_at IS NULL RETURNING id`).Scan(&cancelled))
 
-	after, err := e.repo.Summary(ctx, october())
+	after, err := pageSummary(ctx, e.repo, october())
 	require.NoError(t, err)
 	require.NotContains(t, ids(e.listAll(t, october(), model.JobSortCreatedAt, true)), cancelled)
 	require.Equal(t, before.Count-1, after.Count)
@@ -547,7 +547,7 @@ func TestACancelledJobThatIsNotDeletedIsCountedAndTotalled(t *testing.T) {
 	f := october()
 	f.Statuses = []model.JobStatus{model.JobCancelled}
 
-	s, err := e.repo.Summary(context.Background(), f)
+	s, err := pageSummary(context.Background(), e.repo, f)
 
 	require.NoError(t, err)
 	require.Equal(t, model.JobSummary{Count: 1, Total: 9500}, s)
@@ -591,7 +591,7 @@ func TestAssignedToFilterMatchesTheAssignedStaff(t *testing.T) {
 			f.AssignedToIDs = tt.ids
 
 			rows := e.listAll(t, f, model.JobSortCreatedAt, true)
-			s, err := e.repo.Summary(ctx, f)
+			s, err := pageSummary(ctx, e.repo, f)
 
 			require.NoError(t, err)
 			require.Equal(t, want(tt.ids), s)
@@ -602,7 +602,7 @@ func TestAssignedToFilterMatchesTheAssignedStaff(t *testing.T) {
 	t.Run("unassigned jobs only match without the filter", func(t *testing.T) {
 		f := october()
 		f.AssignedToIDs = []int64{tho, thon}
-		assigned, err := e.repo.Summary(ctx, f)
+		assigned, err := pageSummary(ctx, e.repo, f)
 		require.NoError(t, err)
 
 		require.Positive(t, assigned.Count)
@@ -629,8 +629,8 @@ func TestRowsCarryTheJobsAddressAndTheCustomersFirstPhone(t *testing.T) {
 	ctx := context.Background()
 
 	// a second, later phone for AAA1 ccc1: the report keeps showing the first one
-	_, err := e.pool.Exec(ctx, `INSERT INTO customer_phones (customer_id, number, kind)
-		SELECT id, '555-9999', 'home' FROM customers WHERE account_number = '63706'`)
+	_, err := e.pool.Exec(ctx, `INSERT INTO customer_phones (customer_id, number)
+		SELECT id, '555-9999' FROM customers WHERE account_number = '63706'`)
 	require.NoError(t, err)
 
 	byAccount := func(account string) model.JobRow {
@@ -685,11 +685,26 @@ func TestSearchMatchesThePhoneAndTheAddress(t *testing.T) {
 			f.Search = tt.search
 
 			rows := e.listAll(t, f, model.JobSortCreatedAt, false)
-			s, err := e.repo.Summary(ctx, f)
+			s, err := pageSummary(ctx, e.repo, f)
 
 			require.NoError(t, err)
 			require.Equal(t, want(tt.cond), s.Count, "the summary follows the same search")
 			require.Len(t, rows, int(s.Count))
 		})
 	}
+}
+
+// pageRows reads one page of rows through Page, the repository's only public read path.
+func pageRows(ctx context.Context, r *repository.JobRepository, q model.JobQuery) ([]model.JobRow, error) {
+	page, err := r.Page(ctx, q, false)
+	return page.Rows, err
+}
+
+// pageSummary reads the totals of a filtered set through Page.
+func pageSummary(ctx context.Context, r *repository.JobRepository, f model.JobFilter) (model.JobSummary, error) {
+	page, err := r.Page(ctx, model.JobQuery{Filter: f, Sort: model.JobSort{Key: model.JobSortCreatedAt}, Limit: 1}, true)
+	if err != nil {
+		return model.JobSummary{}, err
+	}
+	return *page.Summary, nil
 }

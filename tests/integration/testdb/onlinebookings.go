@@ -88,7 +88,7 @@ func InsertOnlineBookings(t *testing.T, pool *pgxpool.Pool) OnlineBookingFixture
 	addCustomer(&f.Offline, "80013", "Ollie", "Offline", "Ollie Offline", str("ollie@example.com"), str("Google"), "Walk-in", false)
 
 	// Olive's first phone is the one added first, whatever its number says.
-	_, err = pool.Exec(ctx, `INSERT INTO customer_phones (customer_id, number, kind) VALUES ($1, '(555) 010-0011', 'mobile'), ($1, '(555) 010-9911', 'home')`, f.Olive)
+	_, err = pool.Exec(ctx, `INSERT INTO customer_phones (customer_id, number) VALUES ($1, '(555) 010-0011'), ($1, '(555) 010-9911')`, f.Olive)
 	require.NoError(t, err)
 
 	oliveHome := addLocation(f.Olive, "11 Olive Way", "Round Rock")

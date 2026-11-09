@@ -39,8 +39,8 @@ func TestPaymentMethodsAreValidated(t *testing.T) {
 	s := seed(t, pool)
 	ctx := context.Background()
 
-	_, err := pool.Exec(ctx, `INSERT INTO customer_payment_methods (customer_id, processor, brand, last4, exp_month, exp_year)
-		VALUES ($1, 'stripe', 'Visa', '4242', 12, 2033), ($1, 'square', 'Visa', '0009', 12, 2032)`, s.customerID)
+	_, err := pool.Exec(ctx, `INSERT INTO customer_payment_methods (customer_id, processor, last4, exp_month, exp_year)
+		VALUES ($1, 'stripe', '4242', 12, 2033), ($1, 'square', '0009', 12, 2032)`, s.customerID)
 	require.NoError(t, err)
 
 	_, err = pool.Exec(ctx, `INSERT INTO customer_payment_methods (customer_id, processor, last4, exp_month, exp_year)

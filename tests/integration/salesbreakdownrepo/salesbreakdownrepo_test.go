@@ -686,8 +686,8 @@ func TestPageItemSharesOfAnUnevenSplitAddUpToTheAmount(t *testing.T) {
 	for _, name := range []string{"Item A", "Item B", "Item C"} {
 		_, err := e.pool.Exec(ctx, `INSERT INTO items (name) VALUES ($1)`, name)
 		require.NoError(t, err)
-		_, err = e.pool.Exec(ctx, `INSERT INTO invoice_items (invoice_id, item_id, quantity, unit_price, line_total)
-			SELECT $1, id, 1, 10, 10 FROM items WHERE name = $2`, invoice, name)
+		_, err = e.pool.Exec(ctx, `INSERT INTO invoice_items (invoice_id, item_id, line_total)
+			SELECT $1, id, 10 FROM items WHERE name = $2`, invoice, name)
 		require.NoError(t, err)
 	}
 	_, err := e.pool.Exec(ctx, `INSERT INTO payments (customer_id, invoice_id, method_type, amount, payment_date, status)

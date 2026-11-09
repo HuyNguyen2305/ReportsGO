@@ -13,12 +13,11 @@ import (
 // AccountsAgingRepository reads the Accounts Aging report. It works on a pool or inside a transaction.
 type AccountsAgingRepository struct {
 	conn db.DBTX
-	q    *db.Queries
 }
 
 // NewAccountsAgingRepository returns a repository using conn, typically the shared pool.
 func NewAccountsAgingRepository(conn db.DBTX) *AccountsAgingRepository {
-	return &AccountsAgingRepository{conn: conn, q: db.New(conn)}
+	return &AccountsAgingRepository{conn: conn}
 }
 
 // Page returns one page of the report (up to q.Limit+1 rows, so the caller can tell whether more follow) and,
@@ -116,13 +115,5 @@ func summarizeAging(ctx context.Context, conn db.DBTX, f model.AgingFilter) (mod
 
 // ServiceTypes lists the options for the Service Type filter.
 func (r *AccountsAgingRepository) ServiceTypes(ctx context.Context) ([]model.ServiceType, error) {
-	rows, err := r.q.ListServiceTypes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list service types: %w", err)
-	}
-	out := make([]model.ServiceType, len(rows))
-	for i, row := range rows {
-		out[i] = model.ServiceType{ID: row.ID, Name: row.Name}
-	}
-	return out, nil
+	return lookup[model.ServiceType](ctx, r.conn, "service types", listServiceTypesSQL)
 }

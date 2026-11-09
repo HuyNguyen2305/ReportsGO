@@ -166,11 +166,15 @@ func TestInvoicesOutstandingIsWhatAccountsAgingSays(t *testing.T) {
 	pool := testdb.SeededPool(t)
 	ctx := context.Background()
 
-	invoices, err := repository.NewInvoiceRepository(pool).Summary(ctx, model.InvoiceFilter{
-		DateFrom: day(2000, 1, 1), DateTo: day(2100, 1, 1), Lifecycle: model.LifecycleActive,
-		Statuses: []model.InvoiceStatus{model.InvoiceSent},
-	})
+	invoicePage, err := repository.NewInvoiceRepository(pool).Page(ctx, model.InvoiceQuery{
+		Filter: model.InvoiceFilter{
+			DateFrom: day(2000, 1, 1), DateTo: day(2100, 1, 1), Lifecycle: model.LifecycleActive,
+			Statuses: []model.InvoiceStatus{model.InvoiceSent},
+		},
+		Sort: model.InvoiceSort{Key: model.SortDate}, Limit: 1,
+	}, true)
 	require.NoError(t, err)
+	invoices := invoicePage.Summary
 	aging, err := repository.NewAccountsAgingRepository(pool).Page(ctx, model.AgingQuery{
 		Filter: model.AgingFilter{AsOf: today, Today: today},
 		Sort:   model.AgingSort{Key: model.AgingSortCustomer}, Limit: 1,
@@ -185,8 +189,11 @@ func TestNewJobsAndServiceLookupSplitTheJobsIntoLiveAndDeleted(t *testing.T) {
 	pool := testdb.SeededPool(t)
 	ctx := context.Background()
 
-	newJobs, err := repository.NewJobRepository(pool).Summary(ctx, model.JobFilter{})
+	jobPage, err := repository.NewJobRepository(pool).Page(ctx, model.JobQuery{
+		Sort: model.JobSort{Key: model.JobSortCreatedAt}, Limit: 1,
+	}, true)
 	require.NoError(t, err)
+	newJobs := jobPage.Summary
 	deleted, err := repository.NewServiceLookupRepository(pool).Page(ctx, model.ServiceLookupQuery{
 		Filter: model.ServiceLookupFilter{Tab: model.ServiceLookupDeleted, ScheduledFrom: day(2000, 1, 1), ScheduledBefore: day(2100, 1, 1)},
 		Sort:   model.ServiceLookupSort{Key: model.ServiceLookupSortScheduledAt}, Limit: 1,

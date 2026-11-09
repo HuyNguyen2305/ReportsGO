@@ -54,8 +54,8 @@ func seed(t *testing.T, pool *pgxpool.Pool) seeded {
 
 	insert(&recurringID, `INSERT INTO recurring_invoices (customer_id, job_id, frequency_unit, weekday, occurrences, total_value, started_on)
 		VALUES ($1, $2, 'week', 4, 3, 65, '2026-09-14')`, s.customerID, jobID)
-	insert(&s.invoiceID, `INSERT INTO billing_documents (document_number, customer_id, job_id, recurring_invoice_id, document_date, total, payment_terms_id, created_by)
-		VALUES ('84936', $1, $2, $3, '2026-10-26', 65, $4, $5)`, s.customerID, jobID, recurringID, termsID, userID)
+	insert(&s.invoiceID, `INSERT INTO billing_documents (document_number, customer_id, job_id, document_date, total, payment_terms_id, created_by)
+		VALUES ('84936', $1, $2, '2026-10-26', 65, $3, $4)`, s.customerID, jobID, termsID, userID)
 	_, err = pool.Exec(ctx, `INSERT INTO invoice_tag_links (invoice_id, tag_id) VALUES ($1, $2)`, s.invoiceID, tagID)
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `UPDATE recurring_invoices SET next_invoice_id = $1, next_invoice_date = '2026-10-29' WHERE id = $2`, s.invoiceID, recurringID)

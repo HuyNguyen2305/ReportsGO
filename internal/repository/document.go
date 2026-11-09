@@ -13,22 +13,11 @@ import (
 // DocumentRepository reads the document report. It works on a pool or inside a transaction.
 type DocumentRepository struct {
 	conn db.DBTX
-	q    *db.Queries
 }
 
 // NewDocumentRepository returns a repository using conn, typically the shared pool.
 func NewDocumentRepository(conn db.DBTX) *DocumentRepository {
-	return &DocumentRepository{conn: conn, q: db.New(conn)}
-}
-
-// List returns one page of the report: up to q.Limit+1 rows, so the caller can tell whether more follow.
-func (r *DocumentRepository) List(ctx context.Context, q model.DocumentQuery) ([]model.DocumentRow, error) {
-	return listDocuments(ctx, r.conn, q)
-}
-
-// Summary counts the whole filtered set (not just one page).
-func (r *DocumentRepository) Summary(ctx context.Context, f model.DocumentFilter) (model.DocumentSummary, error) {
-	return summarizeDocuments(ctx, r.conn, f)
+	return &DocumentRepository{conn: conn}
 }
 
 // Page returns one page of the report and, when withSummary is set, the count of the whole filtered set. The
@@ -114,13 +103,5 @@ func summarizeDocuments(ctx context.Context, conn db.DBTX, f model.DocumentFilte
 
 // DocumentTypes lists the options for the Type filter.
 func (r *DocumentRepository) DocumentTypes(ctx context.Context) ([]model.DocumentType, error) {
-	rows, err := r.q.ListDocumentTypes(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list document types: %w", err)
-	}
-	out := make([]model.DocumentType, len(rows))
-	for i, row := range rows {
-		out[i] = model.DocumentType{ID: row.ID, Name: row.Name}
-	}
-	return out, nil
+	return lookup[model.DocumentType](ctx, r.conn, "document types", listDocumentTypesSQL)
 }

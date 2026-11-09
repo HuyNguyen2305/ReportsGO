@@ -11,12 +11,11 @@ import (
 // DeviceTrackingRepository reads the Device Tracking report. It works on a pool or inside a transaction.
 type DeviceTrackingRepository struct {
 	conn db.DBTX
-	q    *db.Queries
 }
 
 // NewDeviceTrackingRepository returns a repository using conn, typically the shared pool.
 func NewDeviceTrackingRepository(conn db.DBTX) *DeviceTrackingRepository {
-	return &DeviceTrackingRepository{conn: conn, q: db.New(conn)}
+	return &DeviceTrackingRepository{conn: conn}
 }
 
 // List returns one page of the report: up to q.Limit+1 rows, so the caller can tell whether more follow.
@@ -63,13 +62,5 @@ func (r *DeviceTrackingRepository) List(ctx context.Context, q model.DeviceTrack
 
 // Clients lists the options for the Clients filter.
 func (r *DeviceTrackingRepository) Clients(ctx context.Context) ([]model.ClientOption, error) {
-	rows, err := r.q.ListClients(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list clients: %w", err)
-	}
-	out := make([]model.ClientOption, len(rows))
-	for i, row := range rows {
-		out[i] = model.ClientOption{ID: row.ID, Name: row.DisplayName}
-	}
-	return out, nil
+	return lookup[model.ClientOption](ctx, r.conn, "clients", listClientsSQL)
 }

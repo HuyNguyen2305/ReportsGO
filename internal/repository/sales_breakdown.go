@@ -13,12 +13,11 @@ import (
 // SalesBreakdownRepository reads the Revenue and Sales Forecast grids. It works on a pool or inside a transaction.
 type SalesBreakdownRepository struct {
 	conn db.DBTX
-	q    *db.Queries
 }
 
 // NewSalesBreakdownRepository returns a repository using conn, typically the shared pool.
 func NewSalesBreakdownRepository(conn db.DBTX) *SalesBreakdownRepository {
-	return &SalesBreakdownRepository{conn: conn, q: db.New(conn)}
+	return &SalesBreakdownRepository{conn: conn}
 }
 
 // Page returns one page of the grid (up to q.Limit+1 rows, so the caller can tell whether more follow) and, when
@@ -138,36 +137,18 @@ func toAmounts(months []int64, total int64) (model.SalesBreakdownAmounts, error)
 func (r *SalesBreakdownRepository) GroupOptions(ctx context.Context) (model.SalesBreakdownGroupOptions, error) {
 	var out model.SalesBreakdownGroupOptions
 
-	types, err := r.q.ListServiceTypes(ctx)
-	if err != nil {
-		return out, fmt.Errorf("list service types: %w", err)
+	var err error
+	if out.ServiceTypes, err = lookup[model.ServiceType](ctx, r.conn, "service types", listServiceTypesSQL); err != nil {
+		return out, err
 	}
-	for _, t := range types {
-		out.ServiceTypes = append(out.ServiceTypes, model.ServiceType{ID: t.ID, Name: t.Name})
+	if out.Items, err = lookup[model.ItemOption](ctx, r.conn, "items", listItemsSQL); err != nil {
+		return out, err
 	}
-
-	items, err := r.q.ListItems(ctx)
-	if err != nil {
-		return out, fmt.Errorf("list items: %w", err)
+	if out.Staff, err = lookup[model.StaffOption](ctx, r.conn, "staff", listStaffSQL); err != nil {
+		return out, err
 	}
-	for _, it := range items {
-		out.Items = append(out.Items, model.ItemOption{ID: it.ID, Name: it.Name})
-	}
-
-	staff, err := r.q.ListStaff(ctx)
-	if err != nil {
-		return out, fmt.Errorf("list staff: %w", err)
-	}
-	for _, s := range staff {
-		out.Staff = append(out.Staff, model.StaffOption{ID: s.ID, Name: s.FullName})
-	}
-
-	sources, err := r.q.ListLeadSources(ctx)
-	if err != nil {
-		return out, fmt.Errorf("list lead sources: %w", err)
-	}
-	for _, s := range sources {
-		out.Sources = append(out.Sources, model.LeadSource{ID: s.ID, Name: s.Name})
+	if out.Sources, err = lookup[model.LeadSource](ctx, r.conn, "lead sources", listLeadSourcesSQL); err != nil {
+		return out, err
 	}
 
 	// Job tags and invoice tags together, as the tag grouping sees them; an invoice-only tag has a negative id.

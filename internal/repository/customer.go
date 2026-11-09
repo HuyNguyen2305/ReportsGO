@@ -14,22 +14,11 @@ import (
 // CustomerRepository reads the new customers report. It works on a pool or inside a transaction.
 type CustomerRepository struct {
 	conn db.DBTX
-	q    *db.Queries
 }
 
 // NewCustomerRepository returns a repository using conn, typically the shared pool.
 func NewCustomerRepository(conn db.DBTX) *CustomerRepository {
-	return &CustomerRepository{conn: conn, q: db.New(conn)}
-}
-
-// List returns one page of the report: up to q.Limit+1 rows, so the caller can tell whether more follow.
-func (r *CustomerRepository) List(ctx context.Context, q model.CustomerQuery) ([]model.CustomerRow, error) {
-	return listCustomers(ctx, r.conn, q)
-}
-
-// Summary counts the whole filtered set (not just one page).
-func (r *CustomerRepository) Summary(ctx context.Context, f model.CustomerFilter) (model.CustomerSummary, error) {
-	return summarizeCustomers(ctx, r.conn, f)
+	return &CustomerRepository{conn: conn}
 }
 
 // Page returns one page of the report and, when withSummary is set, the count of the whole filtered set. The
@@ -128,13 +117,5 @@ func summarizeCustomers(ctx context.Context, conn db.DBTX, f model.CustomerFilte
 
 // LeadSources lists the options for the Source filter.
 func (r *CustomerRepository) LeadSources(ctx context.Context) ([]model.LeadSource, error) {
-	rows, err := r.q.ListLeadSources(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list lead sources: %w", err)
-	}
-	out := make([]model.LeadSource, len(rows))
-	for i, row := range rows {
-		out[i] = model.LeadSource{ID: row.ID, Name: row.Name}
-	}
-	return out, nil
+	return lookup[model.LeadSource](ctx, r.conn, "lead sources", listLeadSourcesSQL)
 }

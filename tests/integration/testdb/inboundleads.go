@@ -56,8 +56,8 @@ func InsertInboundLeads(t *testing.T, pool *pgxpool.Pool) InboundLeadFixture {
 
 	// Mia's first phone is the one added first, whatever its number says.
 	_, err := pool.Exec(ctx, `
-		INSERT INTO customer_phones (customer_id, number, kind) VALUES
-		($1, '(555) 010-0001', 'mobile'), ($1, '(555) 010-9999', 'home'), ($2, '(555) 010-0003', 'mobile')`, f.Mia, f.Noah)
+		INSERT INTO customer_phones (customer_id, number) VALUES
+		($1, '(555) 010-0001'), ($1, '(555) 010-9999'), ($2, '(555) 010-0003')`, f.Mia, f.Noah)
 	require.NoError(t, err)
 
 	var locationID, serviceTypeID int64

@@ -51,7 +51,7 @@ func query(f model.EstimateFilter, key model.EstimateSortKey, desc bool, limit i
 
 func (e env) listAll(t *testing.T, f model.EstimateFilter, key model.EstimateSortKey, desc bool) []model.EstimateRow {
 	t.Helper()
-	rows, err := e.repo.List(context.Background(), query(f, key, desc, 1000))
+	rows, err := pageRows(context.Background(), e.repo, query(f, key, desc, 1000))
 	require.NoError(t, err)
 	return rows
 }
@@ -212,7 +212,7 @@ func TestKeysetPagingWalksEveryKeyAndDirectionWithoutGapsOrDuplicates(t *testing
 					for pages := 0; ; pages++ {
 						require.Less(t, pages, 100, "paging must terminate")
 
-						rows, err := e.repo.List(ctx, q)
+						rows, err := pageRows(ctx, e.repo, q)
 						require.NoError(t, err)
 						page := rows
 						hasMore := len(rows) > limit
@@ -286,7 +286,7 @@ func TestListFilters(t *testing.T) {
 				require.ElementsMatch(t, tt.want, numbers(rows))
 			}
 
-			summary, err := e.repo.Summary(context.Background(), f)
+			summary, err := pageSummary(context.Background(), e.repo, f)
 			require.NoError(t, err)
 			require.EqualValues(t, tt.count, summary.Count, "the summary follows the same filter")
 		})
@@ -310,7 +310,7 @@ func TestSummary(t *testing.T) {
 			want += r.Total
 		}
 
-		s, err := e.repo.Summary(ctx, octoberActive())
+		s, err := pageSummary(ctx, e.repo, octoberActive())
 		require.NoError(t, err)
 
 		require.EqualValues(t, 19, s.Count)
@@ -320,18 +320,18 @@ func TestSummary(t *testing.T) {
 	})
 
 	t.Run("totals include declined and draft estimates unless a status filter leaves them out", func(t *testing.T) {
-		all, err := e.repo.Summary(ctx, octoberActive())
+		all, err := pageSummary(ctx, e.repo, octoberActive())
 		require.NoError(t, err)
 
 		f := octoberActive()
 		f.Statuses = []model.EstimateStatus{model.EstimateDeclined}
-		declined, err := e.repo.Summary(ctx, f)
+		declined, err := pageSummary(ctx, e.repo, f)
 		require.NoError(t, err)
 		require.EqualValues(t, 1, declined.Count)
 		require.Equal(t, model.Money(7550), declined.Total, "estimate 123189 is declined")
 
 		f.Statuses = []model.EstimateStatus{model.EstimateDraft, model.EstimateSent, model.EstimateAccepted}
-		others, err := e.repo.Summary(ctx, f)
+		others, err := pageSummary(ctx, e.repo, f)
 		require.NoError(t, err)
 
 		require.Equal(t, all.Count, others.Count+declined.Count)
@@ -341,13 +341,13 @@ func TestSummary(t *testing.T) {
 	t.Run("archived and deleted tabs have their own totals", func(t *testing.T) {
 		f := octoberActive()
 		f.Lifecycle = model.LifecycleArchived
-		s, err := e.repo.Summary(ctx, f)
+		s, err := pageSummary(ctx, e.repo, f)
 		require.NoError(t, err)
 		require.EqualValues(t, 1, s.Count)
 		require.Equal(t, model.Money(4000), s.Total)
 
 		f.Lifecycle = model.LifecycleDeleted
-		s, err = e.repo.Summary(ctx, f)
+		s, err = pageSummary(ctx, e.repo, f)
 		require.NoError(t, err)
 		require.EqualValues(t, 1, s.Count)
 		require.Equal(t, model.Money(1000), s.Total)
@@ -356,7 +356,7 @@ func TestSummary(t *testing.T) {
 	t.Run("an empty set totals zero", func(t *testing.T) {
 		f := octoberActive()
 		f.Search = "zzz-nothing"
-		s, err := e.repo.Summary(ctx, f)
+		s, err := pageSummary(ctx, e.repo, f)
 		require.NoError(t, err)
 		require.Equal(t, model.EstimateSummary{}, s)
 	})
@@ -384,7 +384,7 @@ func TestPhoneIsTheCustomersFirstAndNeverDuplicatesRows(t *testing.T) {
 
 	all := e.listAll(t, octoberActive(), model.EstimateSortDate, true)
 	require.Len(t, all, 19)
-	s, err := e.repo.Summary(ctx, octoberActive())
+	s, err := pageSummary(ctx, e.repo, octoberActive())
 	require.NoError(t, err)
 	require.EqualValues(t, 19, s.Count)
 }
@@ -407,7 +407,7 @@ func TestInvoicesNeverAppearInEstimateResults(t *testing.T) {
 	require.Len(t, got, 1)
 	require.Equal(t, model.Money(2440), got[0].Total, "the estimate, not the 777.00 invoice")
 
-	s, err := e.repo.Summary(ctx, f)
+	s, err := pageSummary(ctx, e.repo, f)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, s.Count)
 	require.Equal(t, model.Money(2440), s.Total)
@@ -428,15 +428,15 @@ func TestRepositoryWorksInsideATransaction(t *testing.T) {
 		SELECT 'estimate', 'TX1', id, '2026-10-15', 5 FROM customers WHERE account_number = '5001'`)
 	require.NoError(t, err)
 
-	inTx, err := repository.NewEstimateRepository(tx).Summary(ctx, octoberActive())
+	inTx, err := pageSummary(ctx, repository.NewEstimateRepository(tx), octoberActive())
 	require.NoError(t, err)
-	outside, err := e.repo.Summary(ctx, octoberActive())
+	outside, err := pageSummary(ctx, e.repo, octoberActive())
 	require.NoError(t, err)
 
 	require.EqualValues(t, 20, inTx.Count, "the transaction sees its own uncommitted row")
 	require.EqualValues(t, 19, outside.Count, "other connections do not")
 
-	rows, err := repository.NewEstimateRepository(tx).List(ctx, query(octoberActive(), model.EstimateSortNumber, false, 100))
+	rows, err := pageRows(ctx, repository.NewEstimateRepository(tx), query(octoberActive(), model.EstimateSortNumber, false, 100))
 	require.NoError(t, err)
 	require.Contains(t, numbers(rows), "TX1")
 }
@@ -450,9 +450,9 @@ func TestPage(t *testing.T) {
 		page, err := e.repo.Page(ctx, q, true)
 		require.NoError(t, err)
 
-		rows, err := e.repo.List(ctx, q)
+		rows, err := pageRows(ctx, e.repo, q)
 		require.NoError(t, err)
-		summary, err := e.repo.Summary(ctx, q.Filter)
+		summary, err := pageSummary(ctx, e.repo, q.Filter)
 		require.NoError(t, err)
 
 		require.Equal(t, rows, page.Rows)
@@ -466,7 +466,7 @@ func TestPage(t *testing.T) {
 		page, err := e.repo.Page(ctx, q, false)
 		require.NoError(t, err)
 
-		rows, err := e.repo.List(ctx, q)
+		rows, err := pageRows(ctx, e.repo, q)
 		require.NoError(t, err)
 		require.Equal(t, rows, page.Rows)
 		require.Nil(t, page.Summary)
@@ -523,7 +523,7 @@ func TestPageReadsRowsAndSummaryFromOneSnapshot(t *testing.T) {
 	require.Len(t, page.Rows, 19)
 	require.EqualValues(t, 19, page.Summary.Count, "the summary ignores the estimate committed after the rows were read")
 
-	after, err := e.repo.Summary(ctx, q.Filter)
+	after, err := pageSummary(ctx, e.repo, q.Filter)
 	require.NoError(t, err)
 	require.EqualValues(t, 20, after.Count, "the committed estimate is real and visible to a later read")
 }
@@ -533,10 +533,10 @@ func TestQueriesHonorContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := e.repo.List(ctx, query(octoberActive(), model.EstimateSortDate, true, 10))
+	_, err := pageRows(ctx, e.repo, query(octoberActive(), model.EstimateSortDate, true, 10))
 	require.ErrorIs(t, err, context.Canceled)
 
-	_, err = e.repo.Summary(ctx, octoberActive())
+	_, err = pageSummary(ctx, e.repo, octoberActive())
 	require.ErrorIs(t, err, context.Canceled)
 }
 
@@ -544,15 +544,15 @@ func TestInvalidQueriesAreRejectedBeforeReachingTheDatabase(t *testing.T) {
 	e := newEnv(t, false)
 	ctx := context.Background()
 
-	_, err := e.repo.List(ctx, query(octoberActive(), "nope", false, 10))
+	_, err := pageRows(ctx, e.repo, query(octoberActive(), "nope", false, 10))
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
 
-	_, err = e.repo.List(ctx, query(octoberActive(), model.EstimateSortDate, false, 0))
+	_, err = pageRows(ctx, e.repo, query(octoberActive(), model.EstimateSortDate, false, 0))
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
 
 	bad := octoberActive()
 	bad.Lifecycle = "bogus"
-	_, err = e.repo.Summary(ctx, bad)
+	_, err = pageSummary(ctx, e.repo, bad)
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
 }
 
@@ -567,7 +567,7 @@ func TestConcurrentCallsAgree(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			s, err := e.repo.Summary(ctx, octoberActive())
+			s, err := pageSummary(ctx, e.repo, octoberActive())
 			results[i], errs[i] = s.Count, err
 		}()
 	}
@@ -577,4 +577,19 @@ func TestConcurrentCallsAgree(t *testing.T) {
 		require.NoError(t, errs[i])
 		require.EqualValues(t, 19, results[i])
 	}
+}
+
+// pageRows reads one page of rows through Page, the repository's only public read path.
+func pageRows(ctx context.Context, r *repository.EstimateRepository, q model.EstimateQuery) ([]model.EstimateRow, error) {
+	page, err := r.Page(ctx, q, false)
+	return page.Rows, err
+}
+
+// pageSummary reads the totals of a filtered set through Page.
+func pageSummary(ctx context.Context, r *repository.EstimateRepository, f model.EstimateFilter) (model.EstimateSummary, error) {
+	page, err := r.Page(ctx, model.EstimateQuery{Filter: f, Sort: model.EstimateSort{Key: model.EstimateSortDate}, Limit: 1}, true)
+	if err != nil {
+		return model.EstimateSummary{}, err
+	}
+	return *page.Summary, nil
 }
