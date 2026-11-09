@@ -20,16 +20,6 @@ func NewEstimateRepository(conn db.DBTX) *EstimateRepository {
 	return &EstimateRepository{conn: conn}
 }
 
-// List returns one page of the report: up to q.Limit+1 rows, so the caller can tell whether more follow.
-func (r *EstimateRepository) List(ctx context.Context, q model.EstimateQuery) ([]model.EstimateRow, error) {
-	return listEstimates(ctx, r.conn, q)
-}
-
-// Summary totals the whole filtered set (not just one page).
-func (r *EstimateRepository) Summary(ctx context.Context, f model.EstimateFilter) (model.EstimateSummary, error) {
-	return summarizeEstimates(ctx, r.conn, f)
-}
-
 // Page returns one page of the report and, when withSummary is set, the totals of the whole filtered set. The
 // rows and the totals come from one snapshot, so the summary always describes the rows' set even while other
 // connections commit. On a pool that is a read-only REPEATABLE READ transaction; a repository already bound to
