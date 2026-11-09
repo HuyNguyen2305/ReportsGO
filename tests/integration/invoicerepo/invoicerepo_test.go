@@ -58,7 +58,7 @@ func query(f model.InvoiceFilter, key model.InvoiceSortKey, desc bool, limit int
 // listAll fetches everything matching the filter in one page.
 func (e env) listAll(t *testing.T, f model.InvoiceFilter, key model.InvoiceSortKey, desc bool) []model.InvoiceRow {
 	t.Helper()
-	rows, err := e.repo.List(context.Background(), query(f, key, desc, 1000))
+	rows, err := pageRows(context.Background(), e.repo, query(f, key, desc, 1000))
 	require.NoError(t, err)
 	return rows
 }
@@ -223,7 +223,7 @@ func TestKeysetPagingWalksEveryKeyAndDirectionWithoutGapsOrDuplicates(t *testing
 					for pages := 0; ; pages++ {
 						require.Less(t, pages, 100, "paging must terminate")
 
-						rows, err := e.repo.List(ctx, q)
+						rows, err := pageRows(ctx, e.repo, q)
 						require.NoError(t, err)
 						page := rows
 						hasMore := len(rows) > limit
@@ -376,7 +376,7 @@ func TestListFilters(t *testing.T) {
 			require.ElementsMatch(t, tt.want, numbers(rows))
 
 			// The summary must describe exactly the same set of invoices.
-			summary, err := e.repo.Summary(ctx, tt.filter)
+			summary, err := pageSummary(ctx, e.repo, tt.filter)
 			require.NoError(t, err)
 			require.EqualValues(t, len(tt.want), summary.Count)
 		})
@@ -400,7 +400,7 @@ func TestSummary(t *testing.T) {
 			wantDiscount += r.Discount
 		}
 
-		s, err := e.repo.Summary(ctx, octoberActive())
+		s, err := pageSummary(ctx, e.repo, octoberActive())
 		require.NoError(t, err)
 
 		require.EqualValues(t, 21, s.Count)
@@ -431,7 +431,7 @@ func TestSummary(t *testing.T) {
 			t.Run(tt.name, func(t *testing.T) {
 				f := octoberActive()
 				tt.mutate(&f)
-				s, err := e.repo.Summary(ctx, f)
+				s, err := pageSummary(ctx, e.repo, f)
 				require.NoError(t, err)
 
 				require.Equal(t, tt.wantCount, s.Count)
@@ -444,18 +444,18 @@ func TestSummary(t *testing.T) {
 	})
 
 	t.Run("totals include void and draft invoices unless a status filter leaves them out", func(t *testing.T) {
-		all, err := e.repo.Summary(ctx, octoberActive())
+		all, err := pageSummary(ctx, e.repo, octoberActive())
 		require.NoError(t, err)
 
 		f := octoberActive()
 		f.Statuses = []model.InvoiceStatus{model.InvoiceVoid}
-		void, err := e.repo.Summary(ctx, f)
+		void, err := pageSummary(ctx, e.repo, f)
 		require.NoError(t, err)
 		require.EqualValues(t, 1, void.Count)
 		require.Equal(t, model.Money(6500), void.Total, "invoice 85007 is void")
 
 		f.Statuses = []model.InvoiceStatus{model.InvoiceDraft, model.InvoiceSent, model.InvoicePaid}
-		live, err := e.repo.Summary(ctx, f)
+		live, err := pageSummary(ctx, e.repo, f)
 		require.NoError(t, err)
 
 		require.Equal(t, all.Count, live.Count+void.Count)
@@ -470,7 +470,7 @@ func TestSummary(t *testing.T) {
 			require.NoError(t, err)
 		}
 		outstanding := func() model.Money {
-			s, err := e.repo.Summary(ctx, octoberActive())
+			s, err := pageSummary(ctx, e.repo, octoberActive())
 			require.NoError(t, err)
 			return s.Outstanding
 		}
@@ -488,7 +488,7 @@ func TestSummary(t *testing.T) {
 	})
 
 	t.Run("only credit that was paid for reduces the outstanding balance", func(t *testing.T) {
-		before, err := e.repo.Summary(ctx, octoberActive())
+		before, err := pageSummary(ctx, e.repo, octoberActive())
 		require.NoError(t, err)
 
 		// a 40.00 credit whose only payment was refunded, applied to invoice 85031
@@ -504,7 +504,7 @@ func TestSummary(t *testing.T) {
 			WHERE i.parent_type = 'invoice' AND i.document_number = '85031'`)
 		require.NoError(t, err)
 
-		after, err := e.repo.Summary(ctx, octoberActive())
+		after, err := pageSummary(ctx, e.repo, octoberActive())
 		require.NoError(t, err)
 		require.Equal(t, before.Outstanding, after.Outstanding, "a refunded credit pays nothing")
 	})
@@ -548,15 +548,15 @@ func TestRepositoryWorksInsideATransaction(t *testing.T) {
 		SELECT 'TX1', id, '2026-10-15', 5 FROM customers WHERE account_number = '5001'`)
 	require.NoError(t, err)
 
-	inTx, err := repository.NewInvoiceRepository(tx).Summary(ctx, octoberActive())
+	inTx, err := pageSummary(ctx, repository.NewInvoiceRepository(tx), octoberActive())
 	require.NoError(t, err)
-	outside, err := e.repo.Summary(ctx, octoberActive())
+	outside, err := pageSummary(ctx, e.repo, octoberActive())
 	require.NoError(t, err)
 
 	require.EqualValues(t, 22, inTx.Count, "the transaction sees its own uncommitted row")
 	require.EqualValues(t, 21, outside.Count, "other connections do not")
 
-	rows, err := repository.NewInvoiceRepository(tx).List(ctx, query(octoberActive(), model.SortInvoiceNumber, false, 100))
+	rows, err := pageRows(ctx, repository.NewInvoiceRepository(tx), query(octoberActive(), model.SortInvoiceNumber, false, 100))
 	require.NoError(t, err)
 	require.Contains(t, numbers(rows), "TX1")
 }
@@ -570,9 +570,9 @@ func TestPage(t *testing.T) {
 		page, err := e.repo.Page(ctx, q, true)
 		require.NoError(t, err)
 
-		rows, err := e.repo.List(ctx, q)
+		rows, err := pageRows(ctx, e.repo, q)
 		require.NoError(t, err)
-		summary, err := e.repo.Summary(ctx, q.Filter)
+		summary, err := pageSummary(ctx, e.repo, q.Filter)
 		require.NoError(t, err)
 
 		require.Equal(t, rows, page.Rows)
@@ -586,7 +586,7 @@ func TestPage(t *testing.T) {
 		page, err := e.repo.Page(ctx, q, false)
 		require.NoError(t, err)
 
-		rows, err := e.repo.List(ctx, q)
+		rows, err := pageRows(ctx, e.repo, q)
 		require.NoError(t, err)
 		require.Equal(t, rows, page.Rows)
 		require.Nil(t, page.Summary)
@@ -643,7 +643,7 @@ func TestPageReadsRowsAndSummaryFromOneSnapshot(t *testing.T) {
 	require.Len(t, page.Rows, 21)
 	require.EqualValues(t, 21, page.Summary.Count, "the summary ignores the invoice committed after the rows were read")
 
-	after, err := e.repo.Summary(ctx, q.Filter)
+	after, err := pageSummary(ctx, e.repo, q.Filter)
 	require.NoError(t, err)
 	require.EqualValues(t, 22, after.Count, "the committed invoice is real and visible to a later read")
 }
@@ -653,10 +653,10 @@ func TestQueriesHonorContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := e.repo.List(ctx, query(octoberActive(), model.SortDate, true, 10))
+	_, err := pageRows(ctx, e.repo, query(octoberActive(), model.SortDate, true, 10))
 	require.ErrorIs(t, err, context.Canceled)
 
-	_, err = e.repo.Summary(ctx, octoberActive())
+	_, err = pageSummary(ctx, e.repo, octoberActive())
 	require.ErrorIs(t, err, context.Canceled)
 }
 
@@ -664,15 +664,15 @@ func TestInvalidQueriesAreRejectedBeforeReachingTheDatabase(t *testing.T) {
 	e := newEnv(t, false)
 	ctx := context.Background()
 
-	_, err := e.repo.List(ctx, query(octoberActive(), "nope", false, 10))
+	_, err := pageRows(ctx, e.repo, query(octoberActive(), "nope", false, 10))
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
 
-	_, err = e.repo.List(ctx, query(octoberActive(), model.SortDate, false, 0))
+	_, err = pageRows(ctx, e.repo, query(octoberActive(), model.SortDate, false, 0))
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
 
 	bad := octoberActive()
 	bad.Lifecycle = "bogus"
-	_, err = e.repo.Summary(ctx, bad)
+	_, err = pageSummary(ctx, e.repo, bad)
 	require.ErrorIs(t, err, repository.ErrInvalidQuery)
 }
 
@@ -690,7 +690,7 @@ func TestEstimatesNeverAppearInInvoiceResults(t *testing.T) {
 
 	rows := e.listAll(t, octoberActive(), model.SortDate, true)
 	require.Len(t, rows, 21, "estimates do not change the invoice count")
-	summary, err := e.repo.Summary(ctx, octoberActive())
+	summary, err := pageSummary(ctx, e.repo, octoberActive())
 	require.NoError(t, err)
 	require.EqualValues(t, 21, summary.Count)
 
@@ -700,12 +700,27 @@ func TestEstimatesNeverAppearInInvoiceResults(t *testing.T) {
 
 	f := octoberActive()
 	f.Search = "85033"
-	got, err := e.repo.List(ctx, query(f, model.SortDate, true, 10))
+	got, err := pageRows(ctx, e.repo, query(f, model.SortDate, true, 10))
 	require.NoError(t, err)
 	require.Len(t, got, 1, "only the invoice with that number")
 	require.Equal(t, model.Money(9900), got[0].Total)
-	s, err := e.repo.Summary(ctx, f)
+	s, err := pageSummary(ctx, e.repo, f)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, s.Count)
 	require.Equal(t, model.Money(9900), s.Total)
+}
+
+// pageRows reads one page of rows through Page, the repository's only public read path.
+func pageRows(ctx context.Context, r *repository.InvoiceRepository, q model.InvoiceQuery) ([]model.InvoiceRow, error) {
+	page, err := r.Page(ctx, q, false)
+	return page.Rows, err
+}
+
+// pageSummary reads the totals of a filtered set through Page.
+func pageSummary(ctx context.Context, r *repository.InvoiceRepository, f model.InvoiceFilter) (model.InvoiceSummary, error) {
+	page, err := r.Page(ctx, model.InvoiceQuery{Filter: f, Sort: model.InvoiceSort{Key: model.SortDate}, Limit: 1}, true)
+	if err != nil {
+		return model.InvoiceSummary{}, err
+	}
+	return *page.Summary, nil
 }
