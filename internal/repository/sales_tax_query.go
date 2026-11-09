@@ -26,18 +26,18 @@ var salesTaxSorts = map[model.SalesTaxSortKey]string{
 const (
 	salesTaxPaymentsFrom = `
     SELECT l.tax_rate_id,
-           round(l.taxable_amount * p.amount / i.total, 2) AS taxable,
-           round(l.tax_amount * p.amount / i.total, 2) AS tax,
-           round(l.surcharge_amount * p.amount / i.total, 2) AS surcharge
+           round(l.taxable_amount * LEAST(p.amount, i.total) / i.total, 2) AS taxable,
+           round(l.tax_amount * LEAST(p.amount, i.total) / i.total, 2) AS tax,
+           round(l.surcharge_amount * LEAST(p.amount, i.total) / i.total, 2) AS surcharge
     FROM payments p
     JOIN billing_documents i ON i.id = p.invoice_id
     JOIN invoice_tax_lines l ON l.invoice_id = i.id`
 
 	salesTaxCreditsFrom = `
     SELECT l.tax_rate_id,
-           round(l.taxable_amount * ca.amount / i.total, 2) AS taxable,
-           round(l.tax_amount * ca.amount / i.total, 2) AS tax,
-           round(l.surcharge_amount * ca.amount / i.total, 2) AS surcharge
+           round(l.taxable_amount * LEAST(ca.amount, i.total) / i.total, 2) AS taxable,
+           round(l.tax_amount * LEAST(ca.amount, i.total) / i.total, 2) AS tax,
+           round(l.surcharge_amount * LEAST(ca.amount, i.total) / i.total, 2) AS surcharge
     FROM credit_applications ca
     JOIN credits cr ON cr.id = ca.credit_id
     JOIN billing_documents i ON i.id = ca.invoice_id
@@ -68,7 +68,7 @@ func BuildSalesTaxQuery(f model.SalesTaxFilter, s model.SalesTaxSort) (Statement
 		// The same bounds and methods apply to both sources, each on its own date and method column, so every
 		// argument is registered once and its placeholder reused. A credit application follows the method its
 		// credit was bought with.
-		payments := []string{"p.status = 'paid' AND p.deleted_at IS NULL AND i.total > 0"}
+		payments := []string{"p.status = 'paid' AND p.deleted_at IS NULL AND i.status <> 'void' AND i.total > 0"}
 		credits := []string{creditIsPaid, "i.total > 0"}
 		if !f.DateFrom.IsZero() {
 			from := w.arg(f.DateFrom) + "::date"

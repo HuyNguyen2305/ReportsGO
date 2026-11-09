@@ -243,3 +243,52 @@ func TestPaymentsCollectedTaxMatchesSalesTax(t *testing.T) {
 	require.Equal(t, model.Money(6), tax)
 	require.Equal(t, tax, page.Summary.Amount-page.Summary.WithoutTax)
 }
+
+// collectedOn adds one invoice (with one VAT line of tax on a total of total) and a cash payment of paid on d, then
+// returns the Payments Collected summary and the Sales Tax collected total for that single day.
+func collectedOn(t *testing.T, status string, total, tax, paid float64, d time.Time) (*model.PaymentCollectedSummary, model.Money) {
+	t.Helper()
+	pool := testdb.SeededPool(t)
+	ctx := context.Background()
+	for _, q := range []struct {
+		sql  string
+		args []any
+	}{
+		{`INSERT INTO billing_documents (document_number, customer_id, document_date, total, status)
+			SELECT '99001', customer_id, $2, $1, $3::billing_status FROM billing_documents WHERE document_number = '85031'`, []any{total, d, status}},
+		{`INSERT INTO invoice_tax_lines (invoice_id, tax_rate_id, taxable_amount, tax_amount)
+			SELECT b.id, tr.id, $1, $2 FROM billing_documents b, tax_rates tr WHERE b.document_number = '99001' AND tr.name = 'VAT'`, []any{total - tax, tax}},
+		{`INSERT INTO payments (customer_id, invoice_id, method_type, amount, payment_date)
+			SELECT customer_id, id, 'cash', $1, $2 FROM billing_documents WHERE document_number = '99001'`, []any{paid, d}},
+	} {
+		_, err := pool.Exec(ctx, q.sql, q.args...)
+		require.NoError(t, err)
+	}
+	page, err := repository.NewPaymentsCollectedRepository(pool).Page(ctx, model.PaymentCollectedQuery{
+		Filter: model.PaymentCollectedFilter{DateFrom: d, DateTo: d, PaymentFor: model.PaymentForInvoices},
+		Sort:   model.PaymentCollectedSort{Key: model.PaymentCollectedSortDate}, Limit: 1,
+	}, true)
+	require.NoError(t, err)
+	rows, err := repository.NewSalesTaxRepository(pool).Summary(ctx,
+		model.SalesTaxFilter{DateFrom: d, DateTo: d, Basis: model.SalesTaxCollected},
+		model.SalesTaxSort{Key: model.SalesTaxSortName})
+	require.NoError(t, err)
+	var sum model.Money
+	for _, r := range rows {
+		sum += r.TaxCollected
+	}
+	return page.Summary, sum
+}
+
+func TestPaymentOnAVoidInvoiceIsNotCollected(t *testing.T) {
+	summary, tax := collectedOn(t, "void", 100, 10, 100, day(2026, 12, 29))
+	require.Zero(t, summary.Count)
+	require.Zero(t, tax)
+}
+
+func TestOverpaymentSharesAtMostTheWholeTax(t *testing.T) {
+	summary, tax := collectedOn(t, "sent", 100, 10, 120, day(2026, 12, 28))
+	require.Equal(t, model.Money(1000), tax, "not 12.00")
+	require.Equal(t, model.Money(12000), summary.Amount)
+	require.Equal(t, model.Money(11000), summary.WithoutTax)
+}
