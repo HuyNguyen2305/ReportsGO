@@ -9,12 +9,30 @@ import (
 // paymentCollectedAlias is the payments alias in the Payments Collected report's queries.
 const paymentCollectedAlias = "p"
 
-// paymentCollectedWithoutTax is the payment less its share of the invoice's tax: the amount scaled by the ratio of
-// the invoice total without tax to the invoice total, rounded to the cent. A credit payment, or a payment for an
-// invoice with a zero total, has no tax share. The list and the summary both use this one expression, so the
-// footer always adds up the rounded row values.
-const paymentCollectedWithoutTax = `(CASE WHEN i.id IS NULL OR i.total = 0 THEN p.amount
-    ELSE round(p.amount * (i.total - tx.tax) / i.total, 2) END)`
+// invoiceTaxShare joins, as tx.tax, the tax of the invoice that the paying row "pay" ("p" for a payment, "ca" for a
+// credit application) settles: each tax line's share (the amount over the invoice total) rounded to the cent per line,
+// then added up, exactly as the Sales Tax report does, so the two reports agree to the cent. The invoice must be
+// joined as "i"; a credit payment, or an invoice with a zero total, has no tax share.
+func invoiceTaxShare(pay string) string {
+	return fmt.Sprintf(`
+LEFT JOIN LATERAL (
+    SELECT COALESCE(SUM(round(l.tax_amount * %[1]s.amount / NULLIF(i.total, 0), 2)), 0) AS tax
+    FROM invoice_tax_lines l WHERE l.invoice_id = %[1]s.invoice_id) tx ON true`, pay)
+}
+
+// withoutTax is the amount of the paying row "pay" less its tax share (see invoiceTaxShare). The list and the summary
+// both use this one expression, so the footer always adds up the rounded row values.
+func withoutTax(pay string) string {
+	return fmt.Sprintf(`(CASE WHEN i.id IS NULL OR i.total = 0 THEN %[1]s.amount
+    ELSE %[1]s.amount - tx.tax END)`, pay)
+}
+
+var (
+	paymentInvoiceTax           = invoiceTaxShare("p")
+	paymentCollectedWithoutTax  = withoutTax("p")
+	creditApplicationInvoiceTax = invoiceTaxShare("ca")
+	creditApplicationWithoutTax = withoutTax("ca")
+)
 
 // paymentCollectedServiceState is the state of the service location of the invoice's job, or NULL.
 const paymentCollectedServiceState = `NULLIF(sl.state, '')`
@@ -33,16 +51,9 @@ var paymentCollectedSorts = map[model.PaymentCollectedSortKey]sortSpec{
 	model.PaymentCollectedSortWithoutTax:   {expr: paymentCollectedWithoutTax, cast: "numeric"},
 }
 
-// paymentInvoiceTax joins the total tax of the payment's invoice as tx.tax, which paymentCollectedWithoutTax uses.
-// The payment must be aliased "p".
-const paymentInvoiceTax = `
-LEFT JOIN LATERAL (
-    SELECT COALESCE(SUM(l.tax_amount), 0) AS tax
-    FROM invoice_tax_lines l WHERE l.invoice_id = p.invoice_id) tx ON true`
-
 // paymentCollectedFrom joins everything the select list, filters and sort expressions can refer to. The list and
 // the summary share it so they always agree about which payments are in scope.
-const paymentCollectedFrom = `
+var paymentCollectedFrom = `
 FROM payments p
 JOIN customers c ON c.id = p.customer_id
 LEFT JOIN billing_documents i ON i.id = p.invoice_id

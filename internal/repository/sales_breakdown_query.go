@@ -7,14 +7,6 @@ import (
 	"reportsgo/internal/model"
 )
 
-// creditApplicationWithoutTax and creditApplicationInvoiceTax are paymentCollectedWithoutTax and paymentInvoiceTax
-// for a credit application "ca" in place of a payment "p", so a credit-paid amount loses the invoice's tax share
-// the same way a payment does.
-var (
-	creditApplicationWithoutTax = strings.ReplaceAll(paymentCollectedWithoutTax, "p.amount", "ca.amount")
-	creditApplicationInvoiceTax = strings.ReplaceAll(paymentInvoiceTax, "p.invoice_id", "ca.invoice_id")
-)
-
 // salesBreakdownAlias is the alias of the finished rows (CTE r) that the list orders and keyset-pages.
 const salesBreakdownAlias = "r"
 

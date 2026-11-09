@@ -175,7 +175,7 @@ func TestPageSeedFigures(t *testing.T) {
 
 		share := func(amount string) string {
 			return `CASE WHEN i.total = 0 THEN ` + amount + `
-				ELSE round(` + amount + ` * (i.total - COALESCE((SELECT SUM(tax_amount) FROM invoice_tax_lines l WHERE l.invoice_id = i.id), 0)) / i.total, 2) END`
+				ELSE ` + amount + ` - COALESCE((SELECT SUM(round(l.tax_amount * ` + amount + ` / i.total, 2)) FROM invoice_tax_lines l WHERE l.invoice_id = i.id), 0) END`
 		}
 		want := scalar[int64](t, e, `SELECT (((SELECT COALESCE(SUM(`+share("p.amount")+`), 0)
 				FROM payments p JOIN billing_documents i ON i.id = p.invoice_id

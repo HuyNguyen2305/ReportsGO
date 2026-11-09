@@ -32,7 +32,7 @@ func fullPaymentCollectedFilter() model.PaymentCollectedFilter {
 }
 
 const (
-	withoutTaxSQL = "(CASE WHEN i.id IS NULL OR i.total = 0 THEN p.amount\n    ELSE round(p.amount * (i.total - tx.tax) / i.total, 2) END)"
+	withoutTaxSQL = "(CASE WHEN i.id IS NULL OR i.total = 0 THEN p.amount\n    ELSE p.amount - tx.tax END)"
 	stateSQL      = "NULLIF(sl.state, '')"
 )
 
@@ -47,6 +47,7 @@ func TestBuildPaymentsCollectedListQueryDefault(t *testing.T) {
 	require.Contains(t, stmt.SQL, "LEFT JOIN service_locations sl ON sl.id = j.location_id")
 	require.Contains(t, stmt.SQL, "LEFT JOIN users u ON u.id = p.received_by")
 	require.Contains(t, stmt.SQL, "FROM invoice_tax_lines l WHERE l.invoice_id = p.invoice_id")
+	require.Contains(t, stmt.SQL, "round(l.tax_amount * p.amount / NULLIF(i.total, 0), 2)", "tax rounded per line, as Sales Tax does")
 	require.Contains(t, stmt.SQL, "p.status = 'paid' AND p.deleted_at IS NULL", "only collected payments")
 	require.Contains(t, stmt.SQL, "p.invoice_id IS NOT NULL")
 	require.NotContains(t, stmt.SQL, "credit_id IS NOT NULL")

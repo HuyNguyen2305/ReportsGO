@@ -72,9 +72,9 @@ func TestBuildSalesBreakdownListQueryRevenueFacts(t *testing.T) {
 		f.Measure = model.SalesBreakdownCollectedWithoutTax
 		stmt, err := repository.BuildSalesBreakdownListQuery(breakdownQuery(f, model.SalesBreakdownSortName, false))
 		require.NoError(t, err)
-		require.Contains(t, stmt.SQL, "round(p.amount * (i.total - tx.tax) / i.total, 2)")
+		require.Contains(t, stmt.SQL, "p.amount - tx.tax")
 		require.Contains(t, stmt.SQL, "FROM invoice_tax_lines l WHERE l.invoice_id = p.invoice_id) tx ON true")
-		require.Contains(t, stmt.SQL, "round(ca.amount * (i.total - tx.tax) / i.total, 2)", "a credit application loses its tax share too")
+		require.Contains(t, stmt.SQL, "ca.amount - tx.tax", "a credit application loses its tax share too")
 		require.Contains(t, stmt.SQL, "FROM invoice_tax_lines l WHERE l.invoice_id = ca.invoice_id) tx ON true")
 	})
 }
