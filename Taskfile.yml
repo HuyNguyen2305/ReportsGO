@@ -24,6 +24,11 @@ tasks:
     cmds:
       - "{{.MIGRATE}} -path migrations -database \"$DATABASE_URL\" down -all"
 
+  portal:views:
+    desc: Create or refresh the views that show ClientPortalGO data (requires DATABASE_URL and psql; see docs/portal-link.md)
+    cmds:
+      - psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/portal/reports_live.sql
+
   db:seed:
     desc: Reload sample data into DATABASE_URL (TRUNCATES data tables; dev only)
     cmds:
